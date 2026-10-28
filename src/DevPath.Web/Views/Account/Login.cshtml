@@ -2,38 +2,47 @@
 @{
     ViewData["Title"] = "Entrar";
 }
-@* Markup mínimo e funcional. O Frontend Operator (#5/#9) vai estilizar com Tailwind:
-   mantenha os asp-for, o asp-validation-*, o campo oculto ReturnUrl e o <form method="post">. *@
+@*
+    Validação: no servidor (Data Annotations + ModelState) e, no navegador, pelos atributos HTML5
+    (required, type="email"). Mantém: asp-for, asp-validation-*, ReturnUrl oculto e <form method="post">
+    (o form tag helper gera o __RequestVerificationToken).
+*@
+<div class="mx-auto max-w-md">
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <h1 class="text-2xl font-bold tracking-tight text-slate-900">Entrar</h1>
+        <p class="mt-1 text-sm text-slate-600">Continue de onde parou na sua trilha.</p>
 
-<h1>Entrar</h1>
+        <form asp-controller="Account" asp-action="Login" method="post" class="mt-6 space-y-5">
+            <div asp-validation-summary="ModelOnly" role="alert"></div>
+            <input asp-for="ReturnUrl" type="hidden" />
 
-<form asp-controller="Account" asp-action="Login" method="post" novalidate>
-    <div asp-validation-summary="ModelOnly" role="alert"></div>
-    <input asp-for="ReturnUrl" type="hidden" />
+            <div>
+                <label asp-for="Email" class="form-label"></label>
+                <input asp-for="Email" class="form-input" autocomplete="email" inputmode="email"
+                       autocapitalize="none" spellcheck="false" required maxlength="256" placeholder="voce@exemplo.com" />
+                <span asp-validation-for="Email" id="Email-error"></span>
+            </div>
 
-    <div>
-        <label asp-for="Email"></label>
-        <input asp-for="Email" autocomplete="email" />
-        <span asp-validation-for="Email"></span>
+            <div>
+                <label asp-for="Password" class="form-label"></label>
+                <input asp-for="Password" class="form-input" autocomplete="current-password" required />
+                <span asp-validation-for="Password" id="Password-error"></span>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <input asp-for="RememberMe" class="form-checkbox" />
+                <label asp-for="RememberMe" class="text-sm text-slate-700"></label>
+            </div>
+
+            <button type="submit" class="btn-primary">Entrar</button>
+        </form>
     </div>
 
-    <div>
-        <label asp-for="Password"></label>
-        <input asp-for="Password" autocomplete="current-password" />
-        <span asp-validation-for="Password"></span>
-    </div>
-
-    <div>
-        <label>
-            <input asp-for="RememberMe" />
-            @Html.DisplayNameFor(m => m.RememberMe)
-        </label>
-    </div>
-
-    <button type="submit">Entrar</button>
-</form>
-
-<p>Ainda não tem conta? <a asp-controller="Account" asp-action="Register">Criar conta</a></p>
+    <p class="mt-6 text-center text-sm text-slate-600">
+        Ainda não tem conta?
+        <a asp-controller="Account" asp-action="Register" class="link">Criar conta</a>
+    </p>
+</div>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />

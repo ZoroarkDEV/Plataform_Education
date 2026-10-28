@@ -74,3 +74,15 @@ será preciso enviar o token antiforgery do ASP.NET Core.
 O template `dotnet new mvc` traz Bootstrap, jQuery e jquery-validation. Eles foram removidos:
 a stack oficial é Tailwind + HTMX. O `_ValidationScriptsPartial.cshtml` foi mantido como no-op
 para não quebrar views que o referenciam; a validação fica no servidor (DataAnnotations + `ModelState`).
+
+## Formulários e validação (telas de conta)
+
+- `Views/Account/Login.cshtml`, `Register.cshtml` e `AccessDenied.cshtml` usam as classes de componente
+  definidas em `Styles/app.css` (`form-label`, `form-input`, `btn-primary`, `field-validation-error`,
+  `validation-summary-errors`...).
+- Sem jQuery: o navegador valida com atributos HTML5 (`required`, `type="email"`, `minlength`/`maxlength`,
+  `pattern`) que espelham as Data Annotations; o servidor sempre valida de novo (`ModelState`).
+- `TagHelpers/AriaValidationTagHelper.cs` adiciona `aria-describedby="{id}-error"` em todo `input asp-for`
+  e `aria-invalid="true"` quando o campo tem erro. O `<span asp-validation-for>` precisa de `id="{Campo}-error"`.
+- `Views/Shared/_LoginPartial.cshtml` aparece no header (desktop) e no menu mobile
+  (`view-data` com `Variant = "mobile"`). O logout é sempre um `<form method="post">` com antiforgery.

@@ -24,3 +24,36 @@
   .htmx-request .htmx-indicator,
   .htmx-request.htmx-indicator { display: inline-flex; }
 }
+
+/*
+  Componentes de formulário (telas de login/cadastro).
+  Usam @apply para não repetir a mesma lista de classes em todo campo.
+*/
+@layer components {
+  .form-label { @apply block text-sm font-medium text-slate-800; }
+  .form-hint { @apply mt-1 text-xs text-slate-500; }
+  .form-input {
+    @apply mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm
+      placeholder:text-slate-400
+      focus:border-brand-500 focus:outline-2 focus:outline-offset-0 focus:outline-brand-500/40
+      aria-invalid:border-red-500 aria-invalid:focus:outline-red-500/40;
+  }
+  .form-checkbox {
+    @apply size-4 rounded border-slate-300 accent-brand-600
+      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600;
+  }
+  .btn-primary {
+    @apply inline-flex w-full items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm
+      hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600;
+  }
+  .link { @apply font-medium text-brand-700 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-brand-600; }
+
+  /* Classes geradas pelos tag helpers asp-validation-for / asp-validation-summary. */
+  .field-validation-error { @apply mt-1 block text-sm text-red-700; }
+  .field-validation-valid { @apply hidden; }
+  .validation-summary-errors {
+    @apply mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800;
+  }
+  .validation-summary-errors ul { @apply list-disc space-y-1 pl-5; }
+  .validation-summary-valid { @apply hidden; }
+}
