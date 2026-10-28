@@ -175,8 +175,8 @@ alunos fica preso à linha do banco, então o slug é a "identidade" do conteúd
 - **Remove um item** daqui: nada é apagado do banco.
   - Trilha removida: fica **desativada**.
   - Módulo removido: fica **despublicado** e vai para o fim da ordem da trilha.
-  - Aula removida: vai para o fim da ordem do módulo (ainda não há como despublicar uma aula no
-    domínio; isso depende de um campo novo em `Lesson`).
+  - Aula removida: fica **despublicada** (some da navegação e não abre) e vai para o fim da ordem
+    do módulo. O progresso dos alunos continua preso a ela.
   - O log mostra um aviso para cada item órfão. Se o item voltar para cá com o mesmo slug, ele é
     reativado/republicado na posição do arquivo.
 
