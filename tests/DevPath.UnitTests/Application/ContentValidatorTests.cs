@@ -15,11 +15,73 @@ public class ContentValidatorTests
     }
 
     [Fact]
-    public void Validate_PastaDiferenteDoSlugDoTitulo_RetornaErro()
+    public void Validate_PastaDiferenteDoSlugDoTitulo_EhPermitido()
     {
-        var paths = new[] { Path("sql", "SQL & Dados", 1, Module("ambiente", 1, Lesson("ambiente", 1))) };
+        // O slug da trilha é o nome da pasta e não depende do título: renomear o título não cria outra trilha.
+        var paths = new[] { Path("sql", "SQL & Dados (novo nome)", 1, Module("ambiente", 1, Lesson("ambiente", 1))) };
 
-        ContentValidator.Validate(paths).Should().ContainSingle(e => e.Contains("deveria se chamar 'sql-dados'"));
+        ContentValidator.Validate(paths).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("SQL-Dados")]
+    [InlineData("sql_dados")]
+    [InlineData("sql--dados")]
+    [InlineData("-sql")]
+    [InlineData("introdução")]
+    public void Validate_SlugForaDoFormato_RetornaErro(string slug)
+    {
+        var paths = new[] { Path(slug, "SQL", 1, Module("ambiente", 1, Lesson("ambiente", 1))) };
+
+        ContentValidator.Validate(paths).Should().ContainSingle(e => e.Contains($"'{slug}' inválido"));
+    }
+
+    [Fact]
+    public void Validate_SlugDeAulaRepetidoNoModulo_RetornaErro()
+    {
+        var paths = new[]
+        {
+            Path("sql-dados", "SQL", 1, Module("ambiente", 1, Lesson("ambiente", 1, "joins"), Lesson("ambiente", 2, "joins")))
+        };
+
+        ContentValidator.Validate(paths).Should().ContainSingle(e => e.Contains("aula 'joins' aparece mais de uma vez"));
+    }
+
+    [Fact]
+    public void Validate_TituloMaiorQue200Caracteres_RetornaErroComArquivo()
+    {
+        var lesson = Lesson("ambiente", 1) with { Title = new string('a', 201) };
+        var paths = new[] { Path("sql-dados", "SQL", 1, Module("ambiente", 1, lesson)) };
+
+        ContentValidator.Validate(paths).Should().ContainSingle(e =>
+            e.StartsWith(lesson.SourceFile) && e.Contains("'title' tem 201 caracteres (máximo 200)"));
+    }
+
+    [Fact]
+    public void Validate_TamanhosNoLimite_NaoRetornaErros()
+    {
+        var lesson = Lesson("ambiente", 1) with { Title = new string('a', 200), Language = new string('b', 50) };
+        var path = Path("sql-dados", new string('t', 200), 1, Module("ambiente", 1, lesson)) with
+        {
+            Description = new string('d', 2000),
+            Icon = new string('i', 100)
+        };
+
+        ContentValidator.Validate([path]).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_DescricaoEIconeAcimaDoLimite_RetornaErros()
+    {
+        var path = Path("sql-dados", "SQL", 1, Module("ambiente", 1, Lesson("ambiente", 1))) with
+        {
+            Description = new string('d', 2001),
+            Icon = new string('i', 101)
+        };
+
+        ContentValidator.Validate([path]).Should().HaveCount(2)
+            .And.Contain(e => e.Contains("'description' tem 2001"))
+            .And.Contain(e => e.Contains("'icon' tem 101"));
     }
 
     [Theory]
@@ -79,6 +141,6 @@ public class ContentValidatorTests
     private static ModuleContent Module(string slug, int order, params LessonContent[] lessons) =>
         new(slug, $"Módulo {slug}", "Descrição", order, lessons);
 
-    private static LessonContent Lesson(string moduleSlug, int order) =>
-        new($"content/{moduleSlug}/{order:00}.md", $"Aula {order}", moduleSlug, order, 10, "sql", DifficultyLevel.Beginner, "# Aula\n");
+    private static LessonContent Lesson(string moduleSlug, int order, string? slug = null) =>
+        new($"content/{moduleSlug}/{order:00}-aula-{order}.md", slug ?? $"aula-{order}", $"Aula {order}", moduleSlug, order, 10, "sql", DifficultyLevel.Beginner, "# Aula\n");
 }

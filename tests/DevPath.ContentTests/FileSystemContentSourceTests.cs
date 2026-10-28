@@ -74,12 +74,75 @@ public sealed class FileSystemContentSourceTests : IDisposable
     }
 
     [Fact]
-    public void LoadPaths_ChaveDesconhecida_LancaErroDeYaml()
+    public void LoadPaths_SlugDaAulaVemDoNomeDoArquivo()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-o-que-e-sql.md", Frontmatter() + "\n# Intro\n");
+
+        new FileSystemContentSource(_root).LoadPaths().Single().Modules.Single().Lessons.Single()
+            .Slug.Should().Be("o-que-e-sql");
+    }
+
+    [Fact]
+    public void LoadPaths_ArquivoSemPrefixoDeOrdem_LancaErro()
+    {
+        WritePath();
+        WriteLesson("ambiente", "intro.md", Frontmatter() + "\n# Intro\n");
+
+        Errors().Should().ContainSingle(e => e.Contains("padrão NN-slug.md"));
+    }
+
+    [Fact]
+    public void LoadPaths_PrefixoDiferenteDaOrdem_LancaErro()
+    {
+        WritePath();
+        WriteLesson("ambiente", "02-intro.md", Frontmatter() + "\n# Intro\n");
+
+        Errors().Should().ContainSingle(e => e.Contains("prefixo do arquivo (02) não bate com order: 1"));
+    }
+
+    [Fact]
+    public void LoadPaths_ChaveDesconhecida_ErroComArquivoLinhaEChavesAceitas()
     {
         WritePath();
         WriteLesson("ambiente", "01-intro.md", Frontmatter().Replace("order: 1", "ordem: 1") + "\n# Intro\n");
 
-        Errors().Should().ContainSingle(e => e.Contains("YAML inválido"));
+        // Linha 4 do arquivo: '---', title, module, ordem.
+        var error = Errors().Should().ContainSingle().Subject;
+        error.Should().StartWith("content/paths/sql-dados/modules/ambiente/01-intro.md, linha 4: chave desconhecida 'ordem'")
+            .And.Contain("order, estimated_minutes")
+            .And.NotContain("DevPath").And.NotContain("LessonFile");
+    }
+
+    [Fact]
+    public void LoadPaths_ValorNaoNumerico_ErroDizQualCampoEALinha()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter().Replace("estimated_minutes: 15", "estimated_minutes: quinze") + "\n# Intro\n");
+
+        Errors().Should().ContainSingle().Which.Should()
+            .Be("content/paths/sql-dados/modules/ambiente/01-intro.md, linha 5: valor inválido em 'estimated_minutes': esperado um número inteiro.");
+    }
+
+    [Fact]
+    public void LoadPaths_ChaveDesconhecidaNoModuloDoPathYaml_ListaChavesDoModulo()
+    {
+        WritePath(extraModuleKey: "autor: fulano");
+        WriteLesson("ambiente", "01-intro.md", Frontmatter() + "\n# Intro\n");
+
+        Errors().Should().ContainSingle().Which.Should()
+            .StartWith("content/paths/sql-dados/path.yaml, linha 12: chave desconhecida 'autor'. Chaves aceitas: slug, title, description, order.");
+    }
+
+    [Fact]
+    public void LoadPaths_YamlMalFormatado_ErroSemNomesDeTipo()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter().Replace("order: 1", "order: [1") + "\n# Intro\n");
+
+        Errors().Should().ContainSingle().Which.Should()
+            .StartWith("content/paths/sql-dados/modules/ambiente/01-intro.md, linha")
+            .And.NotContain("System.").And.NotContain("Exception");
     }
 
     [Theory]
@@ -110,7 +173,7 @@ public sealed class FileSystemContentSourceTests : IDisposable
         return act.Should().Throw<ContentValidationException>().Which.Errors;
     }
 
-    private void WritePath() => Write(Path.Combine("paths", "sql-dados", "path.yaml"), """
+    private void WritePath(string extraModuleKey = "") => Write(Path.Combine("paths", "sql-dados", "path.yaml"), $"""
         title: "SQL & Dados"
         description: "Trilha de teste"
         icon: database
@@ -122,6 +185,7 @@ public sealed class FileSystemContentSourceTests : IDisposable
             title: "Ambiente"
             description: "Docker e PostgreSQL"
             order: 1
+            {extraModuleKey}
         """);
 
     private void WriteLesson(string module, string file, string text) =>

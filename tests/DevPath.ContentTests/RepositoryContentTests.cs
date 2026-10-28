@@ -32,7 +32,7 @@ public class RepositoryContentTests
     public void Conteudo_TemAsDuasTrilhasIniciaisDaSpec()
     {
         // SPEC §14, item 4: Backend .NET e SQL & Dados.
-        LoadPaths().Select(p => (p.FolderName, p.Title)).Should().Equal(
+        LoadPaths().Select(p => (p.Slug, p.Title)).Should().Equal(
             ("backend-net", "Backend .NET"),
             ("sql-dados", "SQL & Dados"));
     }
@@ -41,7 +41,7 @@ public class RepositoryContentTests
     public void BackendNet_TemOsSeteModulosDaSpecEmOrdem()
     {
         // SPEC §7.1: Módulos 0 a 6 (aqui numerados de 1 a 7).
-        var backend = LoadPaths().Single(p => p.FolderName == "backend-net");
+        var backend = LoadPaths().Single(p => p.Slug == "backend-net");
 
         backend.Modules.OrderBy(m => m.Order).Select(m => m.Title).Should().Equal(
             "Fundamentos de Programação",

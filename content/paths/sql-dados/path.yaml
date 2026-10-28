@@ -1,5 +1,5 @@
 # Trilha SQL & Dados: metadados lidos pelo ContentSeeder.
-# O nome da pasta precisa ser o slug do título (ex.: "SQL & Dados" -> sql-dados).
+# O nome da pasta é o slug da trilha (fixo: é por ele que o seed acha a trilha no banco; o título pode mudar).
 title: "SQL & Dados"
 description: "SQL do zero com PostgreSQL rodando em Docker: modelagem, CRUD, consultas, performance, transactions e como conectar o C# ao banco."
 icon: database
