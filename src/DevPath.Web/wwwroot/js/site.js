@@ -1,4 +1,12 @@
-﻿// Please see documentation at https://learn.microsoft.com/aspnet/core/client-side/bundling-and-minification
-// for details on configuring this project to bundle and minify static web assets.
+// Menu mobile do header: alterna a visibilidade do menu e o aria-expanded do botão.
+document.addEventListener("DOMContentLoaded", () => {
+  const button = document.querySelector("[data-menu-toggle]");
+  const menu = document.getElementById("menu-mobile");
+  if (!button || !menu) return;
 
-// Write your JavaScript code.
+  button.addEventListener("click", () => {
+    const isOpen = button.getAttribute("aria-expanded") === "true";
+    button.setAttribute("aria-expanded", String(!isOpen));
+    menu.classList.toggle("hidden", isOpen);
+  });
+});

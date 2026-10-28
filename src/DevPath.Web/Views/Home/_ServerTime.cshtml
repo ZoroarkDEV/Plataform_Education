@@ -1,0 +1,8 @@
+@model DevPath.Web.Models.ServerTimeViewModel
+@* Partial retornada por HomeController.ServerTime e inserida no #server-time pelo HTMX. *@
+<p class="font-medium text-slate-900">
+    Horário do servidor: <time datetime="@Model.Now.ToString("O")">@Model.Now.ToString("HH:mm:ss")</time>
+</p>
+<p class="mt-1 text-xs text-slate-500">
+    Renderizado em C# no servidor e trocado no DOM pelo HTMX (<code class="font-mono">hx-get</code> + <code class="font-mono">hx-target</code>).
+</p>

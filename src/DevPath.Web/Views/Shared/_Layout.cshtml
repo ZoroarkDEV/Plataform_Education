@@ -1,49 +1,96 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
+
+    // Links do menu principal (texto, controller, action). Usado no menu desktop e no mobile.
+    var navLinks = new[]
+    {
+        (Text: "Início", Controller: "Home", Action: "Index"),
+        (Text: "Privacidade", Controller: "Home", Action: "Privacy"),
+    };
+
+    bool IsActive(string controller, string action) =>
+        string.Equals(controller, currentController, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(action, currentAction, StringComparison.OrdinalIgnoreCase);
+}
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - DevPath.Web</title>
-    <script type="importmap"></script>
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <title>@ViewData["Title"] - DevPath</title>
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/DevPath.Web.styles.css" asp-append-version="true" />
+    @* HTMX 2.0.10 versionado em wwwroot/lib/htmx (sem CDN). *@
+    <script src="~/lib/htmx/htmx.min.js" asp-append-version="true" defer></script>
 </head>
-<body>
-    <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">DevPath.Web</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </nav>
-    </header>
-    <div class="container">
-        <main role="main" class="pb-3">
-            @RenderBody()
-        </main>
-    </div>
+<body class="flex min-h-full flex-col bg-slate-50 text-slate-800 antialiased">
+    <a href="#conteudo"
+       class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-brand-700 focus:shadow-lg focus:outline-2 focus:outline-brand-600">
+        Pular para o conteúdo
+    </a>
 
-    <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2026 - DevPath.Web - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+    <header class="border-b border-slate-200 bg-white">
+        <nav class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6" aria-label="Principal">
+            <a asp-controller="Home" asp-action="Index"
+               class="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600">
+                <span class="grid size-8 place-items-center rounded-lg bg-brand-600 font-mono text-sm text-white" aria-hidden="true">&lt;/&gt;</span>
+                DevPath
+            </a>
+
+            @* Menu desktop *@
+            <ul class="hidden items-center gap-1 sm:flex">
+                @foreach (var link in navLinks)
+                {
+                    var active = IsActive(link.Controller, link.Action);
+                    <li>
+                        <a asp-controller="@link.Controller" asp-action="@link.Action"
+                           aria-current="@(active ? "page" : null)"
+                           class="rounded-md px-3 py-2 text-sm font-medium hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-brand-600 @(active ? "bg-brand-50 text-brand-700" : "text-slate-600")">
+                            @link.Text
+                        </a>
+                    </li>
+                }
+            </ul>
+
+            @* Botão do menu mobile (controlado por wwwroot/js/site.js) *@
+            <button type="button" data-menu-toggle
+                    class="inline-flex items-center justify-center rounded-md p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-600 sm:hidden"
+                    aria-controls="menu-mobile" aria-expanded="false" aria-label="Abrir menu de navegação">
+                <svg class="size-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+            </button>
+        </nav>
+
+        @* Menu mobile *@
+        <ul id="menu-mobile" class="hidden space-y-1 border-t border-slate-200 px-4 py-3 sm:hidden">
+            @foreach (var link in navLinks)
+            {
+                var active = IsActive(link.Controller, link.Action);
+                <li>
+                    <a asp-controller="@link.Controller" asp-action="@link.Action"
+                       aria-current="@(active ? "page" : null)"
+                       class="block rounded-md px-3 py-2 text-base font-medium hover:bg-slate-100 @(active ? "bg-brand-50 text-brand-700" : "text-slate-700")">
+                        @link.Text
+                    </a>
+                </li>
+            }
+        </ul>
+    </header>
+
+    <main id="conteudo" tabindex="-1" class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 focus:outline-none sm:px-6 sm:py-12">
+        @RenderBody()
+    </main>
+
+    <footer class="border-t border-slate-200 bg-white">
+        <div class="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <p>&copy; @DateTime.Now.Year DevPath. Aprenda programação do jeito que um dev trabalha.</p>
+            <p>
+                <a asp-controller="Home" asp-action="Privacy" class="underline-offset-4 hover:text-slate-700 hover:underline">Privacidade</a>
+            </p>
         </div>
     </footer>
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+
     <script src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
