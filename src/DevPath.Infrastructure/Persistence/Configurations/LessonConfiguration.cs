@@ -16,6 +16,7 @@ internal sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
         builder.HasKey(l => l.Id);
 
         builder.Property(l => l.Title).HasMaxLength(200).IsRequired();
+        builder.Property(l => l.Slug).HasMaxLength(200).IsRequired();
         builder.Property(l => l.Content).IsRequired(); // text, sem limite
         builder.Property(l => l.CodeLanguage).HasMaxLength(50);
 
@@ -25,6 +26,9 @@ internal sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
 
         // Único: duas aulas não podem ocupar a mesma posição no módulo.
         builder.HasIndex(l => new { l.ModuleId, l.Order }).IsUnique();
+
+        // O slug identifica a aula dentro do módulo.
+        builder.HasIndex(l => new { l.ModuleId, l.Slug }).IsUnique();
 
         // Lesson 1:N Exercise
         builder.HasMany(l => l.Exercises)

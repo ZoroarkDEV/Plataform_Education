@@ -73,6 +73,7 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     CareerPathId = table.Column<Guid>(type: "uuid", nullable: false),
                     Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Slug = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Description = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
                     Order = table.Column<int>(type: "integer", nullable: false),
                     EstimatedMinutes = table.Column<int>(type: "integer", nullable: false),
@@ -98,6 +99,7 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ModuleId = table.Column<Guid>(type: "uuid", nullable: false),
                     Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Slug = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     ContentType = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     Content = table.Column<string>(type: "text", nullable: false),
                     Order = table.Column<int>(type: "integer", nullable: false),
@@ -269,9 +271,21 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_Lessons_ModuleId_Slug",
+                table: "Lessons",
+                columns: new[] { "ModuleId", "Slug" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Modules_CareerPathId_Order",
                 table: "Modules",
                 columns: new[] { "CareerPathId", "Order" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Modules_CareerPathId_Slug",
+                table: "Modules",
+                columns: new[] { "CareerPathId", "Slug" },
                 unique: true);
 
             migrationBuilder.CreateIndex(

@@ -39,28 +39,41 @@ public sealed class Exercise
         string solutionCode = "",
         int? maxAttempts = null)
     {
+        var exercise = new Exercise { Id = Guid.NewGuid(), LessonId = lessonId };
+        exercise.Update(title, statement, language, testCasesJson, points, starterCode, solutionCode, maxAttempts);
+        return exercise;
+    }
+
+    /// <summary>Atualiza o exercício (ex.: o seed corrigindo um enunciado), com as mesmas validações do Create.</summary>
+    public void Update(
+        string title,
+        string statement,
+        string language,
+        string testCasesJson,
+        int points,
+        string starterCode,
+        string solutionCode,
+        int? maxAttempts)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         ArgumentException.ThrowIfNullOrWhiteSpace(statement);
         ArgumentException.ThrowIfNullOrWhiteSpace(language);
         ArgumentException.ThrowIfNullOrWhiteSpace(testCasesJson);
+        ArgumentNullException.ThrowIfNull(starterCode);
+        ArgumentNullException.ThrowIfNull(solutionCode);
         ArgumentOutOfRangeException.ThrowIfNegative(points);
         if (maxAttempts is not null)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxAttempts.Value);
         }
 
-        return new Exercise
-        {
-            Id = Guid.NewGuid(),
-            LessonId = lessonId,
-            Title = title.Trim(),
-            Statement = statement,
-            Language = language.Trim().ToLowerInvariant(),
-            TestCases = testCasesJson,
-            Points = points,
-            StarterCode = starterCode,
-            SolutionCode = solutionCode,
-            MaxAttempts = maxAttempts
-        };
+        Title = title.Trim();
+        Statement = statement;
+        Language = language.Trim().ToLowerInvariant();
+        TestCases = testCasesJson;
+        Points = points;
+        StarterCode = starterCode;
+        SolutionCode = solutionCode;
+        MaxAttempts = maxAttempts;
     }
 }
