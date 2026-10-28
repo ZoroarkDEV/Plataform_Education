@@ -1,7 +1,11 @@
+using System.Globalization;
+using System.Text;
+using DevPath.Domain.Common;
+
 namespace DevPath.Domain.CareerPaths;
 
 /// <summary>
-/// Uma trilha de carreira (ex.: "Backend .NET") que agrupa os cursos que o aluno vai seguir.
+/// Uma trilha de carreira (ex.: "Backend .NET") que agrupa os módulos que o aluno vai seguir.
 /// </summary>
 /// <remarks>
 /// A entidade protege as próprias regras: não existe <c>CareerPath</c> sem título,
@@ -9,39 +13,89 @@ namespace DevPath.Domain.CareerPaths;
 /// </remarks>
 public sealed class CareerPath
 {
-    public Guid Id { get; }
-    public string Title { get; }
-    public string Slug { get; }
+    // O EF Core preenche esta lista pelo campo privado; de fora, só leitura.
+    private readonly List<Module> _modules = [];
 
-    private CareerPath(Guid id, string title, string slug)
-    {
-        Id = id;
-        Title = title;
-        Slug = slug;
-    }
+    public Guid Id { get; private set; }
+    public string Title { get; private set; } = string.Empty;
+    public string Slug { get; private set; } = string.Empty;
+    public string Description { get; private set; } = string.Empty;
+    public string? Icon { get; private set; }
+    public DifficultyLevel DifficultyLevel { get; private set; }
+    public int EstimatedHours { get; private set; }
+    public bool IsActive { get; private set; }
+    public int Order { get; private set; }
+
+    public IReadOnlyCollection<Module> Modules => _modules;
+
+    // Construtor vazio exigido pelo EF Core para materializar a entidade.
+    private CareerPath() { }
 
     /// <summary>Cria uma nova trilha validando o título.</summary>
-    /// <exception cref="ArgumentException">Quando o título é vazio ou só tem espaços.</exception>
-    public static CareerPath Create(string title)
+    /// <exception cref="ArgumentException">
+    /// Quando o título é vazio, só tem espaços ou não gera um slug válido (ex.: "!!!").
+    /// </exception>
+    public static CareerPath Create(
+        string title,
+        string description = "",
+        DifficultyLevel difficultyLevel = DifficultyLevel.Beginner,
+        int estimatedHours = 0,
+        int order = 0,
+        string? icon = null)
     {
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            throw new ArgumentException("O título da trilha é obrigatório.", nameof(title));
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        ArgumentOutOfRangeException.ThrowIfNegative(estimatedHours);
+        ArgumentOutOfRangeException.ThrowIfNegative(order);
 
         var normalizedTitle = title.Trim();
-        return new CareerPath(Guid.NewGuid(), normalizedTitle, ToSlug(normalizedTitle));
+        var slug = ToSlug(normalizedTitle);
+        if (slug.Length == 0)
+        {
+            throw new ArgumentException("O título precisa ter ao menos uma letra ou número.", nameof(title));
+        }
+
+        return new CareerPath
+        {
+            Id = Guid.NewGuid(),
+            Title = normalizedTitle,
+            Slug = slug,
+            Description = description.Trim(),
+            Icon = icon,
+            DifficultyLevel = difficultyLevel,
+            EstimatedHours = estimatedHours,
+            IsActive = true,
+            Order = order
+        };
     }
 
-    // "Backend .NET" -> "backend-net"
+    /// <summary>Adiciona um módulo no fim da trilha (a ordem é calculada aqui).</summary>
+    public Module AddModule(string title, string description = "", int estimatedMinutes = 0)
+    {
+        var module = Module.Create(Id, title, order: _modules.Count + 1, description, estimatedMinutes);
+        _modules.Add(module);
+        return module;
+    }
+
+    // "Programação  Backend .NET" -> "programacao-backend-net"
     private static string ToSlug(string value)
     {
-        var words = value
+        var words = RemoveAccents(value)
             .ToLowerInvariant()
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Select(word => new string(word.Where(char.IsLetterOrDigit).ToArray()))
+            .Select(word => new string(word.Where(char.IsAsciiLetterOrDigit).ToArray()))
             .Where(word => word.Length > 0);
 
         return string.Join('-', words);
+    }
+
+    // FormD separa "ç" em "c" + cedilha; depois descartamos as marcas (NonSpacingMark).
+    private static string RemoveAccents(string value)
+    {
+        var decomposed = value.Normalize(NormalizationForm.FormD);
+        var withoutMarks = decomposed
+            .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            .ToArray();
+
+        return new string(withoutMarks).Normalize(NormalizationForm.FormC);
     }
 }
