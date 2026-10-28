@@ -201,8 +201,17 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.Property<int>("EstimatedMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsDraft")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsPublished")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("LearningObjectives")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<Guid>("ModuleId")
                         .HasColumnType("uuid");

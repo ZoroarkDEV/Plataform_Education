@@ -1,5 +1,7 @@
 using DevPath.Application.Auth;
+using DevPath.Application.Lessons;
 using DevPath.Infrastructure.Identity;
+using DevPath.Infrastructure.Lessons;
 using DevPath.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +37,10 @@ public static class DependencyInjection
         services.AddDbContext<DevPathDbContext>(options => options.UseNpgsql(connectionString));
 
         services.AddIdentityServices();
+
+        // Leitura das aulas para a página /trilhas/{trilha}/{módulo}/{aula}. Scoped = um por requisição,
+        // o mesmo tempo de vida do DbContext que ele usa.
+        services.AddScoped<ILessonContentService, LessonContentService>();
 
         return services;
     }

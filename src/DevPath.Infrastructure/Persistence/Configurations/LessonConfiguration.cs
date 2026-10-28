@@ -1,4 +1,6 @@
+using System.Text.Json;
 using DevPath.Domain.CareerPaths;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -28,6 +30,23 @@ internal sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
         // valor false no INSERT (false é o valor padrão do bool) e o banco gravaria true: uma aula
         // despublicada nasceria publicada. O default true fica só na migration, para as aulas existentes.
         builder.Property(l => l.IsPublished).IsRequired();
+
+        // Objetivos de aprendizagem: lista de textos gravada como jsonb (ex.: ["Usar SELECT", "Filtrar com WHERE"]).
+        // O conversor faz lista <-> JSON; o comparador compara o CONTEÚDO da lista, para o EF perceber
+        // mudanças (por padrão ele só compararia a referência).
+        builder.Property(l => l.LearningObjectives)
+            .HasConversion(
+                list => JsonSerializer.Serialize(list, (JsonSerializerOptions?)null),
+                json => JsonSerializer.Deserialize<List<string>>(json, (JsonSerializerOptions?)null) ?? new List<string>(),
+                new ValueComparer<IReadOnlyList<string>>(
+                    (a, b) => a!.SequenceEqual(b!),
+                    list => list.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode())),
+                    list => list.ToList()))
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb") // aulas que já existem no banco ganham lista vazia
+            .IsRequired();
+
+        // IsDraft: bool comum. Na migration, as aulas existentes recebem false (defaultValue da coluna).
 
         // Único: duas aulas não podem ocupar a mesma posição no módulo.
         builder.HasIndex(l => new { l.ModuleId, l.Order }).IsUnique();
