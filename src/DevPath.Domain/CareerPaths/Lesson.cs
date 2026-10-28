@@ -25,6 +25,12 @@ public sealed class Lesson
 
     public DifficultyLevel Difficulty { get; private set; }
 
+    /// <summary>
+    /// Aula visível para os alunos. <c>false</c> = removida do /content: continua no banco (o histórico
+    /// de progresso aponta para ela), mas some da navegação e não abre. Nasce publicada.
+    /// </summary>
+    public bool IsPublished { get; private set; } = true;
+
     public IReadOnlyCollection<Exercise> Exercises => _exercises;
 
     private Lesson() { }
@@ -75,6 +81,9 @@ public sealed class Lesson
     }
 
     public void ChangeSlug(string slug) => Slug = SlugGenerator.Generate(slug);
+
+    public void Publish() => IsPublished = true;
+    public void Unpublish() => IsPublished = false;
 
     /// <summary>Adiciona um exercício de código a esta aula.</summary>
     public Exercise AddExercise(

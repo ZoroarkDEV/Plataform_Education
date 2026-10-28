@@ -201,6 +201,9 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.Property<int>("EstimatedMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsPublished")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("ModuleId")
                         .HasColumnType("uuid");
 

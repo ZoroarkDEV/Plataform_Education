@@ -15,6 +15,31 @@ public class ModuleAndLessonTests
     }
 
     [Fact]
+    public void Lesson_NascePublicada_EPodeSerDespublicadaERepublicada()
+    {
+        var lesson = Lesson.Create(Guid.NewGuid(), "Joins", ContentType.Markdown, "# Joins", order: 1);
+        lesson.IsPublished.Should().BeTrue();
+
+        lesson.Unpublish();
+        lesson.IsPublished.Should().BeFalse();
+
+        lesson.Publish();
+        lesson.IsPublished.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Lesson_UpdateContent_NaoMudaIsPublished()
+    {
+        var lesson = Lesson.Create(Guid.NewGuid(), "Joins", ContentType.Markdown, "# Joins", order: 1);
+        lesson.Unpublish();
+
+        lesson.UpdateContent("Joins", ContentType.Markdown, "# Joins v2", order: 1001, estimatedMinutes: 0,
+            codeLanguage: null, difficulty: DifficultyLevel.Beginner);
+
+        lesson.IsPublished.Should().BeFalse("reordenar ou editar não pode republicar uma aula removida");
+    }
+
+    [Fact]
     public void Lesson_GeraSlugSemAcentos()
     {
         var lesson = Lesson.Create(Guid.NewGuid(), "Variáveis e Tipos", ContentType.Markdown, "# Aula", order: 1);

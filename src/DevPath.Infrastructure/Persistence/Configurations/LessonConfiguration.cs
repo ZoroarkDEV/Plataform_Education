@@ -24,6 +24,11 @@ internal sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
         builder.Property(l => l.ContentType).HasConversion<string>().HasMaxLength(20);
         builder.Property(l => l.Difficulty).HasConversion<string>().HasMaxLength(20);
 
+        // IsPublished: SEM HasDefaultValue(true) no modelo, de propósito. Com ele, o EF não enviaria o
+        // valor false no INSERT (false é o valor padrão do bool) e o banco gravaria true: uma aula
+        // despublicada nasceria publicada. O default true fica só na migration, para as aulas existentes.
+        builder.Property(l => l.IsPublished).IsRequired();
+
         // Único: duas aulas não podem ocupar a mesma posição no módulo.
         builder.HasIndex(l => new { l.ModuleId, l.Order }).IsUnique();
 
