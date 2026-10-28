@@ -136,40 +136,82 @@ Uma tarefa só está pronta quando:
 
 ---
 
-## 6. Estrutura do Repositório (alvo)
+## 6. Estrutura do Repositório
 
 ```
 /
-├── README.md                          ← Você está aqui
-├── SPEC-PLATAFORMA-TREINAMENTO-PROGRAMACAO.md
-├── docker-compose.yml
-├── src/
-│   ├── DevPath.Web/                   # ASP.NET Core MVC
-│   ├── DevPath.Application/
-│   ├── DevPath.Domain/
-│   └── DevPath.Infrastructure/
-├── content/                           # Aulas e exercícios em Markdown/JSON
-├── tests/
-└── docs/                              # ADRs e decisões técnicas
+├── README.md                                   ← Você está aqui
+├── SPEC-PLATAFORMA-TREINAMENTO-PROGRAMACAO.md  ← Especificação técnica
+├── DEVPATH-AGENTS-SKILLS.md                    ← Papéis dos agentes
+├── .gitignore                                  ← .NET / Visual Studio / Rider / .env
+├── docker-compose.yml                          ← (Fase 0, em andamento)
+├── src/                                        ← Código-fonte (.NET)
+│   ├── DevPath.Web/                            #   ASP.NET Core MVC
+│   ├── DevPath.Application/                    #   Casos de uso, DTOs, interfaces
+│   ├── DevPath.Domain/                         #   Entidades, enums, value objects
+│   └── DevPath.Infrastructure/                 #   EF Core, repositórios, serviços externos
+├── tests/                                      ← Testes (xUnit + FluentAssertions)
+├── content/                                    ← Aulas e exercícios em Markdown/JSON
+└── docs/
+    └── adr/                                    ← Architecture Decision Records
 ```
+
+| Pasta | O que vai aqui |
+|-------|----------------|
+| `src/` | Projetos da solution .NET (Web, Application, Domain, Infrastructure) |
+| `tests/` | Projetos de teste: unit, integration e, mais tarde, E2E |
+| `content/` | Conteúdo pedagógico desacoplado do código (Markdown com frontmatter YAML + JSON de exercícios) |
+| `docs/adr/` | Decisões técnicas no formato `ADR-XXX-titulo.md` (Status, Contexto, Decisão, Consequências) |
+
+As pastas vazias têm um `.gitkeep` só para existirem no Git até receberem arquivos.
+
+### Status das fases
+
+| Fase | Escopo | Status |
+|------|--------|--------|
+| 0 | Solution + Docker Compose + EF Core rodando | 🚧 Em andamento |
+| 1 | Identity + entidades básicas + seed de CareerPaths | ⏳ |
+| 2 | Onboarding + Dashboard + progresso básico | ⏳ |
+| 3 | Renderização de aulas (Markdown) | ⏳ |
+| 4 | Exercícios SQL interativos + Docker | ⏳ |
+| 5 | Conteúdo C# + ASP.NET Core MVC | ⏳ |
+| 6 | Projeto final + testes + polish | ⏳ |
 
 ---
 
-## 7. Comandos Essenciais (alvo)
+## 7. Como rodar
+
+### Pré-requisitos
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (ou Docker Engine + Compose)
+- [.NET SDK 9+](https://dotnet.microsoft.com/download)
+- Git
+
+Você **não** precisa instalar PostgreSQL nem Redis na sua máquina: os dois rodam em containers.
+
+### Passo a passo
 
 ```bash
-# Subir ambiente completo
+# 1. Clonar o repositório
+git clone https://github.com/ZoroarkDEV/Plataform_Education.git
+cd Plataform_Education
+
+# 2. Criar seu arquivo de variáveis de ambiente (nunca commitado)
+cp .env.example .env
+
+# 3. Subir PostgreSQL + Redis
 docker-compose up -d
 
-# Aplicar migrations
-dotnet ef database update --project src/DevPath.Infrastructure
+# 4. Aplicar as migrations no banco
+dotnet ef database update --project src/DevPath.Infrastructure --startup-project src/DevPath.Web
 
-# Rodar a aplicação
+# 5. Rodar a aplicação
 dotnet run --project src/DevPath.Web
 
-# Testes
+# 6. Rodar os testes
 dotnet test
 ```
+
+> ⚠️ A solution .NET, o `docker-compose.yml` e o `.env.example` estão sendo criados na Fase 0. Até lá, os passos 2 a 6 ainda não funcionam; esta seção será atualizada junto com eles.
 
 ---
 
@@ -213,7 +255,5 @@ Quando em dúvida, escolha a opção que:
 
 ---
 
-**Última atualização:** 2026-08-12  
-**Status:** Fase de especificação concluída → pronto para implementação
-```
-# Plataform_Education
+**Última atualização:** 2026-10-28  
+**Status:** Fase 0 em andamento (estrutura inicial do repositório criada)
