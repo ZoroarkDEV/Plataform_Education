@@ -1,4 +1,6 @@
+using DevPath.Application.Content;
 using DevPath.Infrastructure;
+using DevPath.Infrastructure.Content;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,7 +24,26 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.SlidingExpiration = true;                     // renova enquanto o usuário estiver ativo
 });
 
+// Leitura do conteúdo pedagógico de /content e o seed das trilhas (issue #10).
+builder.Services.AddContentSeeding(builder.Configuration, builder.Environment.ContentRootPath);
+
 var app = builder.Build();
+
+// Em Development, importa /content para o banco no startup (upsert: rodar de novo não duplica).
+// Desligue com Content__SeedOnStartup=false. Precisa das migrations aplicadas.
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Content:SeedOnStartup", true))
+{
+    using var scope = app.Services.CreateScope();
+    try
+    {
+        await scope.ServiceProvider.GetRequiredService<IContentSeeder>().SeedAsync();
+    }
+    catch (Exception ex)
+    {
+        // Não derruba a aplicação: só avisa no log o que precisa ser corrigido.
+        app.Logger.LogError(ex, "Seed de conteúdo não executado: {Message}", ex.Message);
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
