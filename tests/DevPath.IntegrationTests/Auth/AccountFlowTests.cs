@@ -140,8 +140,98 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
 
         var response = await LoginAsync(client, email, ValidPassword);
 
+        // Bloqueada: nem a senha certa entra, e a mensagem é a genérica (não revela o bloqueio).
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await response.ReadHtmlAsync()).Should().Contain("Conta bloqueada temporariamente");
+        var html = await response.ReadHtmlAsync();
+        html.Should().Contain(GenericLoginError).And.NotContain("bloqueada");
+        (await client.GetAsync("/dashboard")).StatusCode.Should().Be(HttpStatusCode.Redirect);
+
+        var user = await FindUserAsync(email);
+        user!.LockoutEnd.Should().BeAfter(DateTimeOffset.UtcNow, "as tentativas erradas continuam contando para o bloqueio");
+    }
+
+    [Fact]
+    public async Task Login_EmailInexistenteSenhaErradaEContaBloqueada_MostramAMesmaMensagem()
+    {
+        var client = factory.CreateBrowserClient();
+        var existing = await CreateUserAsync();
+        var locked = await CreateUserAsync();
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            await LoginAsync(client, locked, "SenhaErrada1");
+        }
+
+        var nonexistent = await ErrorSummaryAsync(await LoginAsync(client, NewEmail(), ValidPassword));
+        var wrongPassword = await ErrorSummaryAsync(await LoginAsync(client, existing, "SenhaErrada1"));
+        var lockedOut = await ErrorSummaryAsync(await LoginAsync(client, locked, ValidPassword));
+
+        nonexistent.Should().Be(GenericLoginError);
+        wrongPassword.Should().Be(nonexistent);
+        lockedOut.Should().Be(nonexistent);
+    }
+
+    /// <summary>
+    /// Teste de tempo propositalmente FROUXO: só pega a diferença grosseira de antes da correção
+    /// (~3 ms para e-mail inexistente contra ~55 ms para conta real, razão ~0,05).
+    /// Exigimos apenas que o caminho "não existe" leve pelo menos 30% do caminho "senha errada".
+    /// Medimos a mediana de várias tentativas para reduzir o ruído da máquina.
+    /// </summary>
+    [Fact]
+    public async Task Login_EmailInexistente_LevaTempoParecidoComSenhaErrada()
+    {
+        var client = factory.CreateBrowserClient();
+        var existing = await CreateUserAsync();
+
+        async Task<double> MedianMsAsync(Func<Task> login)
+        {
+            await login(); // aquecimento (JIT, conexão com o banco)
+            var samples = new List<double>();
+            for (var i = 0; i < 5; i++)
+            {
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                await login();
+                samples.Add(stopwatch.Elapsed.TotalMilliseconds);
+            }
+
+            return samples.Order().ElementAt(samples.Count / 2);
+        }
+
+        // Senha errada em conta real: usamos uma conta nova a cada rodada para não chegar no bloqueio.
+        var wrongPasswordMs = await MedianMsAsync(async () => await LoginAsync(client, await CreateUserAsync(), "SenhaErrada1"));
+        var nonexistentMs = await MedianMsAsync(() => LoginAsync(client, NewEmail(), "SenhaErrada1"));
+
+        nonexistentMs.Should().BeGreaterThan(wrongPasswordMs * 0.3,
+            $"e-mail inexistente levou {nonexistentMs:F1} ms e senha errada {wrongPasswordMs:F1} ms");
+    }
+
+    [Fact]
+    public async Task Register_ComEmailJaUsado_MostraOErroUmaVezSo()
+    {
+        var email = await CreateUserAsync();
+        var client = factory.CreateBrowserClient();
+
+        var response = await client.SubmitFormAsync("/Account/Register", "/Account/Register", new Dictionary<string, string>
+        {
+            ["DisplayName"] = "Outra Pessoa",
+            ["Email"] = email,
+            ["Password"] = ValidPassword,
+            ["ConfirmPassword"] = ValidPassword
+        });
+
+        var html = await response.ReadHtmlAsync();
+        System.Text.RegularExpressions.Regex.Matches(html, "Já existe uma conta com o e-mail").Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task CookieDeLogin_ForaDoDevelopment_EhSecureEHttpOnly()
+    {
+        var email = await CreateUserAsync();
+        var client = factory.CreateBrowserClient();
+
+        var response = await LoginAsync(client, email, ValidPassword);
+
+        var authCookie = response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith(".DevPath.Auth="));
+        authCookie.Should().ContainEquivalentOf("secure").And.ContainEquivalentOf("httponly").And.ContainEquivalentOf("samesite=lax");
     }
 
     [Fact]
@@ -170,6 +260,16 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
         }));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    private const string GenericLoginError = "E-mail ou senha inválidos.";
+
+    // Texto do primeiro erro do resumo de validação (asp-validation-summary) da página de login.
+    private static async Task<string> ErrorSummaryAsync(HttpResponseMessage response)
+    {
+        var html = await response.ReadHtmlAsync();
+        var match = System.Text.RegularExpressions.Regex.Match(html, @"validation-summary-errors[^>]*>\s*<ul>\s*<li>(.*?)</li>", System.Text.RegularExpressions.RegexOptions.Singleline);
+        return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
     }
 
     private static string NewEmail() => $"aluno-{Guid.NewGuid():N}@devpath.test";

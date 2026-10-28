@@ -42,6 +42,32 @@ public class AccountViewModelsTests
         Validate(new LoginViewModel()).Should().HaveCount(2);
     }
 
+    [Theory]
+    [InlineData(typeof(RegisterViewModel))]
+    [InlineData(typeof(LoginViewModel))]
+    public void TodaRegraDeValidacao_TemMensagemEmPortugues(Type viewModel)
+    {
+        // [DataType(Password)] só descreve o campo (não valida), então fica de fora.
+        var withoutMessage = viewModel.GetProperties()
+            .SelectMany(p => p.GetCustomAttributes(typeof(ValidationAttribute), inherit: true)
+                .Cast<ValidationAttribute>()
+                .Where(a => a.GetType() != typeof(DataTypeAttribute) && string.IsNullOrWhiteSpace(a.ErrorMessage))
+                .Select(a => $"{p.Name}: {a.GetType().Name}"))
+            .ToList();
+
+        withoutMessage.Should().BeEmpty("sem ErrorMessage o aluno veria a mensagem padrão em inglês");
+    }
+
+    [Fact]
+    public void Register_EmailLongoDemais_MostraMensagemEmPortugues()
+    {
+        var model = ValidRegister();
+        model.Email = new string('a', 250) + "@devpath.test";
+
+        Validate(model).Should().ContainSingle()
+            .Which.ErrorMessage.Should().Be("O e-mail deve ter no máximo 256 caracteres.");
+    }
+
     private static RegisterViewModel ValidRegister() => new()
     {
         DisplayName = "Ana",

@@ -20,6 +20,7 @@ Seguindo o papel **DevPath Architect** (`DEVPATH-AGENTS-SKILLS.md`), crie um ADR
 | [ADR-001](ADR-001-stack-oficial-do-mvp.md) | Stack oficial do MVP | Accepted |
 | [ADR-002](ADR-002-monolito-modular-em-camadas.md) | Monólito modular em camadas | Accepted |
 | [ADR-003](ADR-003-conteudo-pedagogico-em-content.md) | Conteúdo pedagógico em `/content` | Accepted |
+| [ADR-005](ADR-005-enumeracao-de-contas.md) | Enumeração de contas (login e cadastro) | Proposed |
 
 Decisões já previstas para ADRs futuros:
 - Estratégia de execução (sandbox) de código do aluno — issue #13 (Fase 3).
