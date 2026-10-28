@@ -112,5 +112,47 @@ public class OnboardingViewModelsTests
         new("sql-dados", "SQL & Dados", 0, available, 0, next, firstAccess, []);
 
     private static PathOptionViewModel Path(DifficultyLevel level = DifficultyLevel.Beginner, int hours = 40, int lessons = 20) =>
-        new("sql-dados", "SQL & Dados", "Descrição.", level, hours, lessons);
+        new("sql-dados", "SQL & Dados", "Descrição.", level, hours, lessons, lessons);
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    [InlineData(18, true)]
+    public void Trilha_SoComAulaDisponivelPodeSerEscolhida(int availableLessons, bool selectable)
+    {
+        new PathOptionViewModel("t", "T", "", DifficultyLevel.Beginner, 1, availableLessons, availableLessons + 1)
+            .IsSelectable.Should().Be(selectable);
+    }
+
+    [Theory]
+    [InlineData(0, 0, false)]
+    [InlineData(0, 2, true)]
+    [InlineData(1, 2, false)]
+    public void Trilha_SoComRascunhos_UsaOTotalComRascunhos(int available, int total, bool onlyDrafts)
+    {
+        var path = new PathOptionViewModel("t", "T", "", DifficultyLevel.Beginner, 1, available, total);
+        path.HasOnlyDrafts.Should().Be(onlyDrafts);
+        path.IsSelectable.Should().Be(available > 0, "o \"Em breve\" continua decidido por AvailableLessons");
+    }
+
+    [Fact]
+    public void Dashboard_CanOpen_SoParaAulaLiberadaDoRoadmap()
+    {
+        var where = new LessonRef("sql-dados", "primeiros-passos-com-sql", "filtrando-com-where", "Filtrando com WHERE");
+        var join = new LessonRef("sql-dados", "primeiros-passos-com-sql", "juntando-tabelas-com-join", "JOIN");
+        var foraDoRoadmap = new LessonRef("sql-dados", "outro", "x", "X");
+        var dashboard = new DashboardViewModel("sql-dados", "SQL & Dados", 0, 3, 0, Select, true,
+        [
+            new("primeiros-passos-com-sql", "Primeiros passos com SQL", 0, 3, 0,
+            [
+                new(Select, LessonStatus.Available),
+                new(where, LessonStatus.Locked, Select),
+                new(join, LessonStatus.Locked, where)
+            ])
+        ]);
+
+        dashboard.CanOpen(Select).Should().BeTrue();
+        dashboard.CanOpen(where).Should().BeFalse("bloqueada");
+        dashboard.CanOpen(foraDoRoadmap).Should().BeFalse();
+    }
 }

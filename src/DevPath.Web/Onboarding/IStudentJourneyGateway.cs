@@ -66,7 +66,7 @@ public enum EnrollmentStatus
     PathNotFound,
     /// <summary>
     /// A trilha está ativa, mas não tem nenhuma aula disponível (inclusive quando só tem rascunhos).
-    /// Não é serviço fora do ar.
+    /// Não é serviço fora do ar. A tela já mostra essas trilhas como "Em breve", sem envio.
     /// </summary>
     NoLessons,
     /// <summary>O usuário do cookie não existe mais no banco (conta apagada): a Web encerra a sessão.</summary>

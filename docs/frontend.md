@@ -147,7 +147,8 @@ um adapter fino para o `IStudentJourneyService` do backend (`DevPath.Application
 Casos de borda:
 - `EnrollmentResultKind.NoLessons` (trilha ativa sem nenhuma aula disponível, inclusive só com rascunhos) vira
   `EnrollmentStatus.NoLessons`: volta para a escolha com "Essa trilha ainda não tem aulas. Escolha outra trilha ou
-  volte em breve.".
+  volte em breve.". Na tela essas trilhas já aparecem "Em breve" (`AvailableLessons == 0`), sem envio, e o
+  controller recusa o POST direto antes de chamar o serviço.
 - `AlreadyEnrolled` (2ª matrícula, na mesma trilha ou em outra; não há troca de trilha) vai para o
   dashboard com o aviso "Você já está na trilha X. Por enquanto é uma trilha por vez: continue de onde parou.",
   com X = `EnrollmentResult.PathTitle` (a trilha atual). Sem título, o aviso fica genérico ("Você já está em uma trilha.").
@@ -156,6 +157,8 @@ Casos de borda:
   esperados, então o adapter não captura exceção nenhuma. `GetDashboardAsync` devolve `null` nesse caso (o mesmo
   de "sem trilha"), então o dashboard manda para a escolha, sem 500.
 - O título vem de `EnrollmentResult.PathTitle`, lido só quando `HasPath` é true (Enrolled e AlreadyEnrolled).
+- `PathSummaryDto.TotalLessons` (com rascunhos) vai para `PathOptionViewModel.TotalLessons` (`HasOnlyDrafts`
+  separa a trilha só com rascunhos da trilha vazia), mas quem decide o "Em breve" é sempre `AvailableLessons`.
 - Porcentagens e "X de Y aulas" usam `AvailableLessons` (sem rascunho). O `TotalLessons` do backend (com
   rascunhos) não é usado no dashboard: o "Aula X de Y" é da página de aula (#12).
 
@@ -164,7 +167,7 @@ trocado por DI nos testes de tela). `OnboardingRealServiceTests` roda o fluxo co
 do Testcontainers.
 
 Contrato que a Web usa do backend:
-- trilhas ativas com o número de aulas disponíveis (sem rascunho);
+- trilhas ativas com o número de aulas disponíveis (sem rascunho) e o total (com rascunhos);
 - se o usuário já tem trilha atual;
 - matrícula com resultado `Enrolled | AlreadyEnrolled | PathNotFound | NoLessons | UserNotFound`, com
   `PathTitle`/`HasPath` (título da trilha escolhida ou da atual);
@@ -178,6 +181,17 @@ Contrato que a Web usa do backend:
 `AllDone` ("Você concluiu tudo que está disponível 🎉"). Cada status tem texto além da cor, e as aulas
 bloqueadas ou "Em breve" não têm link. O motivo do bloqueio ("Conclua 'X' para liberar esta aula") fica
 **sempre visível** abaixo do título, sem depender de hover ou foco (funciona no celular e no teclado).
+Se a aula que falta também está bloqueada (ou fora do roadmap), o nome dela aparece como **texto, sem link**
+(`DashboardViewModel.CanOpen`), para não levar a uma página que não abre.
+
+**Trilha sem aulas disponíveis ("Em breve"):** na "Escolha sua trilha", só trilha com
+`AvailableLessons >= 1` pode ser escolhida (`PathOptionViewModel.IsSelectable`). Trilha com 0 aulas
+disponíveis (inclusive só com rascunhos) aparece com o selo "Em breve", sem form, com um botão
+`disabled` + `aria-disabled="true"` ligado (`aria-describedby`) ao texto que explica o motivo. O POST
+também recusa: o `OnboardingController` confere a lista de trilhas ativas antes de matricular e volta
+para a escolha com "Essa trilha ainda não tem aulas…", sem chamar a matrícula e sem 500.
+
+**Cabeçalho:** o link ativo tem `aria-current="page"` (menu principal e o link "Dashboard" do `_LoginPartial`).
 
 **Um botão principal por tela:** cada tela tem no máximo um `btn-primary` (Home, Entrar, Criar conta,
 Acesso negado e Dashboard têm exatamente um). O "Criar conta" do cabeçalho é contornado (secundário), e

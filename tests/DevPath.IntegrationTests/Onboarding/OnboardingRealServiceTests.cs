@@ -98,12 +98,19 @@ public sealed class OnboardingRealServiceTests(JourneyWebApplicationFactory fact
     }
 
     [Fact]
-    public async Task TrilhaSoComRascunhos_NaoAceitaAMatricula_VoltaParaAEscolhaComMensagem()
+    public async Task TrilhaSoComRascunhos_ApareceEmBreveDesabilitada_EOPostDiretoEhRecusado()
     {
         var client = factory.CreateBrowserClient();
         await RegisterAsync(client);
 
-        // Contrato novo: trilha só com rascunhos devolve NoLessons, como a trilha sem nenhuma aula.
+        // Regra do produto: AvailableLessons == 0 (só rascunhos) = card "Em breve", sem envio.
+        var page = await (await client.GetAsync(ChoosePathUrl)).ReadHtmlAsync();
+        var card = System.Text.RegularExpressions.Regex.Match(page,
+            $@"<li[^>]*data-path=""{factory.DraftsOnlySlug}""[^>]*>.*?</li>",
+            System.Text.RegularExpressions.RegexOptions.Singleline).Value;
+        card.Should().Contain("data-selectable=\"false\"").And.Contain("Em breve")
+            .And.Contain("aria-disabled=\"true\"").And.NotContain("type=\"submit\"");
+
         var post = await ChooseAsync(client, factory.DraftsOnlySlug);
         post.StatusCode.Should().Be(HttpStatusCode.Redirect);
         post.Headers.Location!.ToString().Should().Be(ChoosePathUrl);

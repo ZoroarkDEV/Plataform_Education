@@ -122,7 +122,15 @@
                                     {
                                         @* Sempre visível (nada de hover/foco): precisa funcionar no celular e no teclado. *@
                                         <p class="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
-                                            Conclua '<a href="@item.UnlockRequirement.Url" class="link">@item.UnlockRequirement.Title</a>' para liberar esta aula
+                                            @if (Model.CanOpen(item.UnlockRequirement))
+                                            {
+                                                @:Conclua '<a href="@item.UnlockRequirement.Url" class="link">@item.UnlockRequirement.Title</a>' para liberar esta aula
+                                            }
+                                            else
+                                            {
+                                                @* A aula que falta também está bloqueada: texto, sem link para uma página que não abre. *@
+                                                @:Conclua '<span class="font-medium text-slate-800 dark:text-slate-200" data-unlock-plain>@item.UnlockRequirement.Title</span>' para liberar esta aula
+                                            }
                                         </p>
                                     }
                                     else if (item.Status == LessonStatus.ComingSoon)

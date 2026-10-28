@@ -10,17 +10,29 @@ public sealed record LessonRef(string PathSlug, string ModuleSlug, string Lesson
 }
 
 /// <summary>Um card da tela "Escolha sua trilha" (US-11.2).</summary>
+/// <param name="AvailableLessons">Aulas que abrem (sem rascunho). Decide se a trilha pode ser escolhida.</param>
+/// <param name="TotalLessons">Todas as aulas, com os rascunhos (<c>PathSummaryDto.TotalLessons</c>).</param>
 public sealed record PathOptionViewModel(
     string Slug,
     string Title,
     string Description,
     DifficultyLevel Level,
     int EstimatedHours,
-    int AvailableLessons)
+    int AvailableLessons,
+    int TotalLessons)
 {
     public string LevelLabel => Labels.PathLevel(Level);
 
     public string HoursLabel => EstimatedHours > 0 ? $"Cerca de {EstimatedHours} h" : "Duração a definir";
+
+    /// <summary>
+    /// Só trilha com pelo menos uma aula disponível pode ser escolhida (regra do produto, #11).
+    /// Trilha sem aulas, ou só com rascunhos, aparece desabilitada com o selo "Em breve".
+    /// </summary>
+    public bool IsSelectable => AvailableLessons >= 1;
+
+    /// <summary>Trilha "Em breve" que já tem aulas sendo escritas (só rascunhos), e não uma trilha vazia.</summary>
+    public bool HasOnlyDrafts => AvailableLessons == 0 && TotalLessons > 0;
 
     public string LessonsLabel => AvailableLessons switch
     {
@@ -33,6 +45,10 @@ public sealed record PathOptionViewModel(
 public sealed record ChoosePathViewModel(IReadOnlyList<PathOptionViewModel> Paths, string? ErrorMessage = null)
 {
     public bool IsEmpty => Paths.Count == 0;
+
+    /// <summary>Texto do card desabilitado (trilha sem aulas disponíveis).</summary>
+    public const string ComingSoonExplanation =
+        "Esta trilha ainda não tem aulas disponíveis. Ela poderá ser escolhida assim que a primeira aula for publicada.";
 }
 
 /// <summary>Status de uma aula no roadmap (R7: sempre com texto, não só cor).</summary>
@@ -99,6 +115,13 @@ public sealed record DashboardViewModel(
 
     /// <summary>No 1º acesso o botão diz "Começar pela aula 1"; depois, "Continuar".</summary>
     public string ContinueLabel => IsFirstAccess ? "Começar pela aula 1" : "Continuar";
+
+    /// <summary>
+    /// A aula pode ser aberta agora? Usado no "Conclua 'X' para liberar": se a aula que falta também está
+    /// bloqueada (ou não está no roadmap), ela aparece como texto, sem link para uma página que não abre.
+    /// </summary>
+    public bool CanOpen(LessonRef lesson) =>
+        Modules.SelectMany(m => m.Lessons).Any(item => item.Lesson == lesson && item.CanOpen);
 }
 
 /// <summary>Textos em pt-BR (R6) usados pelas telas de onboarding e dashboard.</summary>

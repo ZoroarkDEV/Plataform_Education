@@ -45,7 +45,7 @@ public sealed class StudentJourneyGateway(IStudentJourneyService service, ILogge
     }
 
     public static PathOptionViewModel ToViewModel(PathSummaryDto dto) =>
-        new(dto.Slug, dto.Title, dto.Description, dto.Level, dto.EstimatedHours, dto.AvailableLessons);
+        new(dto.Slug, dto.Title, dto.Description, dto.Level, dto.EstimatedHours, dto.AvailableLessons, dto.TotalLessons);
 
     public static EnrollmentOutcome ToOutcome(EnrollmentResult result) => result.Kind switch
     {

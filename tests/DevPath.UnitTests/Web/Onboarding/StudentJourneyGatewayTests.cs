@@ -30,9 +30,11 @@ public class StudentJourneyGatewayTests
         var paths = await Gateway(service).GetActivePathsAsync(CancellationToken.None);
 
         paths.Should().Equal(
-            new PathOptionViewModel(Path, "SQL & Dados", "SQL do zero.", DifficultyLevel.Beginner, 40, 5),
-            new PathOptionViewModel("backend-net", "Backend .NET", "C# e .NET.", DifficultyLevel.Intermediate, 120, 0));
+            new PathOptionViewModel(Path, "SQL & Dados", "SQL do zero.", DifficultyLevel.Beginner, 40, 5, 7),
+            new PathOptionViewModel("backend-net", "Backend .NET", "C# e .NET.", DifficultyLevel.Intermediate, 120, 0, 3));
         paths[1].LessonsLabel.Should().Be("Aulas em breve");
+        paths[1].IsSelectable.Should().BeFalse("só rascunhos: AvailableLessons = 0");
+        paths[1].HasOnlyDrafts.Should().BeTrue();
     }
 
     [Theory]

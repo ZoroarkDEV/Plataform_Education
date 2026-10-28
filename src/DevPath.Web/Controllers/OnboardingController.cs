@@ -59,7 +59,19 @@ public sealed class OnboardingController(IStudentJourneyGateway journey, IAuthSe
             return RedirectToAction(nameof(ChoosePath));
         }
 
-        var outcome = await journey.EnrollAsync(userId, pathSlug.Trim(), cancellationToken);
+        var slug = pathSlug.Trim();
+
+        // Regra do produto: trilha sem nenhuma aula disponível (AvailableLessons == 0, inclusive só com
+        // rascunhos) não pode ser escolhida. A tela já mostra o card desabilitado; aqui barra o POST direto.
+        var paths = await journey.GetActivePathsAsync(cancellationToken);
+        var chosen = paths.FirstOrDefault(p => string.Equals(p.Slug, slug, StringComparison.Ordinal));
+        if (chosen is { IsSelectable: false })
+        {
+            TempData[ErrorKey] = NoLessonsMessage;
+            return RedirectToAction(nameof(ChoosePath));
+        }
+
+        var outcome = await journey.EnrollAsync(userId, slug, cancellationToken);
         switch (outcome.Status)
         {
             case EnrollmentStatus.Enrolled:

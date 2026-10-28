@@ -19,10 +19,10 @@ public sealed class FakeStudentJourneyGateway : IStudentJourneyGateway
     [
         new(SqlPath, "SQL & Dados",
             "SQL do zero com PostgreSQL: consultas, modelagem e como conectar o C# ao banco.",
-            DifficultyLevel.Beginner, 40, 5),
+            DifficultyLevel.Beginner, 40, 5, 7),
         new("backend-net", "Backend .NET",
             "C#, ASP.NET Core MVC e Entity Framework Core para construir APIs e sites.",
-            DifficultyLevel.Beginner, 120, 0)
+            DifficultyLevel.Beginner, 120, 0, 0)
     ];
 
     /// <summary>Monta o dashboard que o "serviço" devolve para quem já escolheu trilha.</summary>

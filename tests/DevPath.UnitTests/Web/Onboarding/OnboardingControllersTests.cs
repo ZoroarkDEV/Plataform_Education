@@ -18,7 +18,7 @@ public class OnboardingControllersTests
     private static readonly Guid UserId = Guid.NewGuid();
 
     private static readonly PathOptionViewModel Sql =
-        new("sql-dados", "SQL & Dados", "SQL do zero.", DifficultyLevel.Beginner, 40, 20);
+        new("sql-dados", "SQL & Dados", "SQL do zero.", DifficultyLevel.Beginner, 40, 20, 22);
 
     [Fact]
     public async Task Escolha_JaTemTrilha_RedirecionaParaODashboard()
@@ -110,6 +110,32 @@ public class OnboardingControllersTests
 
         result.Should().BeOfType<RedirectToActionResult>().Which.ActionName.Should().Be(nameof(OnboardingController.ChoosePath));
         controller.TempData.Values.OfType<string>().Should().Contain(v => v.StartsWith(message));
+    }
+
+    [Fact]
+    public async Task Escolha_TrilhaSemAulasDisponiveis_RecusaSemChamarAMatricula()
+    {
+        var emBreve = Sql with { Slug = "backend-net", Title = "Backend .NET", AvailableLessons = 0 };
+        var gateway = new StubGateway { Paths = [Sql, emBreve], Outcome = EnrollmentOutcome.Enrolled("Backend .NET") };
+        var controller = Onboarding(gateway);
+
+        var result = await controller.ChoosePath("backend-net", CancellationToken.None);
+
+        result.Should().BeOfType<RedirectToActionResult>().Which.ActionName.Should().Be(nameof(OnboardingController.ChoosePath));
+        controller.TempData.Values.OfType<string>().Should().Contain(OnboardingController.NoLessonsMessage);
+        gateway.EnrollCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Escolha_TrilhaComAulas_Matricula()
+    {
+        var gateway = new StubGateway { Paths = [Sql], Outcome = EnrollmentOutcome.Enrolled("SQL & Dados") };
+        var controller = Onboarding(gateway);
+
+        var result = await controller.ChoosePath("sql-dados", CancellationToken.None);
+
+        result.Should().BeOfType<RedirectToActionResult>().Which.ControllerName.Should().Be("Dashboard");
+        gateway.EnrollCalls.Should().Be(1);
     }
 
     [Fact]

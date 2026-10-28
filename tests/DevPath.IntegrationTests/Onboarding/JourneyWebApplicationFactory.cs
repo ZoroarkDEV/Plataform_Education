@@ -15,7 +15,8 @@ namespace DevPath.IntegrationTests.Onboarding;
 /// <list type="bullet">
 /// <item>"SQL Teste": 1 módulo publicado com "Primeira Aula", "Segunda Aula" e um rascunho.</item>
 /// <item>"Backend Teste": 1 módulo com 1 aula (para a 2ª matrícula em outra trilha).</item>
-/// <item>"So Rascunhos": só aula em rascunho (AvailableLessons = 0, TotalLessons = 1): a matrícula dá NoLessons.</item>
+/// <item>"So Rascunhos": só aula em rascunho (AvailableLessons = 0, TotalLessons = 1): "Em breve" na escolha
+/// e a matrícula dá NoLessons.</item>
 /// <item>"Sem Aulas": módulo publicado sem nenhuma aula (AvailableLessons = TotalLessons = 0): NoLessons no serviço.</item>
 /// </list>
 /// </remarks>

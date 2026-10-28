@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 using DevPath.IntegrationTests.Infrastructure;
+using DevPath.Web.Controllers;
 using DevPath.Web.Onboarding;
 using DevPath.Web.ViewModels.Onboarding;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -282,6 +283,86 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
+
+    [Fact]
+    public async Task EscolhaDeTrilha_TrilhaSemAulasDisponiveis_ApareceDesabilitadaComEmBreve()
+    {
+        var client = CreateClientWith(new FakeStudentJourneyGateway());
+        await RegisterAsync(client);
+
+        var html = await (await client.GetAsync(ChoosePathUrl)).ReadHtmlAsync();
+
+        var card = Regex.Match(html, @"<li[^>]*data-path=""backend-net""[^>]*>(?<body>.*?)</li>", RegexOptions.Singleline);
+        card.Success.Should().BeTrue();
+        card.Value.Should().Contain("data-selectable=\"false\"");
+        var body = card.Groups["body"].Value;
+        body.Should().Contain("status-coming-soon\">Em breve</span>")
+            .And.Contain(ChoosePathViewModel.ComingSoonExplanation)
+            .And.MatchRegex(@"<button type=""button"" disabled aria-disabled=""true"" aria-describedby=""trilha-backend-net-em-breve""")
+            .And.Contain("id=\"trilha-backend-net-em-breve\"")
+            .And.NotContain("<form").And.NotContain("type=\"submit\"").And.NotContain("name=\"pathSlug\"");
+
+        // A trilha com aulas continua selecionável, e o único botão de envio é o dela.
+        var sql = Regex.Match(html, @"<li[^>]*data-path=""sql-dados""[^>]*>.*?</li>", RegexOptions.Singleline).Value;
+        sql.Should().Contain("data-selectable=\"true\"").And.Contain("type=\"submit\"").And.NotContain("disabled");
+        Regex.Matches(html, @"class=""btn-primary\b").Count.Should().BeLessThanOrEqualTo(1);
+    }
+
+    [Fact]
+    public async Task EscolhaDeTrilha_PostDiretoEmTrilhaSemAulas_VoltaComMensagemSemMatricular()
+    {
+        var gateway = new FakeStudentJourneyGateway();
+        var client = CreateClientWith(gateway);
+        await RegisterAsync(client);
+
+        var post = await client.SubmitFormAsync(ChoosePathUrl, ChoosePathUrl,
+            new Dictionary<string, string> { ["pathSlug"] = "backend-net" });
+
+        post.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        post.Headers.Location!.ToString().Should().Be(ChoosePathUrl);
+        var page = await client.GetAsync(ChoosePathUrl);
+        page.StatusCode.Should().Be(HttpStatusCode.OK, "não matriculou: continua na escolha");
+        (await page.ReadHtmlAsync()).Should().Contain(OnboardingController.NoLessonsMessage);
+        (await client.GetAsync("/dashboard")).Headers.Location!.ToString().Should().Be(ChoosePathUrl);
+    }
+
+    [Fact]
+    public async Task Dashboard_LinkDoCabecalho_TemAriaCurrentSoNoDashboard()
+    {
+        var client = CreateClientWith(new FakeStudentJourneyGateway());
+        await RegisterAsync(client);
+        await ChooseSqlAsync(client);
+
+        var dashboard = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
+        LinksTo(dashboard, "/Dashboard").Should().HaveCount(2, "desktop e mobile")
+            .And.OnlyContain(tag => tag.Contains("aria-current=\"page\""), "o Dashboard é a página atual");
+
+        var home = await (await client.GetAsync("/")).ReadHtmlAsync();
+        LinksTo(home, "/Dashboard").Should().NotBeEmpty().And.OnlyContain(tag => !tag.Contains("aria-current"));
+        LinksTo(home, "/").Count(tag => tag.Contains("aria-current=\"page\"")).Should().Be(2, "na home, o Início é o atual");
+    }
+
+    [Fact]
+    public async Task Dashboard_AulaQueLiberaTambemEstaBloqueada_ApareceComoTextoSemLink()
+    {
+        var client = CreateClientWith(new FakeStudentJourneyGateway());
+        await RegisterAsync(client);
+        await ChooseSqlAsync(client);
+
+        var html = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
+
+        // 1º acesso: só a aula 1 está liberada. "Filtrando com WHERE" depende dela (link);
+        // as outras dependem de aulas bloqueadas (texto, sem link).
+        html.Should().Contain("Conclua '<a href=\"/trilhas/sql-dados/primeiros-passos-com-sql/seu-primeiro-select\" class=\"link\">Seu primeiro SELECT</a>'");
+        Regex.Matches(html, @"data-unlock-plain>").Count.Should().Be(3);
+        html.Should().NotContain("href=\"/trilhas/sql-dados/primeiros-passos-com-sql/filtrando-com-where\"")
+            .And.NotContain("href=\"/trilhas/sql-dados/primeiros-passos-com-sql/ordenando-e-limitando-com-order-by-e-limit\"")
+            .And.NotContain("href=\"/trilhas/sql-dados/primeiros-passos-com-sql/juntando-tabelas-com-join\"");
+    }
+
+    private static List<string> LinksTo(string html, string href) =>
+        Regex.Matches(html, @"<a\s[^>]*>").Select(m => m.Value)
+            .Where(tag => tag.Contains($"href=\"{href}\"", StringComparison.Ordinal)).ToList();
 
     private HttpClient CreateClientWith(IStudentJourneyGateway gateway) =>
         factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
