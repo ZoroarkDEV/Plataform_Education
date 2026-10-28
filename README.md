@@ -106,7 +106,7 @@ Exemplos de decisões corretas:
 
 O CSS é gerado pelo Tailwind standalone CLI (sem Node/npm): `dotnet build` baixa o CLI fixado e compila
 `src/DevPath.Web/Styles/app.css` → `wwwroot/css/site.css` (commitado). O HTMX fica versionado em
-`wwwroot/lib/htmx`. Detalhes, modo watch e exemplo de HTMX em [`docs/frontend.md`](docs/frontend.md).
+`wwwroot/lib/htmx`. Detalhes, modo watch e uso do HTMX em [`docs/frontend.md`](docs/frontend.md).
 
 ---
 

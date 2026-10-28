@@ -49,29 +49,3 @@
         </li>
     </ol>
 </section>
-
-@* Exemplo de HTMX do layout base (#5). Botão secundário para não competir com o "Começar Agora". *@
-<section class="mt-12 max-w-xl" aria-labelledby="htmx-titulo">
-    <div class="card p-6">
-        <h2 id="htmx-titulo" class="text-lg font-semibold text-slate-900 dark:text-white">Exemplo de HTMX</h2>
-        <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            O botão faz um <code class="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs dark:bg-slate-800">GET /Home/ServerTime</code>
-            e o servidor devolve uma <em>partial view</em> que substitui só o quadro abaixo, sem recarregar a página.
-        </p>
-
-        <button type="button"
-                hx-get="@Url.Action("ServerTime", "Home")"
-                hx-target="#server-time"
-                hx-swap="innerHTML"
-                hx-indicator="#server-time-loading"
-                class="btn-secondary mt-4 gap-2">
-            Buscar horário do servidor
-            <span id="server-time-loading" class="htmx-indicator text-xs" aria-hidden="true">…</span>
-        </button>
-
-        <div id="server-time" aria-live="polite"
-             class="mt-4 rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600 dark:border-slate-600 dark:text-slate-300">
-            Clique no botão para carregar o conteúdo via HTMX.
-        </div>
-    </div>
-</section>

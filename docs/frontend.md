@@ -13,7 +13,7 @@ parcial vem do **HTMX**.
 | `wwwroot/lib/htmx/htmx.min.js` | HTMX 2.0.10 versionado no repo (sem CDN). |
 | `wwwroot/js/site.js` | JS mínimo do layout (menu mobile). |
 | `Views/Shared/_Layout.cshtml` | Layout base: skip link, header/nav responsivo, `<main>`, footer. |
-| `Views/Home/Index.cshtml` + `_ServerTime.cshtml` | Home + exemplo de HTMX (`hx-get` em `HomeController.ServerTime`). |
+| `Views/Home/Index.cshtml` | Home: um único botão principal ("Começar Agora") e o "Como funciona". |
 
 ## Como o CSS é gerado
 
@@ -58,16 +58,13 @@ dotnet watch --project src/DevPath.Web
 
 (Rode `dotnet build` uma vez antes para o CLI ser baixado.)
 
-## HTMX: o exemplo da Home
+## HTMX
 
-```html
-<button hx-get="/Home/ServerTime" hx-target="#server-time" hx-swap="innerHTML">…</button>
-<div id="server-time">…</div>
-```
-
-O clique faz um `GET /Home/ServerTime`; a action devolve `PartialView("_ServerTime", …)` (HTML sem layout)
-e o HTMX troca só o conteúdo de `#server-time`. Para requisições que alteram dados (`hx-post`),
-será preciso enviar o token antiforgery do ASP.NET Core.
+O HTMX 2.0.10 é carregado pelo `_Layout` em todas as páginas (`defer`), pronto para atualizações
+parciais (`hx-get`/`hx-post` em uma action que devolve `PartialView(...)`, HTML sem layout).
+A classe `.htmx-indicator` (em `Styles/app.css`) só aparece durante a requisição.
+Para requisições que alteram dados (`hx-post`), envie o token antiforgery do ASP.NET Core.
+O exemplo `GET /Home/ServerTime` do layout base (#5) foi removido da Home no #11 (decisão de produto).
 
 ## Por que não Bootstrap/jQuery?
 

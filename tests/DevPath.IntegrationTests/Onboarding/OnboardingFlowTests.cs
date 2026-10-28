@@ -33,6 +33,17 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
         html.Should().Contain("Já tenho conta").And.Contain("href=\"/Account/Login\"");
     }
 
+    [Fact]
+    public async Task Home_NaoTemMaisOExemploDeHtmx()
+    {
+        var client = factory.CreateBrowserClient();
+
+        var html = await (await client.GetAsync("/")).ReadHtmlAsync();
+
+        html.Should().NotContain("hx-get").And.NotContain("server-time").And.NotContain("Exemplo de HTMX");
+        (await client.GetAsync("/Home/ServerTime")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     [Theory]
     [InlineData("/")]
     [InlineData("/Account/Login")]
