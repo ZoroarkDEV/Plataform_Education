@@ -5,6 +5,8 @@ order: 1
 estimated_minutes: 40
 language: sql
 difficulty: beginner
+# Rascunho (stub): aparece como "Em breve" na plataforma.
+draft: true
 ---
 
 # Banco relacional e PostgreSQL no Docker

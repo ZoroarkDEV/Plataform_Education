@@ -5,6 +5,8 @@ order: 1
 estimated_minutes: 30
 language: csharp
 difficulty: beginner
+# Rascunho (stub): aparece como "Em breve" na plataforma.
+draft: true
 ---
 
 # Seu primeiro programa em C#

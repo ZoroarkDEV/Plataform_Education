@@ -5,6 +5,8 @@ order: 2
 estimated_minutes: 40
 language: sql
 difficulty: intermediate
+# Rascunho (stub): aparece como "Em breve" na plataforma.
+draft: true
 ---
 
 # Agregações, GROUP BY e HAVING

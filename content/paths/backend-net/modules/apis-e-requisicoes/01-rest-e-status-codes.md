@@ -5,6 +5,8 @@ order: 1
 estimated_minutes: 30
 language: csharp
 difficulty: intermediate
+# Rascunho (stub): aparece como "Em breve" na plataforma.
+draft: true
 ---
 
 # Princípios REST e status codes HTTP

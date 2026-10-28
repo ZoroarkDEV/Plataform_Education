@@ -5,6 +5,8 @@ order: 1
 estimated_minutes: 45
 language: csharp
 difficulty: intermediate
+# Rascunho (stub): aparece como "Em breve" na plataforma.
+draft: true
 ---
 
 # DbContext e Migrations

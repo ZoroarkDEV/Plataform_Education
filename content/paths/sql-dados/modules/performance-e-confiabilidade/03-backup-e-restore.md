@@ -5,6 +5,8 @@ order: 3
 estimated_minutes: 30
 language: bash
 difficulty: intermediate
+# Rascunho (stub): aparece como "Em breve" na plataforma.
+draft: true
 ---
 
 # Backup e restore

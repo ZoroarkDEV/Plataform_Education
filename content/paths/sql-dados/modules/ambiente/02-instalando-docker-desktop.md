@@ -5,6 +5,8 @@ order: 2
 estimated_minutes: 20
 language: bash
 difficulty: beginner
+# Rascunho (stub): aparece como "Em breve" na plataforma.
+draft: true
 ---
 
 # Instalando o Docker Desktop
