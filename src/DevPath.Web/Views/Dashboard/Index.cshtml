@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Dashboard";
     var flash = ViewData[DevPath.Web.Controllers.OnboardingController.FlashKey] as string;
+    // Numeração pela posição: o serviço entrega os módulos na ordem da trilha (Module.Order).
     var moduleNumber = 0;
 
     string BadgeClass(LessonStatus status) => status switch
@@ -119,6 +120,7 @@
 
                                     @if (item.Status == LessonStatus.Locked && item.UnlockRequirement is not null)
                                     {
+                                        @* Sempre visível (nada de hover/foco): precisa funcionar no celular e no teclado. *@
                                         <p class="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
                                             Conclua '<a href="@item.UnlockRequirement.Url" class="link">@item.UnlockRequirement.Title</a>' para liberar esta aula
                                         </p>

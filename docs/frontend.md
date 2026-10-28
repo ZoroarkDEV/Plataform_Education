@@ -142,12 +142,19 @@ Contrato que a Web precisa do backend:
 - se o usuário já tem trilha atual;
 - matrícula com resultado `Enrolled | AlreadyEnrolled | PathNotFound | Unavailable`;
 - dashboard com status de cada aula já calculado (`Completed | InProgress | Available | Locked | ComingSoon`),
-  porcentagens, próxima aula, `IsFirstAccess` e a aula que libera cada aula bloqueada.
+  porcentagens, próxima aula, `IsFirstAccess` e a aula que libera cada aula bloqueada;
+- módulos na ordem da trilha e aulas na ordem do módulo. A tela numera "Módulo 1, 2..." pela posição.
+  Na trilha SQL & Dados, o módulo 1 é "Primeiros passos com SQL" (decisão do #22), com JOIN antes de GROUP BY.
 
 **Estados do dashboard:** `Empty` (trilha sem aulas publicadas: sem barra e sem "0 de 0"),
 `Continue` (um único `btn-primary`: "Começar pela aula 1" no primeiro acesso, "Continuar" depois) e
 `AllDone` ("Você concluiu tudo que está disponível 🎉"). Cada status tem texto além da cor, e as aulas
-bloqueadas ou "Em breve" não têm link.
+bloqueadas ou "Em breve" não têm link. O motivo do bloqueio ("Conclua 'X' para liberar esta aula") fica
+**sempre visível** abaixo do título, sem depender de hover ou foco (funciona no celular e no teclado).
+
+**Um botão principal por tela:** cada tela tem no máximo um `btn-primary` (Home, Entrar, Criar conta,
+Acesso negado e Dashboard têm exatamente um). O "Criar conta" do cabeçalho é contornado (secundário), e
+os cards de "Escolha sua trilha" usam `btn-secondary`, porque as trilhas são opções equivalentes.
 
 **Modo escuro em todo o app:** o `_Layout` aplica o tema em todas as páginas, a menos que a view
 defina `ViewData["SupportsDarkMode"] = false`. A preferência do sistema vale até o usuário clicar

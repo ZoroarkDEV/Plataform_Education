@@ -37,7 +37,12 @@ public interface IStudentJourneyGateway
     /// </summary>
     Task<EnrollmentOutcome> EnrollAsync(Guid userId, string pathSlug, CancellationToken cancellationToken);
 
-    /// <summary>Dashboard da trilha atual, já calculado. <c>null</c> quando o aluno ainda não escolheu trilha.</summary>
+    /// <summary>
+    /// Dashboard da trilha atual, já calculado. <c>null</c> quando o aluno ainda não escolheu trilha.
+    /// Módulos na ordem da trilha (<c>Module.Order</c>) e aulas na ordem do módulo (<c>Lesson.Order</c>):
+    /// a tela numera "Módulo 1, 2..." pela posição na lista (no SQL &amp; Dados, "Primeiros passos com SQL"
+    /// é o módulo 1, issue #22).
+    /// </summary>
     Task<DashboardViewModel?> GetDashboardAsync(Guid userId, CancellationToken cancellationToken);
 }
 

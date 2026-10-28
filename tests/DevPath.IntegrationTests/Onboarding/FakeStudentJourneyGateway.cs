@@ -19,7 +19,7 @@ public sealed class FakeStudentJourneyGateway : IStudentJourneyGateway
     [
         new(SqlPath, "SQL & Dados",
             "SQL do zero com PostgreSQL: consultas, modelagem e como conectar o C# ao banco.",
-            DifficultyLevel.Beginner, 40, 20),
+            DifficultyLevel.Beginner, 40, 5),
         new("backend-net", "Backend .NET",
             "C#, ASP.NET Core MVC e Entity Framework Core para construir APIs e sites.",
             DifficultyLevel.Beginner, 120, 0)
@@ -50,68 +50,79 @@ public sealed class FakeStudentJourneyGateway : IStudentJourneyGateway
     public Task<DashboardViewModel?> GetDashboardAsync(Guid userId, CancellationToken cancellationToken) =>
         Task.FromResult(_enrollments.TryGetValue(userId, out var slug) ? Dashboard(slug) : null);
 
-    /// <summary>Dashboards de exemplo (trilha SQL & Dados) para cada estado da US-11.3.</summary>
+    /// <summary>
+    /// Dashboards de exemplo (trilha SQL &amp; Dados) para cada estado da US-11.3. Slugs, títulos e ordem
+    /// iguais ao <c>/content</c> e às decisões do #22: "Primeiros passos com SQL" é o módulo 1, com
+    /// JOIN antes de GROUP BY; os módulos antigos descem uma posição. Rascunhos ("Em breve") não contam
+    /// no total de aulas (R4), por isso a trilha tem 5 aulas disponíveis.
+    /// </summary>
     public static class Samples
     {
+        public const string PrimeirosPassos = "primeiros-passos-com-sql";
+        public const string Ambiente = "ambiente";
+        private const string PrimeirosPassosTitle = "Primeiros passos com SQL";
+        private const string AmbienteTitle = "Ambiente: banco relacional + Docker";
+
         private static LessonRef L(string module, string slug, string title) => new(SqlPath, module, slug, title);
 
-        public static readonly LessonRef PrimeiroSelect = L("primeiros-passos", "seu-primeiro-select", "Seu primeiro SELECT");
-        public static readonly LessonRef Where = L("primeiros-passos", "filtrando-com-where", "Filtrando com WHERE");
-        public static readonly LessonRef OrderBy = L("primeiros-passos", "ordenando-resultados", "Ordenando resultados");
-        public static readonly LessonRef Limit = L("primeiros-passos", "limitando-resultados", "Limitando resultados");
-        public static readonly LessonRef Join = L("consultas", "joins", "Juntando tabelas com JOIN");
-        public static readonly LessonRef GroupBy = L("consultas", "agregacoes-group-by-having", "Agregações com GROUP BY");
+        public static readonly LessonRef PrimeiroSelect = L(PrimeirosPassos, "seu-primeiro-select", "Seu primeiro SELECT");
+        public static readonly LessonRef Where = L(PrimeirosPassos, "filtrando-com-where", "Filtrando com WHERE");
+        public static readonly LessonRef OrderByLimit = L(PrimeirosPassos, "ordenando-e-limitando-com-order-by-e-limit", "Ordenando e limitando com ORDER BY e LIMIT");
+        public static readonly LessonRef Join = L(PrimeirosPassos, "juntando-tabelas-com-join", "Juntando tabelas com JOIN");
+        public static readonly LessonRef GroupBy = L(PrimeirosPassos, "resumindo-dados-com-group-by", "Resumindo dados com COUNT, SUM, AVG e GROUP BY");
 
-        public static DashboardViewModel FirstAccess() => new(SqlPath, "SQL & Dados", 0, 20, 0, PrimeiroSelect, true,
+        public static readonly LessonRef BancoRelacional = L(Ambiente, "o-que-e-banco-relacional", "O que é um banco relacional");
+        public static readonly LessonRef InstalandoDocker = L(Ambiente, "instalando-docker-desktop", "Instalando o Docker Desktop");
+
+        /// <summary>Módulo 2 (antigo módulo 1): só rascunhos por enquanto.</summary>
+        private static ModuleProgressViewModel AmbienteEmBreve() => new(Ambiente, AmbienteTitle, 0, 0, 0,
         [
-            new("primeiros-passos", "Primeiros passos com SQL", 0, 3, 0,
+            new(BancoRelacional, LessonStatus.ComingSoon),
+            new(InstalandoDocker, LessonStatus.ComingSoon)
+        ]);
+
+        public static DashboardViewModel FirstAccess() => new(SqlPath, "SQL & Dados", 0, 5, 0, PrimeiroSelect, true,
+        [
+            new(PrimeirosPassos, PrimeirosPassosTitle, 0, 5, 0,
             [
                 new(PrimeiroSelect, LessonStatus.Available),
                 new(Where, LessonStatus.Locked, PrimeiroSelect),
-                new(OrderBy, LessonStatus.Locked, Where),
-                new(Limit, LessonStatus.ComingSoon)
-            ]),
-            new("consultas", "Consultas", 0, 17, 0,
-            [
-                new(Join, LessonStatus.Locked, OrderBy),
+                new(OrderByLimit, LessonStatus.Locked, Where),
+                new(Join, LessonStatus.Locked, OrderByLimit),
                 new(GroupBy, LessonStatus.Locked, Join)
-            ])
+            ]),
+            AmbienteEmBreve()
         ]);
 
-        public static DashboardViewModel InProgress() => new(SqlPath, "SQL & Dados", 3, 20, 15, Join, false,
+        public static DashboardViewModel InProgress() => new(SqlPath, "SQL & Dados", 3, 5, 60, Join, false,
         [
-            new("primeiros-passos", "Primeiros passos com SQL", 3, 3, 100,
+            new(PrimeirosPassos, PrimeirosPassosTitle, 3, 5, 60,
             [
                 new(PrimeiroSelect, LessonStatus.Completed),
                 new(Where, LessonStatus.Completed),
-                new(OrderBy, LessonStatus.Completed),
-                new(Limit, LessonStatus.ComingSoon)
-            ]),
-            new("consultas", "Consultas", 0, 17, 0,
-            [
+                new(OrderByLimit, LessonStatus.Completed),
                 new(Join, LessonStatus.InProgress),
                 new(GroupBy, LessonStatus.Locked, Join)
             ]),
-            new("ambiente", "Ambiente: banco relacional + Docker", 0, 0, 0,
-            [
-                new(L("ambiente", "instalando-docker-desktop", "Instalando o Docker Desktop"), LessonStatus.ComingSoon)
-            ])
+            AmbienteEmBreve()
         ]);
 
-        public static DashboardViewModel AllDone() => new(SqlPath, "SQL & Dados", 3, 3, 100, null, false,
+        public static DashboardViewModel AllDone() => new(SqlPath, "SQL & Dados", 5, 5, 100, null, false,
         [
-            new("primeiros-passos", "Primeiros passos com SQL", 3, 3, 100,
+            new(PrimeirosPassos, PrimeirosPassosTitle, 5, 5, 100,
             [
                 new(PrimeiroSelect, LessonStatus.Completed),
                 new(Where, LessonStatus.Completed),
-                new(OrderBy, LessonStatus.Completed),
-                new(Limit, LessonStatus.ComingSoon)
-            ])
+                new(OrderByLimit, LessonStatus.Completed),
+                new(Join, LessonStatus.Completed),
+                new(GroupBy, LessonStatus.Completed)
+            ]),
+            AmbienteEmBreve()
         ]);
 
         public static DashboardViewModel Empty() => new(SqlPath, "SQL & Dados", 0, 0, 0, null, true,
         [
-            new("primeiros-passos", "Primeiros passos com SQL", 0, 0, 0,
+            new(PrimeirosPassos, PrimeirosPassosTitle, 0, 0, 0,
             [
                 new(PrimeiroSelect, LessonStatus.ComingSoon)
             ])

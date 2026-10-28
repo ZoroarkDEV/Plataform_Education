@@ -7,7 +7,7 @@ namespace DevPath.UnitTests.Web.Onboarding;
 /// <summary>Textos e estados das telas do #11 (US-11.2, US-11.3, R6, R7).</summary>
 public class OnboardingViewModelsTests
 {
-    private static readonly LessonRef Select = new("sql-dados", "primeiros-passos", "seu-primeiro-select", "Seu primeiro SELECT");
+    private static readonly LessonRef Select = new("sql-dados", "primeiros-passos-com-sql", "seu-primeiro-select", "Seu primeiro SELECT");
 
     [Theory]
     [InlineData(15, 3, 20, "15% concluído — 3 de 20 aulas")]
@@ -45,7 +45,7 @@ public class OnboardingViewModelsTests
     [Fact]
     public void LessonRef_MontaUrlDaTelaDeAulaComSlugsEscapados()
     {
-        Select.Url.Should().Be("/trilhas/sql-dados/primeiros-passos/seu-primeiro-select");
+        Select.Url.Should().Be("/trilhas/sql-dados/primeiros-passos-com-sql/seu-primeiro-select");
         new LessonRef("a b", "c/d", "e?f", "X").Url.Should().Be("/trilhas/a%20b/c%2Fd/e%3Ff");
     }
 

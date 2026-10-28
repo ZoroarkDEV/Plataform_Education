@@ -49,6 +49,20 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
     [InlineData("/Account/Login")]
     [InlineData("/Account/Register")]
     [InlineData("/Account/AccessDenied")]
+    public async Task Paginas_TemUmUnicoBotaoPrincipal_ECriarContaDoCabecalhoEhContornado(string url)
+    {
+        var html = await (await factory.CreateBrowserClient().GetAsync(url)).ReadHtmlAsync();
+
+        Regex.Matches(html, @"class=""btn-primary\b").Count.Should().Be(1, "cada tela tem uma única ação principal");
+        var headerLinks = Regex.Matches(html, @"<a (?=[^>]*href=""/Account/Register"")(?![^>]*btn-primary)(?=[^>]*class=""[^""]*\bborder border-brand-600\b)[^>]*>Criar conta</a>");
+        headerLinks.Count.Should().Be(2, "o \"Criar conta\" do cabeçalho (desktop e menu mobile) é contornado, não primário");
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/Account/Login")]
+    [InlineData("/Account/Register")]
+    [InlineData("/Account/AccessDenied")]
     public async Task Paginas_TemTemaEscuroEBotaoDeTema(string url)
     {
         var html = await (await factory.CreateBrowserClient().GetAsync(url)).ReadHtmlAsync();
@@ -112,9 +126,11 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
             .And.Contain("SQL & Dados")
             .And.Contain("Para iniciantes")
             .And.Contain("Cerca de 40 h")
-            .And.Contain("20 aulas disponíveis")
+            .And.Contain("5 aulas disponíveis")
             .And.Contain("Aulas em breve")
             .And.Contain("name=\"pathSlug\" value=\"sql-dados\"");
+        Regex.Matches(html, @"class=""btn-primary\b").Count.Should().BeLessThanOrEqualTo(1,
+            "os cards de trilha são opções equivalentes (btn-secondary); nunca mais de um primário");
     }
 
     [Fact]
@@ -132,9 +148,9 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
         var html = await dashboard.ReadHtmlAsync();
         html.Should().Contain("Você começou a trilha SQL & Dados!")
             .And.Contain("Olá, Bruno Aluno!")
-            .And.Contain("0% concluído — 0 de 20 aulas")
+            .And.Contain("0% concluído — 0 de 5 aulas")
             .And.Contain("aria-valuenow=\"0\"")
-            .And.MatchRegex(@"href=""/trilhas/sql-dados/primeiros-passos/seu-primeiro-select""[^>]*data-continue>\s*Começar pela aula 1");
+            .And.MatchRegex(@"href=""/trilhas/sql-dados/primeiros-passos-com-sql/seu-primeiro-select""[^>]*data-continue>\s*Começar pela aula 1");
         Regex.Matches(html, @"class=""btn-primary\b").Count.Should().Be(1, "o dashboard tem uma única ação principal");
 
         // A confirmação aparece uma vez só (TempData).
@@ -177,15 +193,53 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
 
         var html = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
 
-        html.Should().Contain("15% concluído — 3 de 20 aulas")
-            .And.MatchRegex(@"href=""/trilhas/sql-dados/consultas/joins""[^>]*data-continue>\s*Continuar")
+        html.Should().Contain("60% concluído — 3 de 5 aulas")
+            .And.MatchRegex(@"href=""/trilhas/sql-dados/primeiros-passos-com-sql/juntando-tabelas-com-join""[^>]*data-continue>\s*Continuar")
             .And.Contain("Concluída").And.Contain("Em andamento").And.Contain("Bloqueada").And.Contain("Em breve")
-            .And.Contain("Conclua '<a href=\"/trilhas/sql-dados/consultas/joins\" class=\"link\">Juntando tabelas com JOIN</a>' para liberar esta aula")
-            .And.Contain("Esta aula está sendo escrita")
-            .And.Contain("100% concluído — 3 de 3 aulas");
+            .And.Contain("Conclua '<a href=\"/trilhas/sql-dados/primeiros-passos-com-sql/juntando-tabelas-com-join\" class=\"link\">Juntando tabelas com JOIN</a>' para liberar esta aula")
+            .And.Contain("Esta aula está sendo escrita");
         // Aula bloqueada e "Em breve" não viram link.
-        html.Should().NotContain("href=\"/trilhas/sql-dados/consultas/agregacoes-group-by-having\"")
-            .And.NotContain("href=\"/trilhas/sql-dados/ambiente/instalando-docker-desktop\"");
+        html.Should().NotContain("href=\"/trilhas/sql-dados/primeiros-passos-com-sql/resumindo-dados-com-group-by\"")
+            .And.NotContain("href=\"/trilhas/sql-dados/ambiente/o-que-e-banco-relacional\"");
+    }
+
+    [Fact]
+    public async Task Dashboard_Roadmap_SegueAOrdemDo22_PrimeirosPassosComSqlEhOModulo1()
+    {
+        var client = CreateClientWith(new FakeStudentJourneyGateway());
+        await RegisterAsync(client);
+        await ChooseSqlAsync(client);
+
+        var html = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
+
+        html.Should().MatchRegex(@"Módulo 1 ·</span>\s*Primeiros passos com SQL")
+            .And.MatchRegex(@"Módulo 2 ·</span>\s*Ambiente: banco relacional \+ Docker");
+        // Aulas do módulo 1 na ordem do #22, com JOIN antes de GROUP BY (decisão do dono).
+        var titles = new[]
+        {
+            "Seu primeiro SELECT", "Filtrando com WHERE", "Ordenando e limitando com ORDER BY e LIMIT",
+            "Juntando tabelas com JOIN", "Resumindo dados com COUNT, SUM, AVG e GROUP BY"
+        };
+        var positions = titles.Select(t => html.IndexOf(t, StringComparison.Ordinal)).ToArray();
+        positions.Should().OnlyContain(p => p >= 0).And.BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task Dashboard_MotivoDoBloqueio_FicaSempreVisivel_SemDependerDeHoverOuFoco()
+    {
+        var client = CreateClientWith(new FakeStudentJourneyGateway());
+        await RegisterAsync(client);
+        await ChooseSqlAsync(client);
+
+        var html = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
+
+        var lockTexts = Regex.Matches(html, @"<p class=""(?<cls>[^""]*)"">\s*Conclua '");
+        lockTexts.Count.Should().Be(4, "as aulas 2 a 5 do módulo 1 estão bloqueadas no primeiro acesso");
+        foreach (Match m in lockTexts)
+        {
+            m.Groups["cls"].Value.Should().NotMatchRegex(@"(^|\s)(hidden|invisible|sr-only|opacity-0)(\s|$)")
+                .And.NotMatchRegex(@"(group-|peer-)?(hover|focus|focus-within|focus-visible):");
+        }
     }
 
     [Fact]
