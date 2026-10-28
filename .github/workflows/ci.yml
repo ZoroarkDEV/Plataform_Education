@@ -1,0 +1,53 @@
+# CI do DevPath: compila a solution e roda os testes em todo PR e em push na main e na dev.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+# Só leitura do repositório; o CI não precisa de mais permissões.
+permissions:
+  contents: read
+
+# Se um novo commit chegar no mesmo PR/branch, cancela a execução anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build e testes (.NET 9)
+    runs-on: ubuntu-latest
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      # Cache dos pacotes NuGet: a chave muda quando algum .csproj muda.
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore DevPath.sln
+
+      - name: Build
+        run: dotnet build DevPath.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test DevPath.sln --no-build --configuration Release --verbosity normal

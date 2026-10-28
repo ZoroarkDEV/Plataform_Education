@@ -1,5 +1,7 @@
 # DevPath — Plataforma de Treinamento para Iniciantes em Programação
 
+[![CI](https://github.com/ZoroarkDEV/Plataform_Education/actions/workflows/ci.yml/badge.svg)](https://github.com/ZoroarkDEV/Plataform_Education/actions/workflows/ci.yml)
+
 > **Documento vivo para humanos e agentes de IA.**  
 > Este README define a **filosofia, prioridades e regras de decisão** do projeto.  
 > O agente orquestrador deve seguir este arquivo + o `SPEC-PLATAFORMA-TREINAMENTO-PROGRAMACAO.md` como fonte da verdade.
