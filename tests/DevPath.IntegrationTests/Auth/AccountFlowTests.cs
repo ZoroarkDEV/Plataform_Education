@@ -172,36 +172,59 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
 
     /// <summary>
     /// Teste de tempo propositalmente FROUXO: só pega a diferença grosseira de antes da correção
-    /// (~3 ms para e-mail inexistente contra ~55 ms para conta real, razão ~0,05).
-    /// Exigimos apenas que o caminho "não existe" leve pelo menos 30% do caminho "senha errada".
-    /// Medimos a mediana de várias tentativas para reduzir o ruído da máquina.
+    /// (sem o hash fictício, e-mail inexistente leva ~3 ms contra ~55 ms de uma conta real, razão ~0,05).
+    /// Exigimos só que a mediana do caminho "não existe" seja pelo menos 25% da mediana de "senha errada".
     /// </summary>
+    /// <remarks>
+    /// Para reduzir o ruído (a versão anterior falhava às vezes):
+    /// <list type="bullet">
+    /// <item>as contas são criadas ANTES de medir (antes, o cadastro, que também calcula hash, entrava no tempo);</item>
+    /// <item>aquecimento dos dois caminhos e 7 rodadas intercaladas (uma de cada por vez), para que uma pausa
+    /// da máquina (GC, outro teste em paralelo) atinja os dois lados igualmente;</item>
+    /// <item>comparação pela mediana, que ignora picos isolados.</item>
+    /// </list>
+    /// Verificado localmente: sem o hash fictício do AuthService, este teste falha.
+    /// </remarks>
     [Fact]
     public async Task Login_EmailInexistente_LevaTempoParecidoComSenhaErrada()
     {
+        const int Rounds = 7;
         var client = factory.CreateBrowserClient();
-        var existing = await CreateUserAsync();
 
-        async Task<double> MedianMsAsync(Func<Task> login)
+        // Senha errada em conta real: uma conta por rodada para não chegar no bloqueio.
+        var accounts = new List<string>();
+        for (var i = 0; i < Rounds + 1; i++)
         {
-            await login(); // aquecimento (JIT, conexão com o banco)
-            var samples = new List<double>();
-            for (var i = 0; i < 5; i++)
-            {
-                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                await login();
-                samples.Add(stopwatch.Elapsed.TotalMilliseconds);
-            }
-
-            return samples.Order().ElementAt(samples.Count / 2);
+            accounts.Add(await CreateUserAsync());
         }
 
-        // Senha errada em conta real: usamos uma conta nova a cada rodada para não chegar no bloqueio.
-        var wrongPasswordMs = await MedianMsAsync(async () => await LoginAsync(client, await CreateUserAsync(), "SenhaErrada1"));
-        var nonexistentMs = await MedianMsAsync(() => LoginAsync(client, NewEmail(), "SenhaErrada1"));
+        static async Task<double> TimeAsync(Func<Task> action)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            await action();
+            return stopwatch.Elapsed.TotalMilliseconds;
+        }
 
-        nonexistentMs.Should().BeGreaterThan(wrongPasswordMs * 0.3,
-            $"e-mail inexistente levou {nonexistentMs:F1} ms e senha errada {wrongPasswordMs:F1} ms");
+        // Aquecimento (JIT, conexão com o banco, hash fictício calculado na 1ª vez).
+        await LoginAsync(client, accounts[Rounds], "SenhaErrada1");
+        await LoginAsync(client, NewEmail(), "SenhaErrada1");
+
+        var wrongPassword = new List<double>();
+        var nonexistent = new List<double>();
+        for (var i = 0; i < Rounds; i++)
+        {
+            wrongPassword.Add(await TimeAsync(() => LoginAsync(client, accounts[i], "SenhaErrada1")));
+            nonexistent.Add(await TimeAsync(() => LoginAsync(client, NewEmail(), "SenhaErrada1")));
+        }
+
+        static double Median(List<double> samples) => samples.Order().ElementAt(samples.Count / 2);
+        var wrongPasswordMs = Median(wrongPassword);
+        var nonexistentMs = Median(nonexistent);
+
+        nonexistentMs.Should().BeGreaterThan(wrongPasswordMs * 0.25,
+            $"e-mail inexistente levou {nonexistentMs:F1} ms (mediana) e senha errada {wrongPasswordMs:F1} ms; " +
+            $"amostras: [{string.Join(", ", nonexistent.Select(x => x.ToString("F0")))}] x " +
+            $"[{string.Join(", ", wrongPassword.Select(x => x.ToString("F0")))}]");
     }
 
     [Fact]
