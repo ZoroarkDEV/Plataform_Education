@@ -11,4 +11,45 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!--
+    Tailwind CSS (standalone CLI, sem Node/npm). Veja docs/frontend.md.
+    - No build, o CLI fixado em TailwindVersion é baixado para .tools/tailwind/ (uma vez)
+      e compila Styles/app.css para wwwroot/css/site.css.
+    - O site.css gerado é commitado, então a app funciona mesmo sem internet
+      ou com -p:TailwindBuild=false (ex.: builds em Docker/CI).
+  -->
+  <PropertyGroup>
+    <TailwindBuild Condition="'$(TailwindBuild)' == ''">true</TailwindBuild>
+    <TailwindVersion>v4.3.3</TailwindVersion>
+    <TailwindInput>$(MSBuildProjectDirectory)/Styles/app.css</TailwindInput>
+    <TailwindOutput>$(MSBuildProjectDirectory)/wwwroot/css/site.css</TailwindOutput>
+    <TailwindDir>$(MSBuildProjectDirectory)/.tools/tailwind/$(TailwindVersion)</TailwindDir>
+    <TailwindArch Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">arm64</TailwindArch>
+    <TailwindArch Condition="'$(TailwindArch)' == ''">x64</TailwindArch>
+    <TailwindAsset Condition="$([MSBuild]::IsOSPlatform('Windows'))">tailwindcss-windows-$(TailwindArch).exe</TailwindAsset>
+    <TailwindAsset Condition="$([MSBuild]::IsOSPlatform('OSX'))">tailwindcss-macos-$(TailwindArch)</TailwindAsset>
+    <TailwindAsset Condition="'$(TailwindAsset)' == ''">tailwindcss-linux-$(TailwindArch)</TailwindAsset>
+    <TailwindExe>$(TailwindDir)/$(TailwindAsset)</TailwindExe>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <TailwindSources Include="Styles/**/*.css;Views/**/*.cshtml;wwwroot/js/**/*.js" />
+  </ItemGroup>
+
+  <Target Name="TailwindDownload" Condition="'$(TailwindBuild)' == 'true' And !Exists('$(TailwindExe)')">
+    <DownloadFile SourceUrl="https://github.com/tailwindlabs/tailwindcss/releases/download/$(TailwindVersion)/$(TailwindAsset)"
+                  DestinationFolder="$(TailwindDir)" ContinueOnError="true" />
+    <Exec Command="chmod +x &quot;$(TailwindExe)&quot;" Condition="!$([MSBuild]::IsOSPlatform('Windows')) And Exists('$(TailwindExe)')" />
+    <Warning Condition="!Exists('$(TailwindExe)')"
+             Text="Tailwind CLI não pôde ser baixado; usando o wwwroot/css/site.css já commitado." />
+  </Target>
+
+  <Target Name="TailwindBuild" BeforeTargets="BeforeBuild" DependsOnTargets="TailwindDownload"
+          Condition="'$(TailwindBuild)' == 'true'"
+          Inputs="@(TailwindSources)" Outputs="$(TailwindOutput)">
+    <Exec Condition="Exists('$(TailwindExe)')"
+          Command="&quot;$(TailwindExe)&quot; -i &quot;$(TailwindInput)&quot; -o &quot;$(TailwindOutput)&quot; --minify"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
 </Project>

@@ -1,0 +1,26 @@
+/*
+  Entrada do Tailwind CSS (v4).
+  Este arquivo é compilado para wwwroot/css/site.css pelo Tailwind standalone CLI.
+  Não edite wwwroot/css/site.css à mão: ele é gerado. Veja docs/frontend.md.
+*/
+@import "tailwindcss" source(none);
+
+/* Onde o Tailwind procura classes usadas (caminhos relativos a este arquivo). */
+@source "../Views";
+@source "../wwwroot/js";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --color-brand-50: oklch(0.97 0.02 265);
+  --color-brand-100: oklch(0.93 0.04 265);
+  --color-brand-500: oklch(0.58 0.2 265);
+  --color-brand-600: oklch(0.51 0.21 265);
+  --color-brand-700: oklch(0.45 0.19 265);
+}
+
+@layer base {
+  /* Mostra o indicador do HTMX só enquanto a requisição está em andamento. */
+  .htmx-indicator { display: none; }
+  .htmx-request .htmx-indicator,
+  .htmx-request.htmx-indicator { display: inline-flex; }
+}
