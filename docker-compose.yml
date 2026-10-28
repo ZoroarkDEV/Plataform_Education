@@ -3,7 +3,6 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: devpath-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env (veja .env.example)}
@@ -22,7 +21,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: devpath-redis
     restart: unless-stopped
     ports:
       - "${REDIS_PORT:-6379}:6379"
