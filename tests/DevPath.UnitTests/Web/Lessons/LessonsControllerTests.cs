@@ -30,35 +30,30 @@ public sealed class LessonsControllerTests
 
     private static readonly LessonBreadcrumb Crumb = new(Path, "SQL & Dados", Module, "Primeiros passos");
 
-    private static LessonDto FullLesson() => new(
+    private static LessonDto FullLesson(ExerciseDto? exercise = null) => new(
         Guid.NewGuid(), FullSlug, "Seu primeiro SELECT", 15, DifficultyLevel.Beginner, "sql",
         ["Ler dados com SELECT"],
         "# Seu primeiro SELECT\n\n```sql\nSELECT 1;\n```\n\n```csharp\nvar x = 1;\n```\n\n## Resumo\n\nFim.",
         Crumb,
         new LessonLink("o-que-e-banco", "O que é banco", IsDraft: false),
         new LessonLink(DraftSlug, "Filtrando com WHERE", IsDraft: true),
-        Position: 2, TotalInModule: 4);
+        Position: 2, TotalInModule: 4, Exercise: exercise);
 
-    private sealed class StubLessonService : ILessonContentService
+    private sealed class StubLessonService(ExerciseDto? exercise = null) : ILessonContentService
     {
         public Task<LessonLoadResult> GetLessonAsync(string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default) =>
             Task.FromResult((pathSlug, moduleSlug, lessonSlug) switch
             {
-                (Path, Module, FullSlug) => LessonLoadResult.Success(FullLesson()),
+                (Path, Module, FullSlug) => LessonLoadResult.Success(FullLesson(exercise)),
                 (Path, Module, DraftSlug) => LessonLoadResult.Draft("Esta aula ainda está em construção."),
                 (Path, Module, MalformedSlug) => LessonLoadResult.Malformed(MalformedDetail),
                 _ => LessonLoadResult.NotFound("Aula não encontrada."),
             });
     }
 
-    private sealed class StubExercises(StudentExercise? exercise) : ILessonExerciseSource
-    {
-        public Task<StudentExercise?> GetForLessonAsync(Guid lessonId, CancellationToken ct) => Task.FromResult(exercise);
-    }
-
     private LessonsController CreateController(
-        ILessonContentService? service = null, string environment = "Testing", StudentExercise? exercise = null) =>
-        new(service ?? new StubLessonService(), new LessonMarkdownRenderer(), new StubExercises(exercise), new StubEnvironment(environment), _logger)
+        ILessonContentService? service = null, string environment = "Testing", ExerciseDto? exercise = null) =>
+        new(service ?? new StubLessonService(exercise), new LessonMarkdownRenderer(), new StubEnvironment(environment), _logger)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
@@ -194,7 +189,7 @@ public sealed class LessonsControllerTests
     [Fact]
     public async Task Show_ComExercicio_MontaVisaoSeguraComMarkdownECodigoInicial()
     {
-        var exercise = new StudentExercise("Catálogo", "Liste o **título**.", "sql", "livraria", 10,
+        var exercise = new ExerciseDto("Catálogo", "Liste o **título**.", "sql", "livraria",
             "SELECT\nFROM livros;", ["Geral", "", "Direta"]);
 
         var result = await CreateController(exercise: exercise).Show(Path, Module, FullSlug, CancellationToken.None);
@@ -208,6 +203,20 @@ public sealed class LessonsControllerTests
         vm.PointsLabel.Should().Be("10 pontos");
         vm.StarterCodeHtml.Should().Contain("tok-keyword");
         vm.Hints.Should().Equal("Geral", "Direta");
+    }
+
+    [Fact]
+    public async Task Show_ExercicioSemCodigoInicial_NaoMostraBlocoDeCodigo()
+    {
+        var exercise = new ExerciseDto("Contando", "Conte os livros.", "sql", null, null, ["Use COUNT"], Points: 5);
+
+        var result = await CreateController(exercise: exercise).Show(Path, Module, FullSlug, CancellationToken.None);
+
+        var vm = ((ViewResult)result).Model.Should().BeOfType<LessonPageViewModel>().Subject.Exercise!;
+        vm.StarterCodeHtml.Should().BeNull();
+        vm.Dataset.Should().BeNull();
+        vm.PointsLabel.Should().Be("5 pontos");
+        vm.Hints.Should().Equal("Use COUNT");
     }
 
     [Theory]

@@ -16,8 +16,6 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Tela de aula (#12): Markdown -> HTML seguro (Markdig com DisableHtml + destaque SQL/C#).
 // O ILessonContentService real (banco) vem de AddInfrastructure.
 builder.Services.AddSingleton<LessonMarkdownRenderer>();
-// Exercício da aula: o DTO do Backend ainda não traz exercício; até trazer, nenhum é mostrado.
-builder.Services.AddSingleton<ILessonExerciseSource, NoLessonExerciseSource>();
 
 // Cookie de autenticação do Identity. Fica na Web porque depende das rotas do AccountController.
 builder.Services.ConfigureApplicationCookie(options =>

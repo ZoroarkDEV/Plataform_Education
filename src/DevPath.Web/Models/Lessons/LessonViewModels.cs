@@ -31,7 +31,7 @@ public sealed record LessonExerciseViewModel(
     string? StarterCodeHtml,
     IReadOnlyList<string> Hints)
 {
-    public static LessonExerciseViewModel From(StudentExercise exercise, LessonMarkdownRenderer renderer) => new(
+    public static LessonExerciseViewModel From(ExerciseDto exercise, LessonMarkdownRenderer renderer) => new(
         exercise.Title,
         renderer.RenderFragment(exercise.StatementMarkdown),
         CodeHighlighter.LabelFor(exercise.Language) ?? "Código",

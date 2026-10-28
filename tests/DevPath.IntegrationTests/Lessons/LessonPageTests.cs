@@ -1,7 +1,6 @@
 using System.Net;
 using DevPath.Application.Lessons;
 using DevPath.IntegrationTests.Infrastructure;
-using DevPath.Web.Lessons;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,7 +12,7 @@ namespace DevPath.IntegrationTests.Lessons;
 /// Tela de aula de ponta a ponta: rota, [Authorize], controller e views. O banco de teste é vazio,
 /// então o ILessonContentService real (AddInfrastructure) é TROCADO, só aqui, pelo
 /// <see cref="InMemoryLessonContentService"/> (ConfigureTestServices + Replace), que imita as regras do real.
-/// O exercício também usa um dublê, porque o LessonDto ainda não o traz.
+/// O exercício vem em LessonDto.Exercise, preenchido pelo dublê.
 /// </summary>
 [Collection(WebAppCollection.Name)]
 public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
@@ -47,14 +46,14 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
         SELECT lê dados.
         """, EstimatedMinutes: 15, Objectives: ["Ler dados com SELECT", "Escolher colunas"]);
 
-    private static InMemoryLessonContentService CreateLessons() => new(
+    private static InMemoryLessonContentService CreateLessons(ExerciseDto? selectExercise = null) => new(
         new InMemoryLessonContentService.FakePath(Path, "SQL & Dados",
         [
             new(Module, "Primeiros passos",
             [
                 new("introducao", "Introdução", "# Introdução\n\nOlá.", EstimatedMinutes: 5),
                 new("aula-escondida", "Aula escondida", "# Escondida", IsPublished: false),
-                Select,
+                Select with { Exercise = selectExercise },
                 new("filtrando-com-where", "Filtrando com WHERE", "# rascunho", IsDraft: true),
                 new("vazia", "Vazia", "   "),
             ]),
@@ -63,16 +62,16 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
         new InMemoryLessonContentService.FakePath("trilha-inativa", "Inativa",
             [new("m", "M", [new("aula", "Aula", "# A")])], IsActive: false));
 
-    private WebApplicationFactory<Program> App(StudentExercise? exercise = null) =>
+    private WebApplicationFactory<Program> App(ExerciseDto? exercise = null) =>
         factory.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
-        {
-            services.Replace(ServiceDescriptor.Scoped<ILessonContentService>(_ => CreateLessons()));
-            services.Replace(ServiceDescriptor.Singleton<ILessonExerciseSource>(new StubExerciseSource(Select.Id, exercise)));
-        }));
+            services.Replace(ServiceDescriptor.Scoped<ILessonContentService>(_ => CreateLessons(exercise)))));
+
+    // HTTPS: o redirecionamento do #9 (UseHttpsRedirection) responderia 307 a http://localhost.
+    private static readonly Uri BaseAddress = new("https://localhost");
 
     private static async Task<HttpClient> LoggedInClientAsync(WebApplicationFactory<Program> app)
     {
-        var client = app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
+        var client = app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true, BaseAddress = BaseAddress });
         var response = await client.SubmitFormAsync("/Account/Register", "/Account/Register", new Dictionary<string, string>
         {
             ["DisplayName"] = "Aluna Aula",
@@ -88,7 +87,7 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
     public async Task SemLogin_RedirecionaParaLoginComReturnUrl()
     {
         await using var app = App();
-        var client = app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var client = app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = BaseAddress });
         var response = await client.GetAsync(Url("seu-primeiro-select"));
 
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
@@ -140,12 +139,11 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
     [Fact]
     public async Task ComExercicio_MostraSoAVisaoSeguraComDicasProgressivas()
     {
-        await using var app = App(new StudentExercise(
+        await using var app = App(new ExerciseDto(
             "Catálogo de títulos",
             "Liste o **título** de cada livro.",
             "sql",
             "livraria",
-            10,
             "SELECT \nFROM livros\n",
             ["Qual coluna guarda o título?", "Use SELECT titulo FROM livros;"]));
         var client = await LoggedInClientAsync(app);
@@ -207,11 +205,5 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
             response.StatusCode.Should().Be(HttpStatusCode.NotFound, url);
             (await response.ReadHtmlAsync()).Should().Contain("Não encontramos esta aula.");
         }
-    }
-
-    private sealed class StubExerciseSource(Guid lessonId, StudentExercise? exercise) : ILessonExerciseSource
-    {
-        public Task<StudentExercise?> GetForLessonAsync(Guid id, CancellationToken ct) =>
-            Task.FromResult(id == lessonId ? exercise : null);
     }
 }

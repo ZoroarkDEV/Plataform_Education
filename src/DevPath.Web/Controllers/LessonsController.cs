@@ -16,7 +16,6 @@ namespace DevPath.Web.Controllers;
 public sealed partial class LessonsController(
     ILessonContentService lessons,
     LessonMarkdownRenderer renderer,
-    ILessonExerciseSource exercises,
     IHostEnvironment environment,
     ILogger<LessonsController> logger) : Controller
 {
@@ -77,12 +76,8 @@ public sealed partial class LessonsController(
         try
         {
             html = renderer.Render(lesson.MarkdownBody);
-            var studentExercise = await exercises.GetForLessonAsync(lesson.LessonId, ct);
-            exercise = studentExercise is null ? null : LessonExerciseViewModel.From(studentExercise, renderer);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
+            // Exercício vem do próprio LessonDto (visão segura: sem solução, casos de teste nem erros comuns).
+            exercise = lesson.Exercise is null ? null : LessonExerciseViewModel.From(lesson.Exercise, renderer);
         }
         catch (Exception ex)
         {

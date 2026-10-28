@@ -11,7 +11,8 @@ namespace DevPath.IntegrationTests.Lessons;
 /// - rascunho aberto direto = Draft; rascunho na navegação = LessonLink.IsDraft;
 /// - corpo vazio = Malformed;
 /// - Position/TotalInModule contam as aulas publicadas do módulo (rascunhos incluídos);
-/// - slugs comparados em minúsculas.
+/// - slugs comparados em minúsculas;
+/// - o exercício (visão segura, ExerciseDto) vai em LessonDto.Exercise, como no real.
 /// </summary>
 public sealed class InMemoryLessonContentService : ILessonContentService
 {
@@ -24,7 +25,8 @@ public sealed class InMemoryLessonContentService : ILessonContentService
         int EstimatedMinutes = 10,
         DifficultyLevel Level = DifficultyLevel.Beginner,
         string? Language = "sql",
-        IReadOnlyList<string>? Objectives = null)
+        IReadOnlyList<string>? Objectives = null,
+        ExerciseDto? Exercise = null)
     {
         public Guid Id { get; } = Guid.NewGuid();
     }
@@ -63,6 +65,6 @@ public sealed class InMemoryLessonContentService : ILessonContentService
             lesson.Id, lesson.Slug, lesson.Title, lesson.EstimatedMinutes, lesson.Level, lesson.Language,
             lesson.Objectives ?? [], lesson.Body,
             new LessonBreadcrumb(path.Slug, path.Title, module.Slug, module.Title),
-            Link(index - 1), Link(index + 1), index + 1, siblings.Count)));
+            Link(index - 1), Link(index + 1), index + 1, siblings.Count, lesson.Exercise)));
     }
 }
