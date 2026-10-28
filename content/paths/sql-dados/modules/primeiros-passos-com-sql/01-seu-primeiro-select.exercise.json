@@ -1,0 +1,59 @@
+{
+  "title": "Lista de preços",
+  "statement": "A livraria quer uma lista de preços. Mostre o **título** e o **preço** de **todos os livros**.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Escreva sua consulta abaixo\nSELECT ",
+  "solution": "SELECT titulo, preco FROM livros;",
+  "hints": [
+    "Você precisa de duas colunas da tabela de livros. Lembre do formato: SELECT colunas FROM tabela.",
+    "As colunas se chamam titulo e preco, e a tabela é livros. Separe as colunas com vírgula."
+  ],
+  "test_cases": [
+    {
+      "name": "Título e preço de todos os livros",
+      "columns": ["titulo", "preco"],
+      "rows": [
+        ["Dom Casmurro", 29.90],
+        ["Memórias Póstumas de Brás Cubas", 34.90],
+        ["A Hora da Estrela", 39.90],
+        ["O Hobbit", 49.90],
+        ["O Senhor dos Anéis: A Sociedade do Anel", 69.90],
+        ["Assassinato no Expresso do Oriente", 32.50],
+        ["E Não Sobrou Nenhum", 36.00],
+        ["Cem Anos de Solidão", 54.90],
+        ["O Silmarillion", 59.90],
+        ["Laços de Família", 27.90]
+      ],
+      "order_matters": false,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT titulo preco FROM livros;",
+      "message": "Sua consulta trouxe 1 coluna, mas pedimos 2. Para pedir várias colunas, separe-as com vírgula: titulo, preco."
+    },
+    {
+      "example": "SELECT titulo, preco, FROM livros;",
+      "message": "Parece que sobrou uma vírgula antes do FROM. A última coluna não leva vírgula."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livro;",
+      "message": "Não existe tabela chamada livro. As tabelas desta aula são livros e autores (no plural)."
+    },
+    {
+      "example": "SELECT * FROM livros;",
+      "message": "Você trouxe todas as colunas. O exercício pede só título e preço."
+    },
+    {
+      "example": "SELEC titulo, preco FROM livros;",
+      "message": "O banco não reconheceu a palavra SELEC. Confira a grafia: SELECT."
+    },
+    {
+      "example": "SELECT titulo, preco;",
+      "message": "Faltou dizer de qual tabela vêm os dados: use FROM livros."
+    }
+  ]
+}

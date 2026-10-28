@@ -1,0 +1,49 @@
+{
+  "title": "Livros por gênero",
+  "statement": "Quantos títulos a livraria tem em cada gênero? Mostre o **gênero** e a **quantidade de livros**.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Quantidade de livros em cada gênero\nSELECT genero, \nFROM livros\n",
+  "solution": "SELECT genero, COUNT(*) AS total_livros FROM livros GROUP BY genero;",
+  "hints": [
+    "Você quer uma linha por gênero, com uma contagem. Qual comando separa os livros em grupos?",
+    "Use SELECT genero, COUNT(*) FROM livros GROUP BY genero."
+  ],
+  "test_cases": [
+    {
+      "name": "Quantidade de livros por gênero",
+      "columns": ["genero", "total_livros"],
+      "rows": [
+        ["Contos", 1],
+        ["Fantasia", 3],
+        ["Mistério", 2],
+        ["Romance", 4]
+      ],
+      "order_matters": false,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT genero, COUNT(*) FROM livros;",
+      "message": "Para contar por gênero, diga ao banco como agrupar: adicione GROUP BY genero no final."
+    },
+    {
+      "example": "SELECT titulo, COUNT(*) FROM livros GROUP BY genero;",
+      "message": "Toda coluna no SELECT que não é COUNT/SUM/AVG precisa estar no GROUP BY. Aqui, mostre genero, não titulo."
+    },
+    {
+      "example": "SELECT genero, SUM(estoque) FROM livros GROUP BY genero;",
+      "message": "Você somou as unidades em estoque. O exercício pede quantos livros existem em cada gênero: use COUNT(*)."
+    },
+    {
+      "example": "SELECT COUNT(*) FROM livros;",
+      "message": "Você contou todos os livros juntos. Mostre também o gênero e agrupe por ele."
+    },
+    {
+      "example": "SELECT genero, COUNT FROM livros GROUP BY genero;",
+      "message": "Funções de resumo usam parênteses: COUNT(*)."
+    }
+  ]
+}

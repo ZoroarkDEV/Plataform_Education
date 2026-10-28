@@ -34,3 +34,10 @@ modules:
     title: "Conectando C# ao banco"
     description: "Acesso ao PostgreSQL a partir do C# com ADO.NET e Entity Framework Core."
     order: 6
+  # Módulo do primeiro contato com SQL, que roda no navegador (issue #22). Pedagogicamente é o
+  # módulo 1. Fica em 7 por enquanto para não mover os módulos existentes antes da correção do
+  # seed (#23). A troca para order 1 vem em um commit separado, depois do #23.
+  - slug: primeiros-passos-com-sql
+    title: "Primeiros passos com SQL"
+    description: "Primeiro contato com SQL direto no navegador, sem instalar nada: SELECT, WHERE, ORDER BY, LIMIT, JOIN e agregações sobre o banco de exemplo de uma livraria."
+    order: 7

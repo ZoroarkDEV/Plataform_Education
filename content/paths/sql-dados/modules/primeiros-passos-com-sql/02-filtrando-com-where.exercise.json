@@ -1,0 +1,59 @@
+{
+  "title": "Fantasia até R$ 60",
+  "statement": "Um cliente procura livros de **Fantasia** que custem **menos de R$ 60**. Mostre o **título** e o **preço**.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Livros de Fantasia com preço menor que 60\nSELECT titulo, preco\nFROM livros\nWHERE ",
+  "solution": "SELECT titulo, preco FROM livros WHERE genero = 'Fantasia' AND preco < 60;",
+  "hints": [
+    "Você precisa de duas condições ao mesmo tempo: gênero e preço. Que palavra junta duas condições?",
+    "Use WHERE genero = 'Fantasia' AND preco < 60."
+  ],
+  "test_cases": [
+    {
+      "name": "Livros de Fantasia com preço menor que 60",
+      "columns": ["titulo", "preco"],
+      "rows": [
+        ["O Hobbit", 49.90],
+        ["O Silmarillion", 59.90]
+      ],
+      "order_matters": false,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero = \"Fantasia\" AND preco < 60;",
+      "message": "Textos em SQL vão entre aspas simples: 'Fantasia'. Aspas duplas são para nomes de colunas."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero = Fantasia AND preco < 60;",
+      "message": "Faltaram as aspas simples em volta do texto: 'Fantasia'."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero = 'fantasia' AND preco < 60;",
+      "message": "Sua consulta não trouxe nenhuma linha. Em textos, maiúsculas e minúsculas fazem diferença: o gênero está gravado como 'Fantasia'."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero = 'Fantasia' OR preco < 60;",
+      "message": "Vieram linhas demais. Com OR basta uma condição ser verdadeira. Aqui o livro precisa ser de Fantasia e custar menos de 60: use AND."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero == 'Fantasia' AND preco < 60;",
+      "message": "Em SQL a comparação de igualdade usa um só sinal de igual: =."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero = 'Fantasia' AND preco < 'R$ 60';",
+      "message": "Números vão sem aspas e sem R$, com ponto decimal: 60 ou 60.00."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero = 'Fantasia' AND preco < 60,00;",
+      "message": "Números vão sem aspas e sem R$, com ponto decimal: 60 ou 60.00."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero = 'Fantasia';",
+      "message": "Vieram 3 livros, esperávamos 2. Falta o filtro de preço menor que 60."
+    }
+  ]
+}

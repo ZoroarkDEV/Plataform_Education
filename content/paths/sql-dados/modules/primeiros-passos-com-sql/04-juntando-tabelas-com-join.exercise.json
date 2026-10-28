@@ -1,0 +1,55 @@
+{
+  "title": "Catálogo com autores",
+  "statement": "Monte o catálogo com o **título** de cada livro e o **nome do autor**.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Título de cada livro e o nome do autor\nSELECT \nFROM livros\n",
+  "solution": "SELECT livros.titulo, autores.nome FROM livros INNER JOIN autores ON livros.autor_id = autores.id;",
+  "hints": [
+    "O nome do autor está em outra tabela. Qual coluna de livros aponta para autores?",
+    "Junte as tabelas com FROM livros INNER JOIN autores ON livros.autor_id = autores.id e selecione livros.titulo, autores.nome."
+  ],
+  "test_cases": [
+    {
+      "name": "Cada livro com o nome do seu autor",
+      "columns": ["titulo", "nome"],
+      "rows": [
+        ["Dom Casmurro", "Machado de Assis"],
+        ["Memórias Póstumas de Brás Cubas", "Machado de Assis"],
+        ["A Hora da Estrela", "Clarice Lispector"],
+        ["O Hobbit", "J.R.R. Tolkien"],
+        ["O Senhor dos Anéis: A Sociedade do Anel", "J.R.R. Tolkien"],
+        ["Assassinato no Expresso do Oriente", "Agatha Christie"],
+        ["E Não Sobrou Nenhum", "Agatha Christie"],
+        ["Cem Anos de Solidão", "Gabriel García Márquez"],
+        ["O Silmarillion", "J.R.R. Tolkien"],
+        ["Laços de Família", "Clarice Lispector"]
+      ],
+      "order_matters": false,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT l.titulo, a.nome FROM livros l JOIN autores a ON l.id = a.id;",
+      "message": "Os pares livro-autor não batem (ex.: 'O Hobbit' com Agatha Christie). O livro aponta para o autor pela coluna autor_id: compare livros.autor_id = autores.id."
+    },
+    {
+      "example": "SELECT id, titulo, nome FROM livros JOIN autores ON livros.autor_id = autores.id;",
+      "message": "As duas tabelas têm uma coluna id. Diga de qual está falando: livros.id ou autores.id."
+    },
+    {
+      "example": "SELECT titulo, nome FROM livros JOIN autores;",
+      "message": "Faltou dizer como as tabelas se ligam: ON livros.autor_id = autores.id."
+    },
+    {
+      "example": "SELECT l.titulo, autores.nome FROM livros JOIN autores ON livros.autor_id = autores.id;",
+      "message": "Você usou o apelido l, mas não o criou. Escreva FROM livros AS l, ou use o nome completo."
+    },
+    {
+      "example": "SELECT titulo, autor_id FROM livros;",
+      "message": "Você mostrou o número do autor. O catálogo precisa do nome, que está na tabela autores."
+    }
+  ]
+}

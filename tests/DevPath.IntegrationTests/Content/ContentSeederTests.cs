@@ -42,7 +42,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
 
         paths.Select(p => p.Slug).Should().Equal("backend-net", "sql-dados");
         paths[0].Modules.Should().HaveCount(7).And.OnlyContain(m => m.IsPublished && m.Lessons.Count > 0);
-        paths[1].Modules.Should().HaveCount(6);
+        paths[1].Modules.Should().HaveCount(7);
         paths.SelectMany(p => p.Modules).SelectMany(m => m.Lessons)
             .Should().OnlyContain(l => l.Content.Length > 0 && !l.Content.StartsWith("---"));
     }
@@ -219,7 +219,8 @@ public sealed class ContentSeederTests : IAsyncLifetime
                 var modules = await db.Modules.Where(m => db.CareerPaths.Any(p => p.Id == m.CareerPathId && p.Slug == "sql-dados")).OrderBy(m => m.Order).ToListAsync();
                 modules.Select(m => (m.Slug, m.Order, m.IsPublished)).Should().Equal(
                     ("ambiente", 1, true), ("estruturas", 2, true), ("consultas", 3, true),
-                    ("performance-e-confiabilidade", 4, true), ("conectando-csharp", 5, true), ("crud", 6, false));
+                    ("performance-e-confiabilidade", 4, true), ("conectando-csharp", 5, true),
+                    ("primeiros-passos-com-sql", 6, true), ("crud", 7, false));
             }
 
             (await LessonSlugsInOrderAsync("consultas")).Should().Equal("joins", "subqueries-e-ctes", "agregacoes-group-by-having");

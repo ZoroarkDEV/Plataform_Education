@@ -1,0 +1,52 @@
+{
+  "title": "Vitrine Premium",
+  "statement": "Monte a vitrine 'Premium': os **3 livros mais caros**, do **mais caro para o mais barato**, com **título** e **preço**.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Os 3 livros mais caros, do mais caro para o mais barato\nSELECT titulo, preco\nFROM livros\n",
+  "solution": "SELECT titulo, preco FROM livros ORDER BY preco DESC LIMIT 3;",
+  "hints": [
+    "Primeiro ordene pelo preço do maior para o menor, depois corte o resultado.",
+    "Termine a consulta com ORDER BY preco DESC LIMIT 3."
+  ],
+  "test_cases": [
+    {
+      "name": "Os 3 livros mais caros, em ordem decrescente de preço",
+      "columns": ["titulo", "preco"],
+      "rows": [
+        ["O Senhor dos Anéis: A Sociedade do Anel", 69.90],
+        ["O Silmarillion", 59.90],
+        ["Cem Anos de Solidão", 54.90]
+      ],
+      "order_matters": true,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT titulo, preco FROM livros ORDER BY preco LIMIT 3;",
+      "message": "Você trouxe os 3 livros mais baratos. Para começar do maior preço, use DESC depois da coluna."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros LIMIT 3 ORDER BY preco DESC;",
+      "message": "A ordem das partes importa: primeiro ORDER BY, depois LIMIT."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros ORDER BY preco DESC;",
+      "message": "Vieram 10 livros, a vitrine tem só 3. Use LIMIT 3 no final."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros ORDER BY preco DESC LIMIT;",
+      "message": "Diga quantas linhas quer: LIMIT 3."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE preco > 50 ORDER BY titulo;",
+      "message": "Os livros estão certos, mas a ordem não: o mais caro deve vir primeiro. Ordene por preço."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros ORDER BY 'preco' LIMIT 3;",
+      "message": "Nome de coluna vai sem aspas simples: ORDER BY preco."
+    }
+  ]
+}
