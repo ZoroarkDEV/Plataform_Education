@@ -13,11 +13,11 @@ public enum ExerciseAccess
 {
     Allowed,
 
-    /// <summary>Não existe ou está escondido (trilha inativa, módulo/aula não publicados): a Web responde 404.</summary>
-    NotFound,
-
-    /// <summary>Aula em construção: aparece na navegação, mas ainda não abre. A Web responde 403.</summary>
-    Draft
+    /// <summary>
+    /// Não existe, está escondido (trilha inativa, módulo/aula não publicados) ou a aula é rascunho.
+    /// A Web responde 404 com a mesma mensagem nos três casos, para não revelar qual deles é.
+    /// </summary>
+    NotFound
 }
 
 /// <summary>Lê a visibilidade de um exercício (implementação com EF Core na Infrastructure).</summary>
@@ -36,18 +36,14 @@ public interface ILessonAccessPolicy
 /// Regra atual: qualquer aluno logado executa exercícios de aulas visíveis e prontas.
 /// </summary>
 /// <remarks>
-/// TODO(#15 / progresso): liberar por progresso (ex.: só abre a aula N depois de concluir a N-1).
-/// Quando isso existir, esta classe recebe o progresso do aluno e devolve um novo valor "Locked".
+/// TODO(#27): liberar por progresso, junto com "marcar como concluída" (ex.: só abre a aula N depois de
+/// concluir a N-1). Quando isso existir, esta classe recebe o progresso do aluno e devolve um novo valor "Locked".
 /// </remarks>
 public sealed class LessonAccessPolicy : ILessonAccessPolicy
 {
     public ExerciseAccess Evaluate(Guid userId, ExerciseVisibility? exercise)
     {
-        if (exercise is null || !exercise.PathActive || !exercise.ModulePublished || !exercise.LessonPublished)
-        {
-            return ExerciseAccess.NotFound;
-        }
-
-        return exercise.LessonDraft ? ExerciseAccess.Draft : ExerciseAccess.Allowed;
+        var visible = exercise is { PathActive: true, ModulePublished: true, LessonPublished: true, LessonDraft: false };
+        return visible ? ExerciseAccess.Allowed : ExerciseAccess.NotFound;
     }
 }

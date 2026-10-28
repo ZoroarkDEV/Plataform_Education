@@ -124,18 +124,22 @@ public sealed class ExecutionWorker(
             // Estourou o prazo do job (fila cheia ou vários casos de teste lentos). Nada foi gravado.
             return ExecutionOutcome.Failure(ExecutionStatus.Timeout, SqlErrorTranslator.TimeoutMessage);
         }
-        catch (AttemptsExhaustedException ex)
-        {
-            return ExecutionOutcome.Failure(ExecutionStatus.Error, ex.Message, remainingAttempts: 0);
-        }
         catch (ArgumentException ex)
         {
             return ExecutionOutcome.Failure(ExecutionStatus.Error, ex.Message);
         }
-        catch (Exception ex) when (ex is KeyNotFoundException or NotSupportedException or FormatException or DatasetNotFoundException)
+        catch (Exception ex) when (ex is NotSupportedException or FormatException or DatasetNotFoundException)
         {
-            // Erro de conteúdo/plataforma: o aluno vê uma frase neutra; o motivo fica no log para a equipe.
-            logger.LogError(ex, "Job {JobId} do exercício {ExerciseId} não pôde ser executado", job.JobId, job.ExerciseId);
+            // Erro de conteúdo (casos de teste ilegíveis, dataset ausente, linguagem sem runner): o aluno vê uma
+            // frase neutra; o motivo fica no log para a equipe corrigir o conteúdo.
+            logger.LogError(ex, "Erro de conteúdo: exercício {ExerciseId} não pôde ser executado (job {JobId}). A tentativa não foi contada.",
+                job.ExerciseId, job.JobId);
+            return ExecutionOutcome.Failure(ExecutionStatus.Error, ExerciseBrokenMessage);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            // O exercício sumiu entre a checagem da Web e a execução (ex.: conteúdo recarregado).
+            logger.LogWarning(ex, "Exercício {ExerciseId} não existe mais (job {JobId})", job.ExerciseId, job.JobId);
             return ExecutionOutcome.Failure(ExecutionStatus.Error, ExerciseBrokenMessage);
         }
         catch (SandboxUnavailableException ex)

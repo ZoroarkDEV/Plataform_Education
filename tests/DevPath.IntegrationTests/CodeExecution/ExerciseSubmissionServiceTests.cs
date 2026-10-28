@@ -7,6 +7,7 @@ using DevPath.Infrastructure.Identity;
 using DevPath.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Testcontainers.PostgreSql;
 
 namespace DevPath.IntegrationTests.CodeExecution;
@@ -76,10 +77,11 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
         return (user.Id, exercise.Id);
     }
 
-    private async Task<ExecutionOutcome> SubmitAsync(Guid userId, Guid exerciseId, string code, ICodeRunner runner)
+    private async Task<ExecutionOutcome> SubmitAsync(Guid userId, Guid exerciseId, string code, ICodeRunner runner,
+        ILogger<ExerciseSubmissionService>? logger = null)
     {
         await using var db = fixture.CreateDbContext();
-        return await new ExerciseSubmissionService(db, new DatasetRepository(db), [runner]).SubmitAsync(userId, exerciseId, code);
+        return await new ExerciseSubmissionService(db, new DatasetRepository(db), [runner], logger).SubmitAsync(userId, exerciseId, code);
     }
 
     /// <summary>Tudo o que o aluno lê na tela: mensagem, detalhe técnico e o retorno de cada caso.</summary>
@@ -197,9 +199,15 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
         var (userId, exerciseId) = await CreateExerciseAsync(TestCases(slug), maxAttempts: 1);
         await SubmitAsync(userId, exerciseId, "SELECT 1;", new FakeRunner(_ => CorrectStdout));
 
-        var act = () => SubmitAsync(userId, exerciseId, "SELECT 1;", new FakeRunner(_ => CorrectStdout));
+        var runner = new FakeRunner(_ => CorrectStdout);
 
-        (await act.Should().ThrowAsync<AttemptsExhaustedException>()).Which.Message.Should().Be("Você já usou a única tentativa deste exercício.");
+        var outcome = await SubmitAsync(userId, exerciseId, "SELECT 1;", runner);
+
+        outcome.Status.Should().Be(ExecutionStatus.AttemptsExhausted);
+        outcome.FriendlyMessage.Should().Be(ExecutionOutcome.AttemptsExhaustedMessage(1));
+        outcome.RemainingAttempts.Should().Be(0);
+        outcome.SubmissionId.Should().BeNull();
+        runner.Calls.Should().Be(0, "não gasta container depois do limite");
     }
 
     [Fact]
@@ -209,21 +217,15 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
         var (userId, exerciseId) = await CreateExerciseAsync(TestCases(slug), maxAttempts: 1);
 
         // Os dois passam pela contagem inicial (0 de 1) antes de qualquer um gravar.
-        var envios = Enumerable.Range(0, 2).Select(async _ =>
-        {
-            try
-            {
-                return await SubmitAsync(userId, exerciseId, "SELECT 1;",
-                    new FakeRunner(_ => CorrectStdout, delay: TimeSpan.FromMilliseconds(500)));
-            }
-            catch (AttemptsExhaustedException)
-            {
-                return null;
-            }
-        }).ToList();
-        var results = await Task.WhenAll(envios);
+        var results = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => SubmitAsync(userId, exerciseId, "SELECT 1;",
+            new FakeRunner(_ => CorrectStdout, delay: TimeSpan.FromMilliseconds(500)))));
 
-        results.Count(r => r is not null).Should().Be(1, "só uma tentativa cabe no limite");
+        results.Should().ContainSingle(r => r.Status != ExecutionStatus.AttemptsExhausted, "só uma tentativa cabe no limite")
+            .Which.SubmissionId.Should().NotBeNull();
+        // Quem perde a corrida recebe o mesmo status da pré-checagem.
+        var loser = results.Single(r => r.Status == ExecutionStatus.AttemptsExhausted);
+        loser.RemainingAttempts.Should().Be(0);
+        loser.SubmissionId.Should().BeNull();
         await using var db = fixture.CreateDbContext();
         (await db.CodeSubmissions.CountAsync(s => s.ExerciseId == exerciseId && s.UserId == userId)).Should().Be(1);
     }
@@ -247,8 +249,14 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
         var slug = await CreateDatasetAsync();
         var (userId, exerciseId) = await CreateExerciseAsync(TestCases(slug), maxAttempts: 1);
         var runner = new FakeRunner(_ => "", exitCode: PostgresSqlCodeRunner.SetupFailedExitCode, stderr: "ERROR: syntax error");
+        var logger = new ListLogger();
 
-        var outcome = await SubmitAsync(userId, exerciseId, "SELECT 1;", runner);
+        var outcome = await SubmitAsync(userId, exerciseId, "SELECT 1;", runner, logger);
+
+        // A equipe precisa achar o exercício quebrado no log: marcador, exercício, aula e dataset.
+        var entry = logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error).Subject;
+        entry.Message.Should().StartWith("Erro de conteúdo").And.Contain(exerciseId.ToString())
+            .And.Contain("aula select").And.Contain($"dataset {slug}").And.Contain("syntax error");
 
         outcome.Status.Should().Be(ExecutionStatus.Error);
         outcome.FriendlyMessage.Should().Be(ExerciseSubmissionService.SetupFailedMessage);
@@ -328,6 +336,15 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
         outcome.Status.Should().Be(ExecutionStatus.Error);
         outcome.FriendlyMessage.Should().Be(SqlErrorTranslator.MetaCommandMessage);
         Shown(outcome).Should().NotContain("uid=");
+    }
+
+    private sealed class ListLogger : ILogger<ExerciseSubmissionService>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => Entries.Add((logLevel, formatter(state, exception)));
     }
 
     private sealed class FakeRunner(Func<string?, string> stdout, bool timedOut = false, int exitCode = 0, string stderr = "",

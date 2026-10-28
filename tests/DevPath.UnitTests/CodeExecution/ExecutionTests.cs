@@ -31,13 +31,12 @@ public class LessonAccessPolicyTests
         Policy.Evaluate(Guid.NewGuid(), Visible() with { LessonPublished = false }).Should().Be(ExerciseAccess.NotFound);
 
     [Fact]
-    public void AulaEmRascunho_Draft() =>
-        Policy.Evaluate(Guid.NewGuid(), Visible() with { LessonDraft = true }).Should().Be(ExerciseAccess.Draft);
+    public void AulaEmRascunho_NotFound_NaoRevelaQueExiste() =>
+        Policy.Evaluate(Guid.NewGuid(), Visible() with { LessonDraft = true }).Should().Be(ExerciseAccess.NotFound);
 
     [Fact]
-    public void RascunhoEscondido_NotFoundGanhaDeDraft() =>
-        Policy.Evaluate(Guid.NewGuid(), Visible() with { LessonDraft = true, LessonPublished = false })
-            .Should().Be(ExerciseAccess.NotFound, "não revela que existe uma aula escondida");
+    public void SoExistemDoisResultados() =>
+        Enum.GetValues<ExerciseAccess>().Should().Equal(ExerciseAccess.Allowed, ExerciseAccess.NotFound);
 }
 
 public class ExecutionLimitsTests
@@ -110,6 +109,22 @@ public class ExecutionLimitsTests
     [Theory]
     [InlineData(1, "Você já usou a única tentativa deste exercício.")]
     [InlineData(3, "Você já usou as 3 tentativas deste exercício.")]
-    public void TentativasEsgotadas_MensagemEmPortugues(int max, string message) =>
-        new AttemptsExhaustedException(max).Message.Should().Be(message);
+    public void TentativasEsgotadas_StatusProprioMensagemEmPortuguesERestantesZero(int max, string start)
+    {
+        var outcome = ExecutionOutcome.AttemptsExhausted(max);
+
+        outcome.Status.Should().Be(ExecutionStatus.AttemptsExhausted);
+        outcome.FriendlyMessage.Should().StartWith(start);
+        outcome.RemainingAttempts.Should().Be(0);
+        outcome.SubmissionId.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(ExecutionStatus.Pass, "pass")]
+    [InlineData(ExecutionStatus.Fail, "fail")]
+    [InlineData(ExecutionStatus.Error, "error")]
+    [InlineData(ExecutionStatus.Timeout, "timeout")]
+    [InlineData(ExecutionStatus.AttemptsExhausted, "attempts_exhausted")]
+    public void Status_SerializaComoOContratoDoFrontend(ExecutionStatus status, string json) =>
+        System.Text.Json.JsonSerializer.Serialize(status).Should().Be($"\"{json}\"");
 }

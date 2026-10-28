@@ -26,7 +26,6 @@ public static class ExerciseExecutionEndpoints
 
     public const string EmptyCodeMessage = "Escreva uma consulta SQL antes de executar.";
     public const string NotFoundMessage = "Exercício não encontrado.";
-    public const string DraftMessage = "Esta aula ainda está em construção. Os exercícios dela ainda não podem ser executados.";
     public const string UnavailableMessage = "O executor de código está indisponível no momento. Tente de novo em instantes.";
     public const string AntiforgeryMessage = "Sua sessão expirou ou a página está desatualizada. Recarregue a página e tente de novo.";
 
@@ -95,18 +94,16 @@ public static class ExerciseExecutionEndpoints
             return Results.BadRequest(new ApiError($"O código pode ter no máximo {ExecutionLimits.MaxCodeLength} caracteres."));
         }
 
+        // Inexistente, escondido ou rascunho: o mesmo 404 e a mesma mensagem (não revela qual é o caso).
         var visibility = await catalog.GetVisibilityAsync(exerciseId, cancellationToken);
-        switch (accessPolicy.Evaluate(userId, visibility))
+        if (accessPolicy.Evaluate(userId, visibility) != ExerciseAccess.Allowed)
         {
-            case ExerciseAccess.NotFound:
-                return Results.NotFound(new ApiError(NotFoundMessage));
-            case ExerciseAccess.Draft:
-                return Results.Json(new ApiError(DraftMessage), statusCode: StatusCodes.Status403Forbidden);
+            return Results.NotFound(new ApiError(NotFoundMessage));
         }
 
         try
         {
-            // 200 para pass/fail/error/timeout: a execução "aconteceu", e o status está no corpo.
+            // 200 para pass/fail/error/timeout/attempts_exhausted: o pedido foi processado, e o status está no corpo.
             return Results.Ok(await queue.ExecuteAsync(userId, exerciseId, code, cancellationToken));
         }
         catch (ExecutionUnavailableException)

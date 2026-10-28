@@ -3,6 +3,8 @@ using DevPath.Application.CodeExecution;
 using DevPath.Domain.Progress;
 using DevPath.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevPath.Infrastructure.CodeExecution;
 
@@ -22,8 +24,11 @@ namespace DevPath.Infrastructure.CodeExecution;
 public sealed partial class ExerciseSubmissionService(
     DevPathDbContext db,
     IDatasetRepository datasets,
-    IEnumerable<ICodeRunner> runners) : IExerciseSubmissionService
+    IEnumerable<ICodeRunner> runners,
+    ILogger<ExerciseSubmissionService>? logger = null) : IExerciseSubmissionService
 {
+    private readonly ILogger _logger = logger ?? NullLogger<ExerciseSubmissionService>.Instance;
+
     /// <summary>Tamanho máximo do código enviado (o mesmo que a Web confere).</summary>
     public const int MaxCodeLength = ExecutionLimits.MaxCodeLength;
 
@@ -65,7 +70,7 @@ public sealed partial class ExerciseSubmissionService(
             usedAttempts = await db.CodeSubmissions.CountAsync(s => s.UserId == userId && s.ExerciseId == exerciseId, cancellationToken);
             if (usedAttempts >= maxAttempts)
             {
-                throw new AttemptsExhaustedException(maxAttempts);
+                return ExecutionOutcome.AttemptsExhausted(maxAttempts); // nada executa, nada é gravado
             }
         }
 
@@ -106,6 +111,12 @@ public sealed partial class ExerciseSubmissionService(
         // Preparação quebrada é erro do EXERCÍCIO: não conta como tentativa do aluno.
         if (problem?.Result.ExitCode == PostgresSqlCodeRunner.SetupFailedExitCode && !problem.Result.TimedOut)
         {
+            var lessonSlug = await db.Lessons.AsNoTracking().Where(l => l.Id == exercise.LessonId).Select(l => l.Slug)
+                .SingleOrDefaultAsync(cancellationToken);
+            _logger.LogError(
+                "Erro de conteúdo: a preparação do exercício {ExerciseId} (aula {LessonSlug}, dataset {Dataset}, caso {TestCase}) " +
+                "falhou no sandbox. A tentativa do aluno não foi contada. Detalhe: {Detail}",
+                exercise.Id, lessonSlug, DatasetOf(problem.Case) ?? "(nenhum)", problem.Case.Name, Truncate(problem.Result.Stderr));
             return ExecutionOutcome.Failure(ExecutionStatus.Error, SetupFailedMessage, remainingAttempts:
                 exercise.MaxAttempts is { } max ? max - usedAttempts : null) with { ExecutionTimeMs = totalMs };
         }
@@ -122,7 +133,13 @@ public sealed partial class ExerciseSubmissionService(
             status == ExecutionStatus.Pass ? SubmissionResult.Pass : SubmissionResult.Fail, totalMs, summary);
         if (exercise.MaxAttempts is { } attemptLimit)
         {
-            usedAttempts = await SaveWithinLimitAsync(submission, attemptLimit, cancellationToken);
+            var saved = await SaveWithinLimitAsync(submission, attemptLimit, cancellationToken);
+            if (saved is null)
+            {
+                // Perdeu a corrida: outro envio simultâneo usou a última tentativa. Este não é gravado.
+                return ExecutionOutcome.AttemptsExhausted(attemptLimit);
+            }
+            usedAttempts = saved.Value;
         }
         else
         {
@@ -144,8 +161,8 @@ public sealed partial class ExerciseSubmissionService(
     /// é esta: um lock de transação do PostgreSQL por (aluno, exercício) serializa "contar + inserir".
     /// O lock dura só esta transação curta (não a execução no sandbox) e some sozinho no commit/rollback.
     /// </summary>
-    /// <returns>Quantas tentativas já existiam antes desta.</returns>
-    private async Task<int> SaveWithinLimitAsync(CodeSubmission submission, int maxAttempts, CancellationToken cancellationToken)
+    /// <returns>Quantas tentativas já existiam antes desta; nulo se o limite já foi atingido (nada gravado).</returns>
+    private async Task<int?> SaveWithinLimitAsync(CodeSubmission submission, int maxAttempts, CancellationToken cancellationToken)
     {
         var lockKey = $"devpath:tentativas:{submission.UserId:N}:{submission.ExerciseId:N}";
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -155,7 +172,7 @@ public sealed partial class ExerciseSubmissionService(
             s => s.UserId == submission.UserId && s.ExerciseId == submission.ExerciseId, cancellationToken);
         if (used >= maxAttempts)
         {
-            throw new AttemptsExhaustedException(maxAttempts); // outro envio simultâneo usou a última tentativa
+            return null; // o rollback acontece no Dispose da transação e libera o lock
         }
 
         db.CodeSubmissions.Add(submission);
@@ -217,6 +234,9 @@ public sealed partial class ExerciseSubmissionService(
         var comparison = ResultComparer.Compare(testCase, actual);
         return new(testCase, result, actual, comparison.Passed ? null : comparison.Feedback, null, null);
     }
+
+    private static string Truncate(string text) =>
+        text.Length <= MaxTechnicalDetailChars ? text : text[..MaxTechnicalDetailChars] + "…";
 
     // "psql:/tmp/consulta.psql:8: " só atrapalha o aluno: ele nunca viu esse arquivo.
     [GeneratedRegex(@"^psql:[^\n:]*:\d+:\s*", RegexOptions.Multiline)]

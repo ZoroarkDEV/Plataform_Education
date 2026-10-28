@@ -12,11 +12,17 @@ public enum ExecutionStatus
     /// <summary>Rodou, mas o resultado não é o esperado em pelo menos um caso.</summary>
     [JsonStringEnumMemberName("fail")] Fail,
 
-    /// <summary>Não rodou até o fim: erro de SQL, comando proibido, limite de tentativas, erro do exercício...</summary>
+    /// <summary>Não rodou até o fim: erro de SQL, comando proibido, erro do exercício, executor com problema...</summary>
     [JsonStringEnumMemberName("error")] Error,
 
     /// <summary>Demorou demais e foi interrompida.</summary>
-    [JsonStringEnumMemberName("timeout")] Timeout
+    [JsonStringEnumMemberName("timeout")] Timeout,
+
+    /// <summary>
+    /// O aluno já usou todas as tentativas (<c>Exercise.MaxAttempts</c>). Nada foi gravado e
+    /// <c>remainingAttempts</c> vem 0. Não é 429: o 429 é só do rate limit.
+    /// </summary>
+    [JsonStringEnumMemberName("attempts_exhausted")] AttemptsExhausted
 }
 
 /// <summary>
@@ -41,7 +47,7 @@ public sealed record TestCaseFeedback(string Name, bool Passed, string? Message)
 /// <param name="FriendlyMessage">Frase curta para iniciante, sempre preenchida.</param>
 /// <param name="TechnicalDetail">Mensagem original do PostgreSQL (a tela mostra recolhida em "Ver detalhe técnico").</param>
 /// <param name="TestCases">Um item por caso de teste do exercício, na ordem do conteúdo.</param>
-/// <param name="SubmissionId">Id da CodeSubmission gravada; nulo quando nada foi gravado (ex.: limite de tentativas).</param>
+/// <param name="SubmissionId">Id da CodeSubmission gravada; nulo quando nada foi gravado (tentativas esgotadas, erro do exercício).</param>
 /// <param name="RemainingAttempts">Tentativas que ainda restam; nulo quando o exercício não tem limite.</param>
 public sealed record ExecutionOutcome(
     ExecutionStatus Status,
@@ -61,6 +67,14 @@ public sealed record ExecutionOutcome(
     public static ExecutionOutcome Failure(ExecutionStatus status, string friendlyMessage, string? technicalDetail = null,
         int? remainingAttempts = null) =>
         new(status, [], [], false, friendlyMessage, technicalDetail, 0, 0, 0, [], null, remainingAttempts);
+
+    /// <summary>Tentativas esgotadas: status próprio, mensagem amigável e <c>remainingAttempts</c> 0.</summary>
+    public static ExecutionOutcome AttemptsExhausted(int maxAttempts) =>
+        Failure(ExecutionStatus.AttemptsExhausted, AttemptsExhaustedMessage(maxAttempts), remainingAttempts: 0);
+
+    public static string AttemptsExhaustedMessage(int maxAttempts) => maxAttempts == 1
+        ? "Você já usou a única tentativa deste exercício. Revise a aula para fixar o conteúdo e siga para o próximo."
+        : $"Você já usou as {maxAttempts} tentativas deste exercício. Revise a aula para fixar o conteúdo e siga para o próximo.";
 }
 
 /// <summary>Um pedido de execução que a Web coloca na fila e o Worker consome.</summary>
@@ -79,15 +93,6 @@ public interface IExecutionQueue
 
 /// <summary>O executor (Worker/Redis) não respondeu. Falha da plataforma, não do aluno.</summary>
 public sealed class ExecutionUnavailableException(string message, Exception? inner = null) : Exception(message, inner);
-
-/// <summary>Tentativas do exercício esgotadas (<c>Exercise.MaxAttempts</c>). Nada é executado nem gravado.</summary>
-public sealed class AttemptsExhaustedException(int maxAttempts)
-    : Exception(maxAttempts == 1
-        ? "Você já usou a única tentativa deste exercício."
-        : $"Você já usou as {maxAttempts} tentativas deste exercício.")
-{
-    public int MaxAttempts { get; } = maxAttempts;
-}
 
 /// <summary>Limites que a Web e o Worker conferem igual.</summary>
 public static class ExecutionLimits

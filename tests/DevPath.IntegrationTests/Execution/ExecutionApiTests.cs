@@ -84,14 +84,17 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
     }
 
     [Fact]
-    public async Task AulaEmRascunho_Devolve403()
+    public async Task AulaEmRascunho_Devolve404IgualAoInexistente()
     {
         var client = await LoggedInClientAsync();
 
-        var response = await client.PostAsJsonAsync(ExecuteUrl(factory.DraftExerciseId), new { code = "SELECT 1;" });
+        var draft = await client.PostAsJsonAsync(ExecuteUrl(factory.DraftExerciseId), new { code = "SELECT 1;" });
+        var missing = await client.PostAsJsonAsync(ExecuteUrl(Guid.NewGuid()), new { code = "SELECT 1;" });
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await MessageAsync(response)).Should().Be(ExerciseExecutionEndpoints.DraftMessage);
+        // Não revela que existe uma aula em construção: mesmo status e mesmo corpo do inexistente.
+        draft.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await draft.Content.ReadAsStringAsync()).Should().Be(await missing.Content.ReadAsStringAsync());
+        (await MessageAsync(draft)).Should().Be(ExerciseExecutionEndpoints.NotFoundMessage);
     }
 
     [Fact]
@@ -266,6 +269,10 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
         outcome.Status.Should().Be(ExecutionStatus.Timeout);
         outcome.FriendlyMessage.Should().Be(SqlErrorTranslator.TimeoutMessage);
         outcome.Rows.Should().BeEmpty();
+        // A remoção do container pode terminar logo depois de o resultado ser publicado: espera um pouco.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DockerAvailability.SandboxContainerCount() > 0 && DateTime.UtcNow < deadline)
+            await Task.Delay(250);
         DockerAvailability.SandboxContainerCount().Should().Be(0, "o container é removido depois do timeout");
     }
 
@@ -308,19 +315,21 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
     }
 
     [DockerFact]
-    public async Task LimiteDeTentativas_SegundaExecucaoDevolveErroAmigavel()
+    public async Task LimiteDeTentativas_SegundaExecucaoDevolve200ComAttemptsExhausted()
     {
         var client = await LoggedInClientAsync();
 
         var first = await ExecuteAsync(client, factory.LimitedExerciseId, "SELECT 1;");
-        var second = await ExecuteAsync(client, factory.LimitedExerciseId, "SELECT 1;");
+        var second = await client.PostAsJsonAsync(ExecuteUrl(factory.LimitedExerciseId), new { code = "SELECT 1;" });
 
         first.SubmissionId.Should().NotBeNull();
         first.RemainingAttempts.Should().Be(0);
-        second.Status.Should().Be(ExecutionStatus.Error);
-        second.FriendlyMessage.Should().Be("Você já usou a única tentativa deste exercício.");
-        second.RemainingAttempts.Should().Be(0);
-        second.SubmissionId.Should().BeNull("nada é gravado depois do limite");
+        second.StatusCode.Should().Be(HttpStatusCode.OK, "429 é só do rate limit");
+        var body = await second.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("status").GetString().Should().Be("attempts_exhausted");
+        body.GetProperty("friendlyMessage").GetString().Should().Be(ExecutionOutcome.AttemptsExhaustedMessage(1));
+        body.GetProperty("remainingAttempts").GetInt32().Should().Be(0);
+        body.GetProperty("submissionId").ValueKind.Should().Be(JsonValueKind.Null, "nada é gravado depois do limite");
     }
 
     // ---------- Ajudantes ----------

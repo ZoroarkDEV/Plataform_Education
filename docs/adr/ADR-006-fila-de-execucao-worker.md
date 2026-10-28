@@ -46,14 +46,16 @@ para gravar a `CodeSubmission`.
    precisam estar sincronizados (NTP), como em qualquer deploy.
 4. **Regra de acesso** na Web, atrás de `ILessonAccessPolicy` (Application): a aula do exercício precisa
    estar publicada (`IsPublished`), não ser rascunho (`IsDraft`), com o módulo publicado e a trilha ativa.
-   Escondido ou inexistente = 404; rascunho = 403. TODO: liberar por progresso (#15).
+   Inexistente, escondido ou rascunho = **o mesmo 404 com a mesma mensagem** (não revela qual é o caso).
+   TODO: liberar por progresso, junto com "marcar como concluída" (#27).
 5. **Rate limiting** na Web (`Microsoft.AspNetCore.RateLimiting`), por usuário (claim `NameIdentifier`):
    janela deslizante de `RateLimiting:Execution:PermitLimit` (10) execuções por `WindowSeconds` (60), em
    `SegmentsPerWindow` (6) pedaços, **e** `ConcurrentPerUser` (1) execução por vez, sem fila. Estourou:
    429 com `Retry-After` e JSON em português: pela janela, mensagem "Calma! Você enviou muitas execuções
    seguidas..." e `Retry-After` = um segmento (60 s / 6 = 10 s); pela concorrência, "Sua execução anterior
-   ainda está rodando..." e `Retry-After` = `ConcurrencyRetryAfterSeconds` (2). O limite é em memória: com mais de uma instância da Web,
-   cada uma conta o seu (aceitável no MVP; depois, um limiter no Redis).
+   ainda está rodando..." e `Retry-After` = `ConcurrencyRetryAfterSeconds` (2). O limite é **em memória, por instância da Web**: com mais de uma instância, cada uma conta o seu e o
+   aluno ganha N vezes o limite. Aceitável no MVP (uma instância só); **um limiter no Redis é obrigatório
+   antes de rodar mais de uma instância da Web** (issue da Fase 2).
 6. **Contrato para o Frontend** (abaixo) é o mesmo objeto que o Worker grava no Redis
    (`ExecutionOutcome`, JSON camelCase).
 
@@ -72,12 +74,11 @@ Respostas:
 
 | Status | Quando | Corpo |
 |---|---|---|
-| 200 | Executou (passou, falhou, erro de SQL, timeout, tentativas esgotadas) | `ExecutionOutcome` |
+| 200 | Pedido processado: passou, falhou, erro de SQL, timeout ou tentativas esgotadas (ver `status`) | `ExecutionOutcome` |
 | 400 | Código vazio/grande demais, ou token antiforgery ausente/inválido | `{ "message": "..." }` |
 | 401 | Sem login (em `/api` não há redirect para a tela de login) | vazio |
-| 403 | Aula em rascunho | `{ "message": "..." }` |
-| 404 | Exercício inexistente ou escondido | `{ "message": "..." }` |
-| 429 | Limite por aluno | `{ "message": "...", "retryAfterSeconds": 10 }` + header `Retry-After` |
+| 404 | Exercício inexistente, escondido ou de aula em rascunho (mesma mensagem nos três) | `{ "message": "Exercício não encontrado." }` |
+| 429 | Rate limit por aluno (só isso; tentativas esgotadas é 200) | `{ "message": "...", "retryAfterSeconds": 10 }` + header `Retry-After` |
 | 503 | Worker/Redis não respondeu a tempo | `{ "message": "..." }` |
 
 `ExecutionOutcome`:
@@ -102,16 +103,30 @@ Respostas:
 }
 ```
 
-- `status`: `pass` | `fail` | `error` | `timeout`.
+- `status`: `pass` | `fail` | `error` | `timeout` | `attempts_exhausted`.
+  - `attempts_exhausted`: o aluno já usou todas as tentativas (`MaxAttempts`). Nada executa nem é gravado;
+    `friendlyMessage` explica em português ("Você já usou as 3 tentativas deste exercício. Revise a aula..."),
+    `remainingAttempts` é `0`, `submissionId` é `null`. Vale também para quem perde a corrida de dois envios
+    simultâneos (ver Consequências).
 - `columns`/`rows`: o resultado **do aluno** no primeiro caso de teste; cada célula é o texto que o
   PostgreSQL devolveu (`null` = NULL). No máximo 200 linhas; `truncated: true` quando havia mais.
-  Vazios em `error`/`timeout`.
+  Vazios em `error`/`timeout`/`attempts_exhausted`.
 - `friendlyMessage`: sempre preenchida, para iniciante. `technicalDetail`: a mensagem original do
   PostgreSQL (com SQLSTATE), para o "Ver detalhe técnico" recolhido; `null` quando não há.
 - `testCases`: um item por caso, na ordem. **Nunca** traz as linhas esperadas nem a solução; casos que não
   rodaram (porque um anterior deu erro/timeout) vêm com `passed: false` e uma mensagem dizendo isso.
 - `submissionId`: `null` quando nada foi gravado (tentativas esgotadas, erro de configuração do exercício).
 - `remainingAttempts`: `null` = sem limite.
+
+Erro na preparação do próprio exercício (dataset ou `setup` do caso quebrado no sandbox): `status: "error"`
+com uma frase neutra ("problema de configuração, não é culpa sua"), **não conta tentativa** e nada é gravado.
+O Worker registra um log `Error` começando com **"Erro de conteúdo"**, com `exerciseId`, slug da aula,
+dataset, caso de teste e o detalhe do PostgreSQL, para a equipe achar e corrigir o conteúdo. Casos de teste
+ilegíveis e dataset inexistente geram o mesmo marcador.
+
+**Exercícios do seed (até o #24):** os `*.exercise.json` em `content/` ainda trazem os casos de teste em
+snake_case (`test_cases`, `order_matters`, `check_column_names`), formato que o `TestCaseSpec` do #13 recusa. Até o #24 converter o conteúdo, executar
+um exercício do seed devolve `status: "error"` (configuração do exercício) e o log "Erro de conteúdo".
 
 Exemplo de erro (DDL/DML): `{ "status": "error", "friendlyMessage": "Neste exercício só é permitido
 consultar dados com SELECT. ...", "technicalDetail": "ERROR:  42P11: cannot open DELETE query as cursor ...", ... }`.
@@ -134,5 +149,6 @@ Mais difícil / em aberto:
 - `MaxAttempts` é conferido duas vezes no Worker: antes de executar (para não gastar container) e na hora de
   gravar, dentro de uma transação com `pg_advisory_xact_lock` por (aluno, exercício). Dois envios
   simultâneos (duas instâncias da Web, vários Workers) não passam do limite: o segundo executa, mas recebe
-  "tentativas esgotadas" e nada é gravado. O lock dura só a transação curta da gravação.
-- Rate limit em memória (por instância da Web), como dito acima.
+  `status: "attempts_exhausted"` (200, igual ao da pré-checagem) e nada é gravado. O lock dura só a transação curta da gravação.
+- Rate limit em memória (por instância da Web), como dito acima: um limiter no Redis é pré-requisito para
+  escalar a Web horizontalmente (Fase 2).
