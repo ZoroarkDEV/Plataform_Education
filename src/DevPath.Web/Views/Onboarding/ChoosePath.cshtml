@@ -1,0 +1,48 @@
+@model DevPath.Web.ViewModels.Onboarding.ChoosePathViewModel
+@{
+    ViewData["Title"] = "Escolha sua trilha";
+}
+@* US-11.2. Uma trilha por vez (SPEC §5.1): cada card tem um form POST com o slug. *@
+<section aria-labelledby="escolha-titulo">
+    <h1 id="escolha-titulo" class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Escolha sua trilha</h1>
+    <p class="mt-2 max-w-2xl text-slate-600 dark:text-slate-300">
+        Escolha um caminho para começar. Você vai estudar uma trilha por vez.
+    </p>
+
+    @if (Model.ErrorMessage is not null)
+    {
+        <div role="alert" class="validation-summary-errors mt-6 max-w-2xl">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.IsEmpty)
+    {
+        <div class="card mt-8 max-w-2xl p-6" role="status">
+            <p class="font-medium text-slate-900 dark:text-white">Estamos preparando as trilhas. Volte em breve.</p>
+            <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Assim que a primeira trilha ficar pronta, ela aparece aqui.</p>
+        </div>
+    }
+    else
+    {
+        <ul class="mt-8 grid gap-6 md:grid-cols-2" aria-label="Trilhas disponíveis">
+            @foreach (var path in Model.Paths)
+            {
+                var titleId = $"trilha-{path.Slug}";
+                <li class="card flex flex-col p-6" aria-labelledby="@titleId">
+                    <h2 id="@titleId" class="text-xl font-semibold text-slate-900 dark:text-white">@path.Title</h2>
+                    <p class="mt-2 flex-1 text-slate-600 dark:text-slate-300">@path.Description</p>
+                    <dl class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-700 dark:text-slate-300">
+                        <div><dt class="sr-only">Nível</dt><dd>@path.LevelLabel</dd></div>
+                        <div><dt class="sr-only">Duração estimada</dt><dd>@path.HoursLabel</dd></div>
+                        <div><dt class="sr-only">Aulas</dt><dd>@path.LessonsLabel</dd></div>
+                    </dl>
+                    <form asp-controller="Onboarding" asp-action="ChoosePath" method="post" class="mt-5">
+                        <input type="hidden" name="pathSlug" value="@path.Slug" />
+                        <button type="submit" class="btn-secondary w-full sm:w-auto">
+                            Começar esta trilha<span class="sr-only">: @path.Title</span>
+                        </button>
+                    </form>
+                </li>
+            }
+        </ul>
+    }
+</section>

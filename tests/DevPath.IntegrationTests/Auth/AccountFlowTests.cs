@@ -37,12 +37,13 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
             ["ConfirmPassword"] = ValidPassword
         });
 
+        // US-11.1: depois do cadastro, vai direto para "Escolha sua trilha", já autenticado.
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        response.Headers.Location!.ToString().Should().Be("/Dashboard");
+        response.Headers.Location!.ToString().Should().Be("/escolha-sua-trilha");
 
-        var dashboard = await client.GetAsync("/dashboard");
-        dashboard.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await dashboard.ReadHtmlAsync()).Should().Contain("Olá, Ana Aluna!");
+        var choosePath = await client.GetAsync("/escolha-sua-trilha");
+        choosePath.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await choosePath.ReadHtmlAsync()).Should().Contain("Escolha sua trilha").And.Contain("Ana Aluna");
 
         var user = await FindUserAsync(email);
         user.Should().NotBeNull();
@@ -65,7 +66,7 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await response.ReadHtmlAsync()).Should().Contain("As senhas não conferem.");
+        (await response.ReadHtmlAsync()).Should().Contain("As duas senhas não são iguais.");
     }
 
     [Fact]
@@ -96,7 +97,9 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
 
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         response.Headers.Location!.ToString().Should().Be("/dashboard");
-        (await client.GetAsync("/dashboard")).StatusCode.Should().Be(HttpStatusCode.OK);
+        // Logado: o dashboard não manda para o login (sem trilha ainda, manda para a escolha de trilha).
+        var dashboard = await client.GetAsync("/dashboard");
+        dashboard.Headers.Location!.ToString().Should().Be("/escolha-sua-trilha");
 
         var user = await FindUserAsync(email);
         user!.LastLoginAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));

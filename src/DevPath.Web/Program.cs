@@ -4,6 +4,8 @@ using DevPath.Infrastructure;
 using DevPath.Infrastructure.Content;
 using DevPath.Web.Lessons;
 using Microsoft.AspNetCore.HttpOverrides;
+using DevPath.Web.Onboarding;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,6 +68,10 @@ builder.Services.AddHttpsRedirection(options =>
 
 // Leitura do conteúdo pedagógico de /content e o seed das trilhas (issue #10).
 builder.Services.AddContentSeeding(builder.Configuration, builder.Environment.ContentRootPath);
+
+// Onboarding e dashboard (#11): enquanto o Backend não registra o serviço real, fica a implementação
+// "pendente", que só mostra os estados vazios (nunca erro 500). TryAdd: o registro real vence.
+builder.Services.TryAddScoped<IStudentJourneyGateway, PendingStudentJourneyGateway>();
 
 var app = builder.Build();
 

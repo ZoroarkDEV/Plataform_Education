@@ -1,8 +1,138 @@
+@using DevPath.Web.ViewModels.Onboarding
+@model DashboardViewModel
 @{
     ViewData["Title"] = "Dashboard";
+    var flash = ViewData[DevPath.Web.Controllers.OnboardingController.FlashKey] as string;
+    var moduleNumber = 0;
+
+    string BadgeClass(LessonStatus status) => status switch
+    {
+        LessonStatus.Completed => "status-completed",
+        LessonStatus.InProgress => "status-in-progress",
+        LessonStatus.Available => "status-available",
+        LessonStatus.Locked => "status-locked",
+        _ => "status-coming-soon"
+    };
 }
-@* Placeholder: o dashboard de verdade (trilha atual, progresso, streak) vem em outra issue. *@
-<section class="max-w-3xl">
-    <h1 class="text-3xl font-bold tracking-tight text-slate-900">Olá, @ViewData["DisplayName"]!</h1>
-    <p class="mt-2 text-slate-600">Este é o seu dashboard. Em breve: sua trilha atual e seu progresso.</p>
+@*
+    US-11.3 / US-11.4. Uma única ação principal ("Continuar"), visível sem rolar no celular.
+    Números e status chegam prontos do serviço (R1, R3, R4); aqui só exibimos, sempre com texto (R7).
+*@
+@if (flash is not null)
+{
+    <div role="status" class="mb-6 rounded-lg border border-green-300 bg-green-50 p-4 text-sm font-medium text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200">
+        @flash
+    </div>
+}
+
+<section class="card p-5 sm:p-8" aria-labelledby="trilha-titulo">
+    <p class="text-sm text-slate-600 dark:text-slate-300">Olá, @ViewData["DisplayName"]!</p>
+    <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300">Sua trilha</p>
+    <h1 id="trilha-titulo" class="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">@Model.PathTitle</h1>
+
+    @if (Model.State == DashboardState.Empty)
+    {
+        <div class="mt-4" role="status">
+            <p class="font-medium text-slate-900 dark:text-white">Esta trilha ainda está sendo preparada.</p>
+            <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Assim que a primeira aula ficar pronta, ela aparece aqui.</p>
+        </div>
+    }
+    else
+    {
+        <div class="mt-4">
+            <p id="progresso-trilha" class="text-sm font-medium text-slate-800 dark:text-slate-200">@Model.ProgressLabel</p>
+            <div class="progress-track mt-2" role="progressbar" aria-labelledby="progresso-trilha"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Model.ProgressPercentage" aria-valuetext="@Model.ProgressLabel">
+                <div class="progress-fill" style="width: @(Math.Clamp(Model.ProgressPercentage, 0, 100))%"></div>
+            </div>
+        </div>
+
+        @if (Model.State == DashboardState.Continue)
+        {
+            <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                <a href="@Model.NextLesson!.Url" class="btn-primary px-6 py-3 text-base sm:w-auto" data-continue>
+                    @Model.ContinueLabel<span class="sr-only">: @Model.NextLesson.Title</span>
+                </a>
+                <p class="text-sm text-slate-600 dark:text-slate-300">
+                    Próxima aula: <span class="font-medium text-slate-900 dark:text-white">@Model.NextLesson.Title</span>
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="mt-6" role="status">
+                <p class="text-lg font-semibold text-slate-900 dark:text-white">
+                    Você concluiu tudo que está disponível <span aria-hidden="true">🎉</span>
+                </p>
+                <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Novas aulas em breve.</p>
+            </div>
+        }
+    }
 </section>
+
+@if (Model.Modules.Count > 0)
+{
+    <section class="mt-10" aria-labelledby="roadmap-titulo">
+        <h2 id="roadmap-titulo" class="text-xl font-semibold text-slate-900 dark:text-white">Roadmap da trilha</h2>
+        <ol class="mt-4 space-y-4">
+            @foreach (var module in Model.Modules)
+            {
+                moduleNumber++;
+                var moduleId = $"modulo-{module.Slug}";
+                <li class="card p-5" aria-labelledby="@moduleId">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+                        <h3 id="@moduleId" class="font-semibold text-slate-900 dark:text-white">
+                            <span class="text-slate-600 dark:text-slate-300">Módulo @moduleNumber ·</span> @module.Title
+                        </h3>
+                        <p class="text-sm text-slate-600 dark:text-slate-300">@module.ProgressLabel</p>
+                    </div>
+                    @if (!module.IsComingSoon)
+                    {
+                        <div class="progress-track mt-2 h-2" role="progressbar" aria-label="Progresso do módulo @module.Title"
+                             aria-valuemin="0" aria-valuemax="100" aria-valuenow="@module.ProgressPercentage" aria-valuetext="@module.ProgressLabel">
+                            <div class="progress-fill" style="width: @(Math.Clamp(module.ProgressPercentage, 0, 100))%"></div>
+                        </div>
+                    }
+
+                    <ol class="mt-4 divide-y divide-slate-200 dark:divide-slate-700">
+                        @foreach (var item in module.Lessons)
+                        {
+                            <li class="flex flex-col gap-1 py-3 sm:flex-row sm:items-start sm:gap-3" data-lesson-status="@item.Status">
+                                <span class="status-badge @BadgeClass(item.Status)">
+                                    @if (item.Status == LessonStatus.Locked)
+                                    {
+                                        <svg class="size-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                        </svg>
+                                    }
+                                    @item.StatusLabel
+                                </span>
+                                <div class="min-w-0">
+                                    @if (item.CanOpen)
+                                    {
+                                        <a href="@item.Lesson.Url" class="link">@item.Lesson.Title</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-slate-700 dark:text-slate-300">@item.Lesson.Title</span>
+                                    }
+
+                                    @if (item.Status == LessonStatus.Locked && item.UnlockRequirement is not null)
+                                    {
+                                        <p class="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
+                                            Conclua '<a href="@item.UnlockRequirement.Url" class="link">@item.UnlockRequirement.Title</a>' para liberar esta aula
+                                        </p>
+                                    }
+                                    else if (item.Status == LessonStatus.ComingSoon)
+                                    {
+                                        <p class="mt-0.5 text-sm text-slate-600 dark:text-slate-300">Esta aula está sendo escrita</p>
+                                    }
+                                </div>
+                            </li>
+                        }
+                    </ol>
+                </li>
+            }
+        </ol>
+    </section>
+}
