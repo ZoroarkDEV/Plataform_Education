@@ -2,8 +2,11 @@ using System.Net;
 using DevPath.Application.Content;
 using DevPath.Infrastructure;
 using DevPath.Infrastructure.Content;
+using DevPath.Infrastructure.Persistence;
+using DevPath.Web.Health;
 using DevPath.Web.Lessons;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -67,22 +70,19 @@ builder.Services.AddHttpsRedirection(options =>
 // Leitura do conteúdo pedagógico de /content e o seed das trilhas (issue #10).
 builder.Services.AddContentSeeding(builder.Configuration, builder.Environment.ContentRootPath);
 
+// GET /health (usado pelo healthcheck do serviço web no docker-compose).
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database");
+
 var app = builder.Build();
 
-// Em Development, importa /content para o banco no startup (upsert: rodar de novo não duplica).
-// Desligue com Content__SeedOnStartup=false. Precisa das migrations aplicadas.
-if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Content:SeedOnStartup", true))
+// Em Development, prepara o banco no startup: aplica as migrations e importa /content (issue #21).
+// Assim `docker compose up` sobe a app pronta numa máquina limpa. Fora do Development nada disso roda:
+// em produção as migrations continuam sendo aplicadas à parte (dotnet ef / script de deploy).
+// Desligue com Database__MigrateOnStartup=false e Content__SeedOnStartup=false.
+if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
-    try
-    {
-        await scope.ServiceProvider.GetRequiredService<IContentSeeder>().SeedAsync();
-    }
-    catch (Exception ex)
-    {
-        // Não derruba a aplicação: só avisa no log o que precisa ser corrigido.
-        app.Logger.LogError(ex, "Seed de conteúdo não executado: {Message}", ex.Message);
-    }
+    await PrepareDevelopmentDatabaseAsync(app);
 }
 
 // Primeiro de tudo: corrige Request.Scheme/RemoteIpAddress antes de cookie, HSTS e redirecionamento.
@@ -104,6 +104,9 @@ app.UseAuthorization();
 
 app.MapStaticAssets();
 
+// Liveness/readiness para o healthcheck do Docker: 200 "Healthy" se a app responde e alcança o banco.
+app.MapHealthChecks("/health");
+
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
@@ -111,6 +114,39 @@ app.MapControllerRoute(
 
 
 app.Run();
+
+static async Task PrepareDevelopmentDatabaseAsync(WebApplication app)
+{
+    using var scope = app.Services.CreateScope();
+
+    if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
+    {
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<DevPathDbContext>().Database.MigrateAsync();
+        }
+        catch (Exception ex)
+        {
+            // Não derruba a aplicação: avisa no log. Sem migrations o seed também falharia, então para aqui.
+            app.Logger.LogError(ex, "Migrations não aplicadas: {Message}", ex.Message);
+            return;
+        }
+    }
+
+    // Upsert: rodar de novo não duplica. Precisa das migrations aplicadas.
+    if (app.Configuration.GetValue("Content:SeedOnStartup", true))
+    {
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<IContentSeeder>().SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            // Não derruba a aplicação: só avisa no log o que precisa ser corrigido.
+            app.Logger.LogError(ex, "Seed de conteúdo não executado: {Message}", ex.Message);
+        }
+    }
+}
 
 // Torna a classe Program visível para o WebApplicationFactory<Program> dos testes de integração.
 public partial class Program;

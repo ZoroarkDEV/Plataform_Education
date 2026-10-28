@@ -152,7 +152,8 @@ Uma tarefa só está pronta quando:
 ├── SPEC-PLATAFORMA-TREINAMENTO-PROGRAMACAO.md  ← Especificação técnica
 ├── DEVPATH-AGENTS-SKILLS.md                    ← Papéis dos agentes
 ├── .gitignore                                  ← .NET / Visual Studio / Rider / .env
-├── docker-compose.yml                          ← (Fase 0, em andamento)
+├── docker-compose.yml                          ← App (web) + PostgreSQL + Redis
+├── Dockerfile                                  ← Imagem da app (multi-stage, usuário não-root)
 ├── src/                                        ← Código-fonte (.NET)
 │   ├── DevPath.Web/                            #   ASP.NET Core MVC
 │   ├── DevPath.Application/                    #   Casos de uso, DTOs, interfaces
@@ -191,37 +192,45 @@ As decisões de arquitetura já tomadas estão no [índice de ADRs](docs/adr/REA
 
 ## 7. Como rodar
 
-### Pré-requisitos
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (ou Docker Engine + Compose)
-- [.NET SDK 9+](https://dotnet.microsoft.com/download)
-- Git
-
-Você **não** precisa instalar PostgreSQL nem Redis na sua máquina: os dois rodam em containers.
-
-### Passo a passo
+### Com Docker (um comando)
+Pré-requisitos: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (ou Docker Engine + Compose v2) e Git. Não precisa de .NET, PostgreSQL nem Redis na máquina.
 
 ```bash
-# 1. Clonar o repositório
 git clone https://github.com/ZoroarkDEV/Plataform_Education.git
 cd Plataform_Education
-
-# 2. Criar seu arquivo de variáveis de ambiente (nunca commitado)
-cp .env.example .env
-
-# 3. Subir PostgreSQL + Redis
-docker-compose up -d
-
-# 4. Aplicar as migrations no banco
-dotnet ef database update --project src/DevPath.Infrastructure --startup-project src/DevPath.Web
-
-# 5. Rodar a aplicação
-dotnet run --project src/DevPath.Web
-
-# 6. Rodar os testes
-dotnet test
+cp .env.example .env          # variáveis locais (nunca commitado)
+docker compose up --build     # app + PostgreSQL + Redis
 ```
 
-> ⚠️ A solution .NET, o `docker-compose.yml` e o `.env.example` estão sendo criados na Fase 0. Até lá, os passos 2 a 6 ainda não funcionam; esta seção será atualizada junto com eles.
+Abra **http://localhost:8080** (porta `WEB_PORT` do `.env`). O serviço `web` só sobe depois que PostgreSQL e Redis estão saudáveis e, em `Development`, **aplica as migrations e faz o seed de `/content` no startup**. O estado do container fica em `docker compose ps` e em `GET /health` (`Healthy` = app no ar e banco alcançável).
+
+- O conteúdo (`content/`) vai **dentro da imagem**. Mudou uma aula? Rode `docker compose up --build` de novo (o seed é upsert e não duplica).
+- Parar: `docker compose down`. Apagar também o banco: `docker compose down -v`.
+- Fora do `Development` (`ASPNETCORE_ENVIRONMENT` no `.env`) nada é aplicado no startup; as migrations rodam à parte, como em produção.
+- Para desligar no Development: `Database__MigrateOnStartup=false` e `Content__SeedOnStartup=false`.
+
+### Sem Docker para a app (desenvolvimento com `dotnet run`)
+Pré-requisitos: Docker (para o banco), [.NET SDK 9+](https://dotnet.microsoft.com/download) e Git.
+
+```bash
+# 1. Variáveis de ambiente (nunca commitado)
+cp .env.example .env
+
+# 2. Subir só PostgreSQL + Redis
+docker compose up -d postgres redis
+
+# 3. Exportar a connection string (Host=localhost) e rodar a aplicação.
+#    Em Development ela aplica as migrations e faz o seed sozinha.
+set -a && . ./.env && set +a
+dotnet run --project src/DevPath.Web
+
+# (opcional) aplicar as migrations manualmente
+dotnet tool restore
+dotnet ef database update --project src/DevPath.Infrastructure --startup-project src/DevPath.Web
+
+# 4. Rodar os testes (os de integração usam Docker via Testcontainers)
+dotnet test
+```
 
 ---
 

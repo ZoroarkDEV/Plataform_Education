@@ -1,0 +1,31 @@
+# Tudo que não precisa ir para o contexto do `docker build` (issue #21).
+# Segredos: nunca entram na imagem.
+.env
+.env.*
+!.env.example
+
+# Git e ferramentas
+.git
+.gitignore
+.github
+.vs
+.vscode
+.idea
+.config
+
+# Saídas de build e testes
+**/bin
+**/obj
+**/.tools
+**/TestResults
+**/*.trx
+**/coverage*
+
+# Não usados na imagem
+tests
+docs
+# Só os .md da raiz (README, SPEC...). As aulas em content/ continuam no contexto.
+*.md
+docker-compose*.yml
+Dockerfile
+.dockerignore
