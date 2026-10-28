@@ -207,6 +207,11 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.Property<int>("Order")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -215,6 +220,9 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ModuleId", "Order")
+                        .IsUnique();
+
+                    b.HasIndex("ModuleId", "Slug")
                         .IsUnique();
 
                     b.ToTable("Lessons", null, t =>
@@ -248,6 +256,11 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.Property<int>("Order")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -256,6 +269,9 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CareerPathId", "Order")
+                        .IsUnique();
+
+                    b.HasIndex("CareerPathId", "Slug")
                         .IsUnique();
 
                     b.ToTable("Modules", null, t =>

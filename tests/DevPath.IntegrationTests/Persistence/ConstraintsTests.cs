@@ -61,6 +61,54 @@ public sealed class ConstraintsTests : IAsyncLifetime
             .Which.SqlState.Should().Be(UniqueViolation);
     }
 
+    [Fact]
+    public async Task ModulosComMesmoSlugNaMesmaTrilha_SaoRejeitados()
+    {
+        await using var db = CreateDbContext();
+        var path = CareerPath.Create($"Trilha {Guid.NewGuid():N}");
+        db.CareerPaths.Add(path);
+        db.Modules.Add(Module.Create(path.Id, "Fundamentos", order: 1));
+        db.Modules.Add(Module.Create(path.Id, "Fundamentos!", order: 2)); // slug "fundamentos" de novo
+
+        var act = () => db.SaveChangesAsync();
+
+        (await act.Should().ThrowAsync<DbUpdateException>())
+            .WithInnerException<PostgresException>()
+            .Which.ConstraintName.Should().Be("IX_Modules_CareerPathId_Slug");
+    }
+
+    [Fact]
+    public async Task AulasComMesmoSlugNoMesmoModulo_SaoRejeitadas()
+    {
+        await using var db = CreateDbContext();
+        var path = CareerPath.Create($"Trilha {Guid.NewGuid():N}");
+        var module = path.AddModule("Fundamentos");
+        db.CareerPaths.Add(path);
+        db.Lessons.Add(Lesson.Create(module.Id, "Variáveis", ContentType.Markdown, "# A", order: 1));
+        db.Lessons.Add(Lesson.Create(module.Id, "Variaveis", ContentType.Markdown, "# B", order: 2));
+
+        var act = () => db.SaveChangesAsync();
+
+        (await act.Should().ThrowAsync<DbUpdateException>())
+            .WithInnerException<PostgresException>()
+            .Which.ConstraintName.Should().Be("IX_Lessons_ModuleId_Slug");
+    }
+
+    [Fact]
+    public async Task MesmoSlugEmTrilhasDiferentes_EhPermitido()
+    {
+        await using var db = CreateDbContext();
+        var pathA = CareerPath.Create($"Trilha A {Guid.NewGuid():N}");
+        var pathB = CareerPath.Create($"Trilha B {Guid.NewGuid():N}");
+        pathA.AddModule("Fundamentos");
+        pathB.AddModule("Fundamentos");
+        db.CareerPaths.AddRange(pathA, pathB);
+
+        var act = () => db.SaveChangesAsync();
+
+        await act.Should().NotThrowAsync("o slug é único por trilha, não global");
+    }
+
     [Theory]
     [InlineData(150)]
     [InlineData(-1)]
