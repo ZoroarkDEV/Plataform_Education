@@ -1,4 +1,6 @@
 using DevPath.Application.Auth;
+using DevPath.Application.CodeExecution;
+using DevPath.Infrastructure.CodeExecution;
 using DevPath.Infrastructure.Identity;
 using DevPath.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -35,6 +37,13 @@ public static class DependencyInjection
         services.AddDbContext<DevPathDbContext>(options => options.UseNpgsql(connectionString));
 
         services.AddIdentityServices();
+
+        // Execução de código do aluno (ADR-004). Singleton: o limite de execuções simultâneas (semáforo)
+        // precisa ser o mesmo objeto para a aplicação inteira. Nada roda até alguém chamar o serviço.
+        services.Configure<SandboxOptions>(configuration.GetSection(SandboxOptions.SectionName));
+        services.AddSingleton<ICodeSandbox, DockerCliSandbox>();
+        services.AddSingleton<ICodeRunner, PostgresSqlCodeRunner>();
+        services.AddScoped<IExerciseSubmissionService, ExerciseSubmissionService>();
 
         return services;
     }
