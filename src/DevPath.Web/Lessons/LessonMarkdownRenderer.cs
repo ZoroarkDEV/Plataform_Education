@@ -12,7 +12,7 @@ namespace DevPath.Web.Lessons;
 /// HTML de uma aula, já separado nas partes que a tela posiciona (US-12.1):
 /// o corpo principal e, se o Markdown tiver, as seções "O que você vai aprender" e "Resumo"
 /// (títulos de nível 2). O exercício não vem do Markdown: vem de dados estruturados
-/// (<c>NN-aula.exercise.json</c>), ver <see cref="StudentExercise"/>.
+/// (<c>NN-aula.exercise.json</c>), ver <c>ExerciseDto</c> em <c>LessonDto.Exercise</c>.
 /// </summary>
 public sealed record RenderedLesson(string ContentHtml, string? ObjectivesHtml, string? SummaryHtml);
 
@@ -22,6 +22,7 @@ public sealed record RenderedLesson(string ContentHtml, string? ObjectivesHtml, 
 /// - Links e imagens só com http(s), mailto ou caminho relativo; "javascript:" e afins viram "#".
 /// - Blocos de código ganham destaque (SQL/C#, no servidor) e um botão "Copiar".
 /// - O primeiro título de nível 1 é removido: a página já mostra o título da aula.
+/// - Outro "# Título" no corpo não vira um segundo &lt;h1&gt;: os títulos do corpo descem um nível.
 /// </summary>
 public sealed class LessonMarkdownRenderer
 {
@@ -43,6 +44,9 @@ public sealed class LessonMarkdownRenderer
 
         var objectives = ExtractSection(document, "o que voce vai aprender");
         var summary = ExtractSection(document, "resumo");
+
+        // Depois de separar as seções: um "# Título" que sobrou no corpo viraria um segundo <h1>.
+        DemoteHeadings(document, minLevel: 2);
 
         return new RenderedLesson(
             ToHtml(document),
@@ -95,6 +99,23 @@ public sealed class LessonMarkdownRenderer
         }
 
         return section;
+    }
+
+    /// <summary>
+    /// Rebaixa os títulos do documento para que nenhum fique acima de <paramref name="minLevel"/>
+    /// (a página já tem o &lt;h1&gt; com o título da aula). Mantém a hierarquia relativa: se sobrar
+    /// um "# X" no corpo, todos descem um nível (h1→h2, h2→h3...), com teto em h6. Sem "# X",
+    /// nada muda e os "## " das aulas continuam &lt;h2&gt;.
+    /// </summary>
+    private static void DemoteHeadings(MarkdownDocument document, int minLevel)
+    {
+        var headings = document.Descendants<HeadingBlock>().ToList();
+        if (headings.Count == 0) return;
+
+        var shift = minLevel - headings.Min(h => h.Level);
+        if (shift <= 0) return;
+
+        foreach (var heading in headings) heading.Level = Math.Min(heading.Level + shift, 6);
     }
 
     private string ToHtml(MarkdownDocument document)

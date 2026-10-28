@@ -167,4 +167,32 @@ public sealed class LessonMarkdownRendererTests
         html.Should().Contain("<span class=\"tok-keyword\">SELECT</span>");
         html.Should().Contain("&lt;x&gt;").And.NotContain("<x>");
     }
+
+    [Fact]
+    public void Render_TituloNivel1NoMeioDoCorpo_NaoGeraSegundoH1()
+    {
+        const string md = "# Seu primeiro SELECT\n\n## O que você vai aprender\n\n- Ler uma tabela\n\n" +
+                          "Introdução.\n\n# Parte extra\n\n## Detalhe\n\n#### Nota\n\n###### Fundo\n\n" +
+                          "## Resumo\n\n- SELECT lê dados";
+
+        var result = _renderer.Render(md);
+
+        result.ContentHtml.Should().NotContain("<h1");
+        result.ContentHtml.Should().Contain("<h2>Parte extra</h2>")
+            .And.Contain("<h3>Detalhe</h3>")
+            .And.Contain("<h5>Nota</h5>")
+            .And.Contain("<h6>Fundo</h6>")
+            .And.NotContain("<h7");
+        result.ObjectivesHtml.Should().Contain("Ler uma tabela");
+        result.SummaryHtml.Should().Contain("SELECT lê dados");
+        result.ContentHtml.Should().NotContain("Resumo").And.NotContain("O que você vai aprender");
+    }
+
+    [Fact]
+    public void Render_SemTituloNivel1NoCorpo_MantemOsH2()
+    {
+        var html = _renderer.Render("# Aula\n\n## Tabelas\n\n### Colunas").ContentHtml;
+
+        html.Should().Contain("<h2").And.Contain("<h3").And.NotContain("<h1").And.NotContain("<h4");
+    }
 }
