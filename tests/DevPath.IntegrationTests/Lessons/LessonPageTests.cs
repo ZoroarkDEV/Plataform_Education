@@ -164,6 +164,39 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task ComExercicio_TitulosDoEnunciadoComecamEmH3SemSegundoH1()
+    {
+        await using var app = App(new ExerciseDto(
+            "Catálogo de títulos",
+            "# Objetivo\n\nListe os títulos.\n\n## Regras\n\nSó a coluna titulo.",
+            "sql",
+            "livraria",
+            "SELECT \nFROM livros\n",
+            []));
+        var client = await LoggedInClientAsync(app);
+
+        var html = await (await client.GetAsync(Url("seu-primeiro-select"))).ReadHtmlAsync();
+
+        CountTag(html, "<h1").Should().Be(1, "o único <h1> é o título da aula");
+        var exercise = html[html.IndexOf("data-exercise", StringComparison.Ordinal)..];
+        exercise = exercise[..exercise.IndexOf("</section>", StringComparison.Ordinal)];
+        CountTag(exercise, "<h2").Should().Be(1, "só o título da seção do exercício é <h2>");
+        exercise.Should().Contain("<h3>Objetivo</h3>").And.Contain("<h4>Regras</h4>");
+    }
+
+    private static int CountTag(string html, string tag)
+    {
+        var count = 0;
+        for (var i = html.IndexOf(tag, StringComparison.Ordinal); i >= 0; i = html.IndexOf(tag, i + tag.Length, StringComparison.Ordinal))
+        {
+            var next = i + tag.Length < html.Length ? html[i + tag.Length] : ' ';
+            if (next is ' ' or '>') count++;
+        }
+
+        return count;
+    }
+
+    [Fact]
     public async Task AulaComDefeito_Devolve500ComMensagemAmigavelSemDetalheTecnico()
     {
         await using var app = App();

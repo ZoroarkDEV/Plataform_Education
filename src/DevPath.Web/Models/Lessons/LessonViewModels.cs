@@ -33,7 +33,7 @@ public sealed record LessonExerciseViewModel(
 {
     public static LessonExerciseViewModel From(ExerciseDto exercise, LessonMarkdownRenderer renderer) => new(
         exercise.Title,
-        renderer.RenderFragment(exercise.StatementMarkdown),
+        renderer.RenderFragment(exercise.StatementMarkdown, LessonMarkdownRenderer.StatementMinHeadingLevel),
         CodeHighlighter.LabelFor(exercise.Language) ?? "Código",
         string.IsNullOrWhiteSpace(exercise.Dataset) ? null : exercise.Dataset,
         exercise.Points,

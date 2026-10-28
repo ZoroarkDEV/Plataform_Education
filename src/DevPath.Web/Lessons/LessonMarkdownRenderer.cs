@@ -23,6 +23,7 @@ public sealed record RenderedLesson(string ContentHtml, string? ObjectivesHtml, 
 /// - Blocos de código ganham destaque (SQL/C#, no servidor) e um botão "Copiar".
 /// - O primeiro título de nível 1 é removido: a página já mostra o título da aula.
 /// - Outro "# Título" no corpo não vira um segundo &lt;h1&gt;: os títulos do corpo descem um nível.
+/// - No enunciado do exercício (<see cref="RenderFragment"/>) os títulos começam em &lt;h3&gt;.
 /// </summary>
 public sealed class LessonMarkdownRenderer
 {
@@ -54,11 +55,26 @@ public sealed class LessonMarkdownRenderer
             summary is null ? null : ToHtml(summary));
     }
 
-    /// <summary>Markdown curto (ex.: enunciado do exercício), com as mesmas regras de segurança.</summary>
-    public string RenderFragment(string markdown)
+    /// <summary>
+    /// Nível mínimo dos títulos no enunciado do exercício: a seção do exercício já tem um &lt;h2&gt;
+    /// ("Exercício: ..."), então os títulos do enunciado começam em &lt;h3&gt;.
+    /// </summary>
+    public const int StatementMinHeadingLevel = 3;
+
+    /// <summary>
+    /// Markdown curto (ex.: enunciado do exercício), com as mesmas regras de segurança.
+    /// Os títulos descem (mantendo a hierarquia relativa) para que nenhum fique acima de
+    /// <paramref name="minHeadingLevel"/>: um "# X" no enunciado não vira um segundo &lt;h1&gt;.
+    /// </summary>
+    public string RenderFragment(string markdown, int minHeadingLevel = StatementMinHeadingLevel)
     {
         ArgumentNullException.ThrowIfNull(markdown);
-        return ToHtml(Markdown.Parse(markdown, _pipeline));
+        ArgumentOutOfRangeException.ThrowIfLessThan(minHeadingLevel, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(minHeadingLevel, 6);
+
+        var document = Markdown.Parse(markdown, _pipeline);
+        DemoteHeadings(document, minHeadingLevel);
+        return ToHtml(document);
     }
 
     /// <summary>Um bloco de código (com destaque e botão "Copiar"), sem passar pelo Markdown.</summary>
