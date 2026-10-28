@@ -1,7 +1,12 @@
+using DevPath.Infrastructure;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+
+// Banco de dados e demais serviços de infraestrutura (connection string via ConnectionStrings__DevPath).
+builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 

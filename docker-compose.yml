@@ -6,15 +6,15 @@ services:
     container_name: devpath-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env (veja .env.example)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env (veja .env.example)}
+      POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB no .env (veja .env.example)}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:?defina POSTGRES_USER no .env (veja .env.example)} -d $${POSTGRES_DB:?defina POSTGRES_DB no .env (veja .env.example)}"]
       interval: 5s
       timeout: 5s
       retries: 10
