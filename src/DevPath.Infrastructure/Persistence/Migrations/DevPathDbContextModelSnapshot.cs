@@ -282,6 +282,35 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("DevPath.Domain.Datasets.Dataset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Sql")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("Datasets", (string)null);
+                });
+
             modelBuilder.Entity("DevPath.Domain.Progress.CodeSubmission", b =>
                 {
                     b.Property<Guid>("Id")

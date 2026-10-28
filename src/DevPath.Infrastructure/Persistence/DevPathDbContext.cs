@@ -1,5 +1,6 @@
 using DevPath.Domain.Achievements;
 using DevPath.Domain.CareerPaths;
+using DevPath.Domain.Datasets;
 using DevPath.Domain.Progress;
 using DevPath.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
@@ -31,6 +32,7 @@ public sealed class DevPathDbContext(DbContextOptions<DevPathDbContext> options)
     public DbSet<Achievement> Achievements => Set<Achievement>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<CodeSubmission> CodeSubmissions => Set<CodeSubmission>();
+    public DbSet<Dataset> Datasets => Set<Dataset>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -107,6 +107,8 @@ public sealed class DockerCliSandbox : ICodeSandbox, IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
+            // UTF-8 sem BOM nos dois sentidos: o runner de SQL manda o tamanho do código em BYTES UTF-8 na frente.
+            StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
@@ -154,14 +156,19 @@ public sealed class DockerCliSandbox : ICodeSandbox, IDisposable
                 // O tempo acabou no meio da escrita; o WaitForExitAsync abaixo cai direto no "docker kill".
             }
 
+            var killed = false;
             try
             {
                 await process.WaitForExitAsync(kill.Token);
             }
             catch (OperationCanceledException)
             {
-                // Mata o CONTAINER pelo nome (matar só o processo "docker" deixaria o container rodando).
-                await RunDockerQuietlyAsync("kill", containerName);
+                if (!process.HasExited)
+                {
+                    killed = true;
+                    // Mata o CONTAINER pelo nome (matar só o processo "docker" deixaria o container rodando).
+                    await RunDockerQuietlyAsync("kill", containerName);
+                }
                 await WaitForExitOrKillClientAsync(process);
             }
 
@@ -170,7 +177,9 @@ public sealed class DockerCliSandbox : ICodeSandbox, IDisposable
             var (stderr, stderrTruncated) = await stderrTask;
             cancellationToken.ThrowIfCancellationRequested();
 
-            var timedOut = timeout.IsCancellationRequested;
+            // Só é timeout se o relógio estourou E fomos nós que matamos: um processo que terminou sozinho
+            // no mesmo instante em que o tempo acabou não é "tempo esgotado" (falso positivo apontado pelo QA).
+            var timedOut = killed && timeout.IsCancellationRequested;
             var truncated = stdoutTruncated || stderrTruncated;
             var exitCode = process.ExitCode;
 

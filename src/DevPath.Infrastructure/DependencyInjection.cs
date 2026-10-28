@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.Configure<SandboxOptions>(configuration.GetSection(SandboxOptions.SectionName));
         services.AddSingleton<ICodeSandbox, DockerCliSandbox>();
         services.AddSingleton<ICodeRunner, PostgresSqlCodeRunner>();
+        services.AddScoped<IDatasetRepository, DatasetRepository>();
         services.AddScoped<IExerciseSubmissionService, ExerciseSubmissionService>();
 
         return services;

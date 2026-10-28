@@ -18,6 +18,18 @@ public sealed class DockerFactAttribute : FactAttribute
     }
 }
 
+/// <summary>O mesmo que <see cref="DockerFactAttribute"/>, para testes com [InlineData].</summary>
+public sealed class DockerTheoryAttribute : TheoryAttribute
+{
+    public DockerTheoryAttribute()
+    {
+        if (DockerAvailability.SkipReason is { } reason)
+        {
+            Skip = reason;
+        }
+    }
+}
+
 internal static class DockerAvailability
 {
     private static readonly Lazy<string?> Reason = new(Check);
