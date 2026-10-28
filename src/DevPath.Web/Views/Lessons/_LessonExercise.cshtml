@@ -1,0 +1,50 @@
+@model LessonExerciseViewModel
+@*
+    Exercício da aula, só leitura (o editor interativo é a #14).
+    Mostra apenas a visão segura: título, enunciado, linguagem, dataset, pontos, código inicial e dicas.
+    Nunca: solução, linhas esperadas dos testes, erros comuns.
+    Dicas: cada uma num <details> (funciona sem JS). Com JS (site.js), a próxima dica só aparece
+    depois que a anterior é aberta, e o aviso vai para o aria-live.
+*@
+@{
+    const string prose = "prose prose-slate max-w-none text-base dark:prose-invert prose-a:text-brand-700 dark:prose-a:text-brand-100 prose-code:rounded prose-code:bg-slate-200 prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none dark:prose-code:bg-slate-800";
+}
+<section aria-labelledby="sec-exercicio" class="mt-10 rounded-lg border border-slate-300 p-5 dark:border-slate-700" data-exercise>
+    <h2 id="sec-exercicio" class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Exercício: @Model.Title</h2>
+    <dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-700 dark:text-slate-300">
+        <div class="flex gap-1"><dt>Linguagem:</dt><dd class="font-semibold">@Model.LanguageLabel</dd></div>
+        @if (Model.Dataset is not null)
+        {
+            <div class="flex gap-1"><dt>Dados usados:</dt><dd class="font-semibold">@Model.Dataset</dd></div>
+        }
+        <div class="flex gap-1"><dt>Vale:</dt><dd class="font-semibold">@Model.PointsLabel</dd></div>
+    </dl>
+
+    <div class="@prose mt-4">@Html.Raw(Model.StatementHtml)</div>
+
+    @if (Model.StarterCodeHtml is not null)
+    {
+        <h3 class="mt-6 text-base font-semibold text-slate-900 dark:text-white">Código para começar</h3>
+        <p class="text-sm text-slate-700 dark:text-slate-300">Copie e complete no seu editor. O editor dentro da aula vem em breve.</p>
+        @Html.Raw(Model.StarterCodeHtml)
+    }
+
+    @if (Model.Hints.Count > 0)
+    {
+        <h3 class="mt-6 text-base font-semibold text-slate-900 dark:text-white">Dicas</h3>
+        <p class="text-sm text-slate-700 dark:text-slate-300">Tente sozinho primeiro. Abra uma dica de cada vez: a primeira é a mais geral.</p>
+        <ol class="mt-3 space-y-2" data-hints>
+            @for (var i = 0; i < Model.Hints.Count; i++)
+            {
+                <li data-hint>
+                    <details class="rounded-md border border-slate-300 bg-white px-4 py-2 dark:border-slate-600 dark:bg-slate-900">
+                        <summary class="cursor-pointer font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:text-slate-100">
+                            Ver dica @(i + 1) de @Model.Hints.Count
+                        </summary>
+                        <p class="mt-2 text-base text-slate-800 dark:text-slate-200">@Model.Hints[i]</p>
+                    </details>
+                </li>
+            }
+        </ol>
+    }
+</section>

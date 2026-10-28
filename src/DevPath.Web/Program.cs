@@ -2,6 +2,7 @@ using System.Net;
 using DevPath.Application.Content;
 using DevPath.Infrastructure;
 using DevPath.Infrastructure.Content;
+using DevPath.Web.Lessons;
 using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,12 @@ builder.Services.AddControllersWithViews();
 
 // Banco de dados e demais serviços de infraestrutura (connection string via ConnectionStrings__DevPath).
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// Tela de aula (#12): Markdown -> HTML seguro (Markdig com DisableHtml + destaque SQL/C#).
+// O ILessonContentService real (banco) vem de AddInfrastructure.
+builder.Services.AddSingleton<LessonMarkdownRenderer>();
+// Exercício da aula: o DTO do Backend ainda não traz exercício; até trazer, nenhum é mostrado.
+builder.Services.AddSingleton<ILessonExerciseSource, NoLessonExerciseSource>();
 
 // Cookie de autenticação do Identity. Fica na Web porque depende das rotas do AccountController.
 builder.Services.ConfigureApplicationCookie(options =>

@@ -1,0 +1,88 @@
+@model LessonPageViewModel
+@*
+    Tela de leitura da aula (#12). Ordem das seções (US-12.1): título, tempo, nível,
+    "O que você vai aprender", conteúdo, exercício (dados estruturados, não Markdown), resumo.
+    Todo o texto da aula vem do ILessonContentService; o HTML vem do LessonMarkdownRenderer
+    (Markdown sem HTML cru, links filtrados), por isso o Html.Raw abaixo é seguro.
+*@
+@{
+    ViewData["SupportsDarkMode"] = true;
+    var lesson = Model.Lesson;
+    var crumbs = lesson.Breadcrumb;
+    var hasObjectives = lesson.LearningObjectives.Count > 0;
+    const string h2 = "text-xl font-bold tracking-tight text-slate-900 dark:text-white";
+    const string prose = "prose prose-slate max-w-none text-base dark:prose-invert prose-a:text-brand-700 dark:prose-a:text-brand-100 prose-code:rounded prose-code:bg-slate-200 prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none dark:prose-code:bg-slate-800";
+}
+
+<article class="mx-auto max-w-[70ch]" aria-labelledby="titulo-aula">
+    <nav aria-label="Você está aqui" class="text-sm">
+        <ol class="flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-700 dark:text-slate-300">
+            <li><a asp-controller="Dashboard" asp-action="Index" class="link dark:text-brand-100">Dashboard</a></li>
+            <li><span aria-hidden="true" class="mr-2">›</span>@crumbs.PathTitle</li>
+            <li><span aria-hidden="true" class="mr-2">›</span>@crumbs.ModuleTitle</li>
+            <li><span aria-hidden="true" class="mr-2">›</span><span aria-current="page" class="font-semibold text-slate-900 dark:text-white">@Model.PositionLabel</span></li>
+        </ol>
+    </nav>
+
+    <div class="mt-4">
+        <partial name="_LessonPager" model="Model" view-data='new ViewDataDictionary(ViewData) { ["PagerLabel"] = "Navegação entre aulas (topo)" }' />
+    </div>
+
+    <header class="mt-8">
+        <h1 id="titulo-aula" class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-4xl">@lesson.Title</h1>
+        <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-700 dark:text-slate-300">
+            <dl class="flex flex-wrap gap-x-6 gap-y-2">
+                <div class="flex gap-1"><dt>Tempo estimado:</dt><dd class="font-semibold">@Model.EstimatedTimeLabel</dd></div>
+                <div class="flex gap-1"><dt>Nível:</dt><dd class="font-semibold">@Model.LevelLabel</dd></div>
+            </dl>
+            <button type="button" data-theme-toggle hidden aria-pressed="false"
+                    class="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800 sm:ml-auto">
+                Tema escuro: <span data-theme-state>desligado</span>
+            </button>
+        </div>
+    </header>
+
+    @if (hasObjectives || Model.Html.ObjectivesHtml is not null)
+    {
+        <section aria-labelledby="sec-objetivos" class="mt-8 rounded-lg border border-brand-100 bg-brand-50 p-5 dark:border-slate-700 dark:bg-slate-900">
+            <h2 id="sec-objetivos" class="@h2">O que você vai aprender</h2>
+            @if (hasObjectives)
+            {
+                <ul class="mt-3 list-disc space-y-1 pl-5 text-base text-slate-800 dark:text-slate-200">
+                    @foreach (var objective in lesson.LearningObjectives)
+                    {
+                        <li>@objective</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <div class="@prose mt-3">@Html.Raw(Model.Html.ObjectivesHtml)</div>
+            }
+        </section>
+    }
+
+    <div class="@prose mt-8" data-lesson-content>
+        @Html.Raw(Model.Html.ContentHtml)
+    </div>
+
+    @if (Model.Exercise is not null)
+    {
+        <partial name="_LessonExercise" model="Model.Exercise" />
+    }
+
+    @if (Model.Html.SummaryHtml is not null)
+    {
+        <section aria-labelledby="sec-resumo" class="mt-10 border-t border-slate-200 pt-6 dark:border-slate-800">
+            <h2 id="sec-resumo" class="@h2">Resumo</h2>
+            <div class="@prose mt-3">@Html.Raw(Model.Html.SummaryHtml)</div>
+        </section>
+    }
+
+    <div class="mt-12">
+        <partial name="_LessonPager" model="Model" view-data='new ViewDataDictionary(ViewData) { ["PagerLabel"] = "Navegação entre aulas (fim da página)" }' />
+    </div>
+
+    @* Avisos para leitores de tela: botão "Copiar" e dicas do exercício (site.js escreve aqui). *@
+    <p id="copy-status" class="sr-only" role="status" aria-live="polite"></p>
+</article>

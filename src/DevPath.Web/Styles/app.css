@@ -8,6 +8,11 @@
 /* Onde o Tailwind procura classes usadas (caminhos relativos a este arquivo). */
 @source "../Views";
 @source "../wwwroot/js";
+/* Estilos de texto longo (aulas). O plugin já vem no Tailwind standalone. */
+@plugin "@tailwindcss/typography";
+
+/* Tema escuro por classe (.dark no <html>), definida pelo script do _Layout e pelo botão da aula. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
@@ -56,4 +61,35 @@
   }
   .validation-summary-errors ul { @apply list-disc space-y-1 pl-5; }
   .validation-summary-valid { @apply hidden; }
+}
+
+/*
+  Blocos de código das aulas (gerados no servidor por LessonMarkdownRenderer + CodeHighlighter).
+  Fundo escuro nos dois temas; cores dos tokens com contraste AA (>= 4.5:1) sobre #0f172a.
+  Contrastes medidos: ver docs/frontend.md.
+*/
+@layer components {
+  .code-block { @apply my-6 overflow-hidden rounded-lg border border-slate-700 bg-slate-900; }
+  .code-block-bar {
+    @apply flex items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-3 py-1.5;
+  }
+  .code-block-lang { @apply font-mono text-xs font-semibold uppercase tracking-wide text-slate-300; }
+  .code-block-copy {
+    @apply rounded-md border border-slate-500 px-2.5 py-1 text-sm font-medium text-slate-100
+      hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300;
+  }
+  .code-block pre {
+    @apply m-0 overflow-x-auto p-4 font-mono text-base leading-relaxed text-slate-200
+      focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-sky-300;
+    tab-size: 4;
+  }
+  .code-block code { @apply font-mono; white-space: pre; }
+
+  .tok-keyword { color: #93c5fd; font-weight: 600; } /* blue-300 */
+  .tok-function { color: #67e8f9; }                  /* cyan-300 */
+  .tok-string { color: #86efac; }                    /* green-300 */
+  .tok-number { color: #fcd34d; }                    /* amber-300 */
+  .tok-comment { color: #94a3b8; font-style: italic; } /* slate-400 */
+  .tok-type { color: #c4b5fd; }                      /* violet-300 */
+  .tok-operator { color: #f9a8d4; }                  /* pink-300 */
 }
