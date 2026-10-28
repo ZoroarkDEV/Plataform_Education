@@ -129,18 +129,45 @@ comment 7.0, function 12.3, type 9.7, operator 9.8; rodapé 4.8:1 / 6.8:1.
 
 Depois do cadastro o usuário vai para `/escolha-sua-trilha` (antes ia para `/Dashboard`).
 
-**Porta provisória da Web:** `Onboarding/IStudentJourneyGateway` devolve view models prontos.
-A implementação registrada hoje é `PendingStudentJourneyGateway`, um *null object*: lista vazia,
-"sem trilha", matrícula `Unavailable`. Assim as telas mostram estados vazios e nunca dão 500
-enquanto o serviço do backend não existe. Ela não tem dados de exemplo. Os dados fictícios
-ficam só nos testes (`tests/DevPath.IntegrationTests/Onboarding/FakeStudentJourneyGateway.cs`).
-Quando o serviço do backend (Application) existir, troque o registro `TryAddScoped` em `Program.cs`
-por um adaptador que converte os DTOs do serviço nesses view models.
+**Porta da Web e adapter:** os controllers dependem de `Onboarding/IStudentJourneyGateway`, que
+devolve view models prontos. A implementação registrada em `Program.cs` é `Onboarding/StudentJourneyGateway`,
+um adapter fino para o `IStudentJourneyService` do backend (`DevPath.Application.Journey`, registrado em
+`AddInfrastructure`). Ele só mapeia, campo a campo:
 
-Contrato que a Web precisa do backend:
-- trilhas ativas com o número de aulas publicadas;
+| DTO do backend | View model da Web |
+|---|---|
+| `PathSummaryDto` | `PathOptionViewModel` |
+| `LessonRefDto` | `LessonRef` |
+| `DashboardLessonDto` (com `UnlockRequirement`) | `LessonItemViewModel` |
+| `DashboardModuleDto` | `ModuleProgressViewModel` |
+| `DashboardDto` | `DashboardViewModel` |
+| `JourneyLessonStatus` | `LessonStatus` (`switch` explícito, nunca cast) |
+| `EnrollmentResult.Kind` | `EnrollmentOutcome.Status` (`switch` explícito) |
+
+Casos de borda:
+- `EnrollmentResultKind.NoLessons` (trilha ativa sem nenhuma aula disponível, inclusive só com rascunhos) vira
+  `EnrollmentStatus.NoLessons`: volta para a escolha com "Essa trilha ainda não tem aulas. Escolha outra trilha ou
+  volte em breve.".
+- `AlreadyEnrolled` (2ª matrícula, na mesma trilha ou em outra; não há troca de trilha) vai para o
+  dashboard com o aviso "Você já está na trilha X. Por enquanto é uma trilha por vez: continue de onde parou.",
+  com X = `EnrollmentResult.PathTitle` (a trilha atual). Sem título, o aviso fica genérico ("Você já está em uma trilha.").
+- `EnrollmentResultKind.UserNotFound` (conta apagada com o cookie ainda válido) vira `EnrollmentStatus.UserNotFound`:
+  o controller encerra a sessão e manda para `/Account/Login`, sem 500. O serviço não lança para os casos
+  esperados, então o adapter não captura exceção nenhuma. `GetDashboardAsync` devolve `null` nesse caso (o mesmo
+  de "sem trilha"), então o dashboard manda para a escolha, sem 500.
+- O título vem de `EnrollmentResult.PathTitle`, lido só quando `HasPath` é true (Enrolled e AlreadyEnrolled).
+- Porcentagens e "X de Y aulas" usam `AvailableLessons` (sem rascunho). O `TotalLessons` do backend (com
+  rascunhos) não é usado no dashboard: o "Aula X de Y" é da página de aula (#12).
+
+Os dados fictícios ficam só nos testes (`tests/DevPath.IntegrationTests/Onboarding/FakeStudentJourneyGateway.cs`,
+trocado por DI nos testes de tela). `OnboardingRealServiceTests` roda o fluxo com o serviço real e um Postgres
+do Testcontainers.
+
+Contrato que a Web usa do backend:
+- trilhas ativas com o número de aulas disponíveis (sem rascunho);
 - se o usuário já tem trilha atual;
-- matrícula com resultado `Enrolled | AlreadyEnrolled | PathNotFound | Unavailable`;
+- matrícula com resultado `Enrolled | AlreadyEnrolled | PathNotFound | NoLessons | UserNotFound`, com
+  `PathTitle`/`HasPath` (título da trilha escolhida ou da atual);
 - dashboard com status de cada aula já calculado (`Completed | InProgress | Available | Locked | ComingSoon`),
   porcentagens, próxima aula, `IsFirstAccess` e a aula que libera cada aula bloqueada;
 - módulos na ordem da trilha e aulas na ordem do módulo. A tela numera "Módulo 1, 2..." pela posição.
