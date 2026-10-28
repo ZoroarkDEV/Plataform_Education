@@ -55,6 +55,22 @@ public class RepositoryContentTests
     }
 
     [Fact]
+    public void SqlDados_PrimeirosPassosComSqlEhOModulo1()
+    {
+        // #22/#23: o primeiro contato com SQL (no navegador) vem antes do módulo de ambiente/Docker.
+        var sql = LoadPaths().Single(p => p.Slug == "sql-dados");
+
+        sql.Modules.OrderBy(m => m.Order).Select(m => (m.Order, m.Slug)).Should().Equal(
+            (1, "primeiros-passos-com-sql"),
+            (2, "ambiente"),
+            (3, "estruturas"),
+            (4, "crud"),
+            (5, "consultas"),
+            (6, "performance-e-confiabilidade"),
+            (7, "conectando-csharp"));
+    }
+
+    [Fact]
     public void TodoModulo_TemPeloMenosUmaAulaComTexto()
     {
         foreach (var module in LoadPaths().SelectMany(p => p.Modules))
