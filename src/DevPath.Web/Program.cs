@@ -8,6 +8,20 @@ builder.Services.AddControllersWithViews();
 // Banco de dados e demais serviços de infraestrutura (connection string via ConnectionStrings__DevPath).
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Cookie de autenticação do Identity. Fica na Web porque depende das rotas do AccountController.
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.Name = ".DevPath.Auth";
+    options.Cookie.HttpOnly = true;                       // JavaScript não lê o cookie (protege contra XSS)
+    options.Cookie.SameSite = SameSiteMode.Lax;           // não vai em POSTs vindos de outros sites (CSRF)
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // HTTP no dev local; use Always atrás de HTTPS em produção
+    options.LoginPath = "/Account/Login";
+    options.LogoutPath = "/Account/Logout";
+    options.AccessDeniedPath = "/Account/AccessDenied";
+    options.ExpireTimeSpan = TimeSpan.FromDays(7);
+    options.SlidingExpiration = true;                     // renova enquanto o usuário estiver ativo
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -21,6 +35,8 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseRouting();
 
+// Ordem importa: primeiro descobre QUEM é o usuário (cookie), depois verifica O QUE ele pode acessar.
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
@@ -32,3 +48,6 @@ app.MapControllerRoute(
 
 
 app.Run();
+
+// Torna a classe Program visível para o WebApplicationFactory<Program> dos testes de integração.
+public partial class Program;

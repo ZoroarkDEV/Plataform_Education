@@ -1,4 +1,5 @@
 using DevPath.Domain.Achievements;
+using DevPath.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -14,5 +15,8 @@ internal sealed class UserAchievementConfiguration : IEntityTypeConfiguration<Us
         builder.HasKey(ua => new { ua.UserId, ua.AchievementId });
 
         builder.HasOne<Achievement>().WithMany().HasForeignKey(ua => ua.AchievementId).OnDelete(DeleteBehavior.Cascade);
+
+        // UserId -> AspNetUsers: apagar o usuário apaga as conquistas dele (LGPD: dado do aluno sai junto).
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(ua => ua.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }

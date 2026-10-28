@@ -1,5 +1,6 @@
 using DevPath.Domain.CareerPaths;
 using DevPath.Domain.Progress;
+using DevPath.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,5 +22,8 @@ internal sealed class UserPathEnrollmentConfiguration : IEntityTypeConfiguration
 
         // Se o módulo atual for apagado, a matrícula continua, só sem módulo atual.
         builder.HasOne<Module>().WithMany().HasForeignKey(e => e.CurrentModuleId).OnDelete(DeleteBehavior.SetNull);
+
+        // UserId -> AspNetUsers: apagar o usuário apaga as matrículas dele (LGPD: dado do aluno sai junto).
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }

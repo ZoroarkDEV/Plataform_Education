@@ -1,0 +1,40 @@
+@model DevPath.Web.ViewModels.Account.LoginViewModel
+@{
+    ViewData["Title"] = "Entrar";
+}
+@* Markup mínimo e funcional. O Frontend Operator (#5/#9) vai estilizar com Tailwind:
+   mantenha os asp-for, o asp-validation-*, o campo oculto ReturnUrl e o <form method="post">. *@
+
+<h1>Entrar</h1>
+
+<form asp-controller="Account" asp-action="Login" method="post" novalidate>
+    <div asp-validation-summary="ModelOnly" role="alert"></div>
+    <input asp-for="ReturnUrl" type="hidden" />
+
+    <div>
+        <label asp-for="Email"></label>
+        <input asp-for="Email" autocomplete="email" />
+        <span asp-validation-for="Email"></span>
+    </div>
+
+    <div>
+        <label asp-for="Password"></label>
+        <input asp-for="Password" autocomplete="current-password" />
+        <span asp-validation-for="Password"></span>
+    </div>
+
+    <div>
+        <label>
+            <input asp-for="RememberMe" />
+            @Html.DisplayNameFor(m => m.RememberMe)
+        </label>
+    </div>
+
+    <button type="submit">Entrar</button>
+</form>
+
+<p>Ainda não tem conta? <a asp-controller="Account" asp-action="Register">Criar conta</a></p>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

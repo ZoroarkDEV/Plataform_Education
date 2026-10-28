@@ -25,7 +25,8 @@ public sealed class MigrationsTests : IAsyncLifetime
         await db.Database.MigrateAsync();
 
         (await db.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await db.Database.GetAppliedMigrationsAsync()).Should().ContainSingle(m => m.EndsWith("_InitialCreate"));
+        (await db.Database.GetAppliedMigrationsAsync()).Should().Contain(m => m.EndsWith("_InitialCreate"))
+            .And.Contain(m => m.EndsWith("_AddIdentity"));
 
         var tables = await db.Database
             .SqlQueryRaw<string>("SELECT table_name AS \"Value\" FROM information_schema.tables WHERE table_schema = 'public'")
@@ -35,7 +36,8 @@ public sealed class MigrationsTests : IAsyncLifetime
         [
             "CareerPaths", "Modules", "Lessons", "Exercises",
             "UserProgress", "UserPathEnrollments",
-            "Achievements", "UserAchievements", "CodeSubmissions"
+            "Achievements", "UserAchievements", "CodeSubmissions",
+            "AspNetUsers", "AspNetRoles", "AspNetUserRoles"
         ]);
     }
 

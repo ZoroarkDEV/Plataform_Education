@@ -1,0 +1,18 @@
+@using DevPath.Application.Auth
+@* Links de autenticação para o cabeçalho. Ainda NÃO está no _Layout.cshtml:
+   o Frontend Operator inclui com <partial name="_LoginPartial" /> e estiliza.
+   O logout é um POST com antiforgery (o form tag helper gera o token); um link GET não funciona. *@
+
+@if (User.Identity?.IsAuthenticated == true)
+{
+    <span>Olá, @(User.FindFirst(DevPathClaimTypes.DisplayName)?.Value ?? User.Identity.Name)</span>
+    <a asp-controller="Dashboard" asp-action="Index">Dashboard</a>
+    <form asp-controller="Account" asp-action="Logout" method="post">
+        <button type="submit">Sair</button>
+    </form>
+}
+else
+{
+    <a asp-controller="Account" asp-action="Login">Entrar</a>
+    <a asp-controller="Account" asp-action="Register">Criar conta</a>
+}

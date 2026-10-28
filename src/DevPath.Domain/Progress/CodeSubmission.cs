@@ -1,7 +1,10 @@
 namespace DevPath.Domain.Progress;
 
 /// <summary>Uma tentativa do aluno em um exercício, com o resultado da correção.</summary>
-/// <remarks>UserId sem navegação até a issue #9 (ApplicationUser / Identity).</remarks>
+/// <remarks>
+/// UserId aponta para o ApplicationUser (Identity, na Infrastructure). A FK existe no banco,
+/// mas não há navegação aqui para o Domain não depender do Identity.
+/// </remarks>
 public sealed class CodeSubmission
 {
     public Guid Id { get; private set; }
