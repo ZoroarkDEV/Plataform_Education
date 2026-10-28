@@ -52,12 +52,14 @@ public sealed class StudentJourneyService(DevPathDbContext db) : IStudentJourney
             return EnrollmentResult.PathNotFound();
         }
 
-        // Módulo inicial: o da 1ª aula disponível; se a trilha só tem rascunhos, o da 1ª aula "Em breve".
+        // Módulo inicial: o da 1ª aula disponível (publicada, de módulo publicado e não rascunho), o mesmo
+        // critério do AvailableLessons. Trilha sem aula disponível, inclusive só com rascunhos, fica
+        // "Em breve" e não aceita matrícula (R4).
         var firstModuleId = await (
                 from m in db.Modules.AsNoTracking()
                 join l in db.Lessons.AsNoTracking() on m.Id equals l.ModuleId
-                where m.CareerPathId == path.Id && m.IsPublished && l.IsPublished
-                orderby l.IsDraft, m.Order, l.Order
+                where m.CareerPathId == path.Id && m.IsPublished && l.IsPublished && !l.IsDraft
+                orderby m.Order, l.Order
                 select (Guid?)m.Id)
             .FirstOrDefaultAsync(ct);
         if (firstModuleId is null)

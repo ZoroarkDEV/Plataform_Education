@@ -10,8 +10,8 @@ namespace DevPath.Application.Journey;
 /// </param>
 /// <param name="TotalLessons">
 /// Todas as aulas publicadas de módulos publicados, <b>com</b> os rascunhos. Com <paramref name="AvailableLessons"/> = 0,
-/// separa a trilha só com rascunhos (TotalLessons &gt; 0) da trilha sem aula nenhuma (TotalLessons = 0, matrícula dá
-/// <see cref="EnrollmentResultKind.NoLessons"/>).
+/// separa a trilha só com rascunhos (TotalLessons &gt; 0, "Aulas em breve") da trilha sem aula nenhuma (TotalLessons = 0).
+/// Nos dois casos a trilha não pode ser escolhida: a matrícula dá <see cref="EnrollmentResultKind.NoLessons"/>.
 /// </param>
 public sealed record PathSummaryDto(
     string Slug,
@@ -39,7 +39,11 @@ public enum EnrollmentResultKind
     /// <summary>Slug inexistente ou trilha desativada.</summary>
     PathNotFound,
 
-    /// <summary>A trilha existe e está ativa, mas não tem nenhuma aula publicada (nem rascunho) para montar o roadmap.</summary>
+    /// <summary>
+    /// A trilha existe e está ativa, mas não tem nenhuma aula <b>disponível</b> (publicada, de módulo publicado e não
+    /// rascunho; o mesmo critério de <see cref="PathSummaryDto.AvailableLessons"/>). Inclui a trilha só com rascunhos
+    /// (<see cref="PathSummaryDto.TotalLessons"/> &gt; 0 e AvailableLessons = 0), que fica "Em breve" (R4).
+    /// </summary>
     NoLessons,
 
     /// <summary>Não existe usuário com esse Id (ex.: conta apagada com o cookie ainda válido). Verificado primeiro.</summary>

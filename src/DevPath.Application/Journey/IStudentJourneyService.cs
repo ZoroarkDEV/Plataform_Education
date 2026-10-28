@@ -17,6 +17,10 @@ public interface IStudentJourneyService
     /// Ordem das verificações: <see cref="EnrollmentResultKind.UserNotFound"/> &gt; <see cref="EnrollmentResultKind.AlreadyEnrolled"/>
     /// &gt; <see cref="EnrollmentResultKind.PathNotFound"/> &gt; <see cref="EnrollmentResultKind.NoLessons"/> &gt;
     /// <see cref="EnrollmentResultKind.Enrolled"/>. Não lança para nenhum desses casos.
+    /// <see cref="EnrollmentResultKind.NoLessons"/> = a trilha não tem aula disponível (publicada, de módulo publicado e
+    /// não rascunho), inclusive quando só tem rascunhos.
+    /// A precedência vale para chamadas sequenciais: numa corrida, quem perde pode receber PathNotFound/NoLessons
+    /// em vez de AlreadyEnrolled se checou antes do commit de quem ganhou. O banco não muda nesse caso.
     /// </remarks>
     Task<EnrollmentResult> EnrollAsync(Guid userId, string pathSlug, CancellationToken ct = default);
 
