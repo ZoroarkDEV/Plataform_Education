@@ -7,26 +7,41 @@ using Microsoft.EntityFrameworkCore;
 namespace DevPath.Infrastructure.CodeExecution;
 
 /// <summary>
-/// Corrige o envio do aluno: roda o código contra cada caso de teste do exercício
-/// e grava uma <see cref="CodeSubmission"/> com o resultado.
+/// Corrige o envio do aluno: roda o código contra cada caso de teste do exercício, monta a resposta da tela
+/// (<see cref="ExecutionOutcome"/>) e grava uma <see cref="CodeSubmission"/>.
 /// </summary>
 /// <remarks>
+/// <para>Registrado só no Worker (<c>AddSandboxExecution</c>): é o único processo que fala com o Docker (ADR-006).</para>
+/// <para>
 /// Divisão de responsabilidades (ADR-004): o container recebe SÓ o código do aluno e a preparação
 /// (SQL do dataset + setup do caso). O resultado esperado fica aqui fora, e a comparação
-/// (<see cref="ResultComparer"/>) também. Assim nada secreto passa perto do código do aluno.
+/// (<see cref="ResultComparer"/>) também. A resposta mostra a tabela que o ALUNO produziu e, por caso,
+/// só se passou e o que está diferente: nunca as linhas esperadas nem a solução.
+/// </para>
 /// </remarks>
 public sealed partial class ExerciseSubmissionService(
     DevPathDbContext db,
     IDatasetRepository datasets,
     IEnumerable<ICodeRunner> runners) : IExerciseSubmissionService
 {
-    /// <summary>Tamanho máximo do código enviado. Barra envios gigantes antes de gastar um container.</summary>
-    public const int MaxCodeLength = 20_000;
+    /// <summary>Tamanho máximo do código enviado (o mesmo que a Web confere).</summary>
+    public const int MaxCodeLength = ExecutionLimits.MaxCodeLength;
 
-    /// <summary>Quanto do erro técnico mostramos ao aluno no feedback.</summary>
+    /// <summary>Quanto do erro técnico vai para o "Ver detalhe técnico".</summary>
     private const int MaxTechnicalDetailChars = 1_000;
 
-    public async Task<SubmissionOutcome> SubmitAsync(Guid userId, Guid exerciseId, string code, CancellationToken cancellationToken = default)
+    public const string PassMessage = "Parabéns! Sua consulta passou em todos os casos de teste.";
+    public const string FailMessage = "Sua consulta rodou, mas o resultado ainda não é o esperado. Veja os casos de teste.";
+    public const string OomMessage = "Sua consulta usou memória demais e foi interrompida. Tente filtrar mais os dados.";
+    public const string OutputTooLargeMessage = "Sua consulta devolveu dados demais. Filtre as linhas (WHERE) ou escolha menos colunas.";
+    public const string SetupFailedMessage = "Houve um erro na preparação deste exercício (não é culpa sua). A tentativa não foi contada. Avise a equipe.";
+    public const string UnreadableMessage = "Não foi possível ler o resultado da sua consulta. Tente de novo; se continuar, avise a equipe.";
+    public const string NotRunMessage = "Não foi executado porque um caso anterior deu erro ou demorou demais.";
+
+    private sealed record CaseRun(TestCaseSpec Case, SandboxResult Result, QueryResult? Table, string? Failure,
+        ExecutionStatus? Problem, string? Technical);
+
+    public async Task<ExecutionOutcome> SubmitAsync(Guid userId, Guid exerciseId, string code, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(code);
         if (code.Length > MaxCodeLength)
@@ -44,12 +59,13 @@ public sealed partial class ExerciseSubmissionService(
         var runner = runners.FirstOrDefault(r => string.Equals(r.Language, exercise.Language, StringComparison.OrdinalIgnoreCase))
             ?? throw new NotSupportedException($"Ainda não há como executar exercícios de '{exercise.Language}'.");
 
+        var usedAttempts = 0;
         if (exercise.MaxAttempts is { } maxAttempts)
         {
-            var attempts = await db.CodeSubmissions.CountAsync(s => s.UserId == userId && s.ExerciseId == exerciseId, cancellationToken);
-            if (attempts >= maxAttempts)
+            usedAttempts = await db.CodeSubmissions.CountAsync(s => s.UserId == userId && s.ExerciseId == exerciseId, cancellationToken);
+            if (usedAttempts >= maxAttempts)
             {
-                throw new InvalidOperationException($"Limite de {maxAttempts} tentativas atingido para este exercício.");
+                throw new AttemptsExhaustedException(maxAttempts);
             }
         }
 
@@ -57,48 +73,95 @@ public sealed partial class ExerciseSubmissionService(
 
         // Carrega TODOS os datasets antes de executar qualquer coisa: se faltar um, é erro de conteúdo
         // (DatasetNotFoundException), não gastamos container e não gravamos tentativa contra o aluno.
+        // O caso pode citar o dataset; senão, vale o dataset do exercício (campo "dataset" do conteúdo).
+        string? DatasetOf(TestCaseSpec c) => c.Dataset ?? exercise.Dataset;
         var datasetSql = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var slug in cases.Select(c => c.Dataset).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var slug in cases.Select(DatasetOf).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var dataset = await datasets.FindBySlugAsync(slug, cancellationToken) ?? throw new DatasetNotFoundException(slug);
             datasetSql[slug] = dataset.Sql;
         }
 
-        var passed = 0;
-        var totalMs = 0;
-        string? firstFailure = null;
-
+        var runs = new List<CaseRun>();
         foreach (var testCase in cases)
         {
-            var preparation = BuildPreparation(testCase.Dataset is null ? null : datasetSql[testCase.Dataset], testCase.Setup);
-            var result = await runner.RunAsync(code, preparation, cancellationToken);
-            totalMs += (int)result.Duration.TotalMilliseconds;
-
-            var (failure, stop) = Evaluate(testCase, result);
-            if (failure is null)
+            var slug = DatasetOf(testCase);
+            var preparation = BuildPreparation(slug is null ? null : datasetSql[slug], testCase.Setup);
+            var run = Evaluate(testCase, await runner.RunAsync(code, preparation, cancellationToken));
+            runs.Add(run);
+            if (run.Problem is not null)
             {
-                passed++;
-                continue;
-            }
-
-            firstFailure ??= failure;
-            if (stop)
-            {
-                break; // não vale a pena gastar mais containers com um código que trava
+                break; // erro, timeout ou memória: os outros casos dariam o mesmo problema. Não gasta mais containers.
             }
         }
 
-        var allPassed = passed == cases.Count;
-        var feedback = allPassed
+        var totalMs = runs.Sum(r => (int)r.Result.Duration.TotalMilliseconds);
+        var feedback = cases.Select((c, i) => i < runs.Count
+                ? new TestCaseFeedback(c.Name, runs[i].Failure is null, runs[i].Failure)
+                : new TestCaseFeedback(c.Name, false, NotRunMessage))
+            .ToList();
+        var passed = feedback.Count(f => f.Passed);
+        var problem = runs.FirstOrDefault(r => r.Problem is not null);
+
+        // Preparação quebrada é erro do EXERCÍCIO: não conta como tentativa do aluno.
+        if (problem?.Result.ExitCode == PostgresSqlCodeRunner.SetupFailedExitCode && !problem.Result.TimedOut)
+        {
+            return ExecutionOutcome.Failure(ExecutionStatus.Error, SetupFailedMessage, remainingAttempts:
+                exercise.MaxAttempts is { } max ? max - usedAttempts : null) with { ExecutionTimeMs = totalMs };
+        }
+
+        var (status, friendly, technical) = problem is not null
+            ? (problem.Problem!.Value, problem.Failure!, problem.Technical)
+            : passed == cases.Count ? (ExecutionStatus.Pass, PassMessage, (string?)null) : (ExecutionStatus.Fail, FailMessage, null);
+
+        var summary = status == ExecutionStatus.Pass
             ? (cases.Count == 1 ? "O caso de teste passou." : $"Todos os {cases.Count} casos de teste passaram.")
-            : firstFailure!;
+            : string.Join("\n", feedback.Where(f => !f.Passed).Select(f => $"Caso \"{f.Name}\": {f.Message}"));
 
         var submission = CodeSubmission.Create(userId, exerciseId, code,
-            allPassed ? SubmissionResult.Pass : SubmissionResult.Fail, totalMs, feedback);
+            status == ExecutionStatus.Pass ? SubmissionResult.Pass : SubmissionResult.Fail, totalMs, summary);
+        if (exercise.MaxAttempts is { } attemptLimit)
+        {
+            usedAttempts = await SaveWithinLimitAsync(submission, attemptLimit, cancellationToken);
+        }
+        else
+        {
+            db.CodeSubmissions.Add(submission);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        // A tabela mostrada é a que o aluno produziu no primeiro caso (os dados "principais" do exercício).
+        var table = runs[0].Table;
+        var (rows, truncated) = table is null ? ([], false) : ExecutionLimits.CapRows(table);
+        return new ExecutionOutcome(status, table?.Columns ?? [], rows, truncated, friendly, technical, totalMs,
+            passed, cases.Count, feedback, submission.Id,
+            exercise.MaxAttempts is { } limit ? limit - usedAttempts - 1 : null);
+    }
+
+    /// <summary>
+    /// Grava a tentativa sem passar do limite, mesmo com dois envios do mesmo aluno ao mesmo tempo (duas abas,
+    /// duas instâncias da Web, vários Workers). A contagem do início só evita gastar container à toa; a que vale
+    /// é esta: um lock de transação do PostgreSQL por (aluno, exercício) serializa "contar + inserir".
+    /// O lock dura só esta transação curta (não a execução no sandbox) e some sozinho no commit/rollback.
+    /// </summary>
+    /// <returns>Quantas tentativas já existiam antes desta.</returns>
+    private async Task<int> SaveWithinLimitAsync(CodeSubmission submission, int maxAttempts, CancellationToken cancellationToken)
+    {
+        var lockKey = $"devpath:tentativas:{submission.UserId:N}:{submission.ExerciseId:N}";
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", cancellationToken);
+
+        var used = await db.CodeSubmissions.CountAsync(
+            s => s.UserId == submission.UserId && s.ExerciseId == submission.ExerciseId, cancellationToken);
+        if (used >= maxAttempts)
+        {
+            throw new AttemptsExhaustedException(maxAttempts); // outro envio simultâneo usou a última tentativa
+        }
+
         db.CodeSubmissions.Add(submission);
         await db.SaveChangesAsync(cancellationToken);
-
-        return new SubmissionOutcome(submission.Id, submission.Result, feedback, totalMs, passed, cases.Count);
+        await transaction.CommitAsync(cancellationToken);
+        return used;
     }
 
     /// <summary>Dataset primeiro, depois o setup do caso (que pode, por exemplo, mudar uma linha do dataset).</summary>
@@ -108,25 +171,26 @@ public sealed partial class ExerciseSubmissionService(
         return parts.Count == 0 ? null : string.Join("\n;\n", parts) + "\n";
     }
 
-    /// <summary>Failure nulo = o caso passou. Stop = não adianta rodar os próximos casos.</summary>
-    private static (string? Failure, bool Stop) Evaluate(TestCaseSpec testCase, SandboxResult result)
+    /// <summary>
+    /// Failure nulo = o caso passou. Problem não nulo = o código não rodou até o fim (erro/timeout): para nos próximos casos.
+    /// </summary>
+    private static CaseRun Evaluate(TestCaseSpec testCase, SandboxResult result)
     {
-        var prefix = $"Caso \"{testCase.Name}\": ";
         if (result.TimedOut)
         {
-            return (prefix + SqlErrorTranslator.TimeoutMessage, true);
+            return new(testCase, result, null, SqlErrorTranslator.TimeoutMessage, ExecutionStatus.Timeout, null);
         }
         if (result.OomKilled)
         {
-            return (prefix + "a execução usou memória demais.", true);
+            return new(testCase, result, null, OomMessage, ExecutionStatus.Error, null);
         }
         if (result.OutputTruncated)
         {
-            return (prefix + "a saída ficou grande demais.", false);
+            return new(testCase, result, null, OutputTooLargeMessage, ExecutionStatus.Error, null);
         }
         if (result.ExitCode == PostgresSqlCodeRunner.SetupFailedExitCode)
         {
-            return (prefix + "erro na preparação do exercício (não é culpa sua). Avise a equipe.", true);
+            return new(testCase, result, null, SetupFailedMessage, ExecutionStatus.Error, null);
         }
         if (result.ExitCode != 0)
         {
@@ -136,7 +200,8 @@ public sealed partial class ExerciseSubmissionService(
             {
                 detail = detail[..MaxTechnicalDetailChars] + "…";
             }
-            return ($"{prefix}{error.FriendlyMessage}\n\nDetalhe técnico:\n{detail}", error.IsTimeout);
+            return new(testCase, result, null, error.FriendlyMessage,
+                error.IsTimeout ? ExecutionStatus.Timeout : ExecutionStatus.Error, detail);
         }
 
         QueryResult actual;
@@ -146,11 +211,11 @@ public sealed partial class ExerciseSubmissionService(
         }
         catch (FormatException)
         {
-            return (prefix + "não foi possível ler o resultado da sua consulta. Tente de novo; se continuar, avise a equipe.", false);
+            return new(testCase, result, null, UnreadableMessage, ExecutionStatus.Error, null);
         }
 
         var comparison = ResultComparer.Compare(testCase, actual);
-        return (comparison.Passed ? null : prefix + comparison.Feedback, false);
+        return new(testCase, result, actual, comparison.Passed ? null : comparison.Feedback, null, null);
     }
 
     // "psql:/tmp/consulta.psql:8: " só atrapalha o aluno: ele nunca viu esse arquivo.

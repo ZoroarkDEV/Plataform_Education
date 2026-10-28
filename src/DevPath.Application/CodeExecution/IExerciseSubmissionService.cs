@@ -1,23 +1,16 @@
-using DevPath.Domain.Progress;
-
 namespace DevPath.Application.CodeExecution;
 
 /// <summary>
-/// Corrige a tentativa do aluno: executa no sandbox contra cada caso de teste
-/// e registra o resultado em <c>CodeSubmission</c>.
+/// Corrige a tentativa do aluno: executa no sandbox contra cada caso de teste, monta a resposta da tela
+/// e registra o resultado em <c>CodeSubmission</c>. Roda SÓ no Worker, que é quem fala com o Docker (ADR-006).
 /// </summary>
 public interface IExerciseSubmissionService
 {
+    /// <exception cref="ArgumentException">Código vazio, grande demais ou com caractere nulo.</exception>
     /// <exception cref="KeyNotFoundException">Exercício não existe.</exception>
     /// <exception cref="NotSupportedException">Não há runner para a linguagem do exercício.</exception>
-    Task<SubmissionOutcome> SubmitAsync(Guid userId, Guid exerciseId, string code, CancellationToken cancellationToken = default);
+    /// <exception cref="AttemptsExhaustedException">Limite de tentativas (<c>MaxAttempts</c>) atingido.</exception>
+    /// <exception cref="FormatException">Casos de teste do exercício fora do formato (erro de conteúdo).</exception>
+    /// <exception cref="DatasetNotFoundException">Dataset do caso de teste não está no banco (erro de conteúdo).</exception>
+    Task<ExecutionOutcome> SubmitAsync(Guid userId, Guid exerciseId, string code, CancellationToken cancellationToken = default);
 }
-
-/// <summary>O que a tela mostra para o aluno depois de enviar.</summary>
-public sealed record SubmissionOutcome(
-    Guid SubmissionId,
-    SubmissionResult Result,
-    string Feedback,
-    int ExecutionTimeMs,
-    int PassedCases,
-    int TotalCases);

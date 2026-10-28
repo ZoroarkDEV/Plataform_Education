@@ -1,0 +1,12 @@
+# Nunca mandar para o build do Docker: segredos, saídas de build e coisas locais.
+.env
+.env.*
+!.env.example
+**/bin/
+**/obj/
+**/.tools/
+.git/
+.vs/
+.vscode/
+.idea/
+tests/

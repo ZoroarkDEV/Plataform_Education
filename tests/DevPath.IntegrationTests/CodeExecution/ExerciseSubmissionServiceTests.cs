@@ -63,24 +63,28 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
         return dataset.Slug;
     }
 
-    private async Task<(Guid UserId, Guid ExerciseId)> CreateExerciseAsync(string testCases, int? maxAttempts = null)
+    private async Task<(Guid UserId, Guid ExerciseId)> CreateExerciseAsync(string testCases, int? maxAttempts = null, string? dataset = null)
     {
         await using var db = fixture.CreateDbContext();
         var user = new ApplicationUser { UserName = $"{Guid.NewGuid():N}@devpath.test", Email = $"{Guid.NewGuid():N}@devpath.test", DisplayName = "Aluno" };
         db.Users.Add(user);
         var path = CareerPath.Create($"Trilha {Guid.NewGuid():N}");
         var exercise = path.AddModule("SQL").AddLesson("Select", ContentType.Markdown, "# x")
-            .AddExercise("Caros", "Liste os livros com preço, do mais caro para o mais barato.", "sql", testCases, maxAttempts: maxAttempts);
+            .AddExercise("Caros", "Liste os livros com preço, do mais caro para o mais barato.", "sql", testCases, maxAttempts: maxAttempts, dataset: dataset);
         db.CareerPaths.Add(path);
         await db.SaveChangesAsync();
         return (user.Id, exercise.Id);
     }
 
-    private async Task<SubmissionOutcome> SubmitAsync(Guid userId, Guid exerciseId, string code, ICodeRunner runner)
+    private async Task<ExecutionOutcome> SubmitAsync(Guid userId, Guid exerciseId, string code, ICodeRunner runner)
     {
         await using var db = fixture.CreateDbContext();
         return await new ExerciseSubmissionService(db, new DatasetRepository(db), [runner]).SubmitAsync(userId, exerciseId, code);
     }
+
+    /// <summary>Tudo o que o aluno lê na tela: mensagem, detalhe técnico e o retorno de cada caso.</summary>
+    private static string Shown(ExecutionOutcome o) =>
+        string.Join("\n", new[] { o.FriendlyMessage, o.TechnicalDetail }.Concat(o.TestCases.Select(t => $"{t.Name}: {t.Message}")));
 
     private static PostgresSqlCodeRunner RealRunner() =>
         new(DockerCliSandboxTests.CreateSandbox(), limits: new SandboxLimits { Timeout = TimeSpan.FromSeconds(30) });
@@ -99,8 +103,13 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
 
         var outcome = await SubmitAsync(userId, exerciseId, "SELECT titulo, preco FROM livros ORDER BY preco DESC;", runner);
 
-        outcome.Result.Should().Be(SubmissionResult.Pass, outcome.Feedback);
+        outcome.Status.Should().Be(ExecutionStatus.Pass, Shown(outcome));
         outcome.PassedCases.Should().Be(2);
+        outcome.TestCases.Should().OnlyContain(t => t.Passed);
+        outcome.Columns.Should().Equal("titulo", "preco");
+        outcome.Rows.Should().BeEquivalentTo(new[] { new[] { "O Cortiço", "35.00" }, new[] { "Dom Casmurro", "29.90" } },
+            o => o.WithStrictOrdering());
+        outcome.Truncated.Should().BeFalse();
         outcome.TotalCases.Should().Be(2);
         runner.Preparations.Should().HaveCount(2);
         runner.Preparations[0].Should().StartWith(MiniDatasetSql).And.NotContain("UPDATE");
@@ -124,8 +133,16 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
 
         var outcome = await SubmitAsync(userId, exerciseId, "SELECT titulo, preco FROM livros;", new FakeRunner(_ => reversed));
 
-        outcome.Result.Should().Be(SubmissionResult.Fail);
-        outcome.Feedback.Should().Contain("livros caros").And.Contain("ORDER BY");
+        outcome.Status.Should().Be(ExecutionStatus.Fail);
+        outcome.FriendlyMessage.Should().Be(ExerciseSubmissionService.FailMessage);
+        outcome.TestCases[0].Name.Should().Be("livros caros");
+        outcome.TestCases[0].Passed.Should().BeFalse();
+        outcome.TestCases[0].Message.Should().Contain("ORDER BY");
+        // O retorno nunca entrega a resposta: as linhas esperadas do caso com setup (99) não aparecem.
+        Shown(outcome).Should().NotContain("99");
+
+        await using var db = fixture.CreateDbContext();
+        (await db.CodeSubmissions.SingleAsync(s => s.Id == outcome.SubmissionId)).Result.Should().Be(SubmissionResult.Fail);
     }
 
     [Fact]
@@ -138,9 +155,11 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
 
         var outcome = await SubmitAsync(userId, exerciseId, "SELECT * FROM livro", runner);
 
-        outcome.Result.Should().Be(SubmissionResult.Fail);
-        outcome.Feedback.Should().Contain("A tabela \"livro\" não existe").And.Contain("Detalhe técnico")
-            .And.NotContain("/tmp/consulta.psql");
+        outcome.Status.Should().Be(ExecutionStatus.Error);
+        outcome.FriendlyMessage.Should().Contain("A tabela \"livro\" não existe");
+        outcome.TechnicalDetail.Should().Contain("42P01").And.NotContain("/tmp/consulta.psql");
+        outcome.TestCases.Select(t => t.Message).Should().Equal(outcome.FriendlyMessage, ExerciseSubmissionService.NotRunMessage);
+        outcome.SubmissionId.Should().NotBeNull("erro do aluno conta como tentativa");
     }
 
     [Fact]
@@ -152,8 +171,8 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
 
         var outcome = await SubmitAsync(userId, exerciseId, "SELECT pg_sleep(60);", runner);
 
-        outcome.Result.Should().Be(SubmissionResult.Fail);
-        outcome.Feedback.Should().Contain("demorou demais");
+        outcome.Status.Should().Be(ExecutionStatus.Timeout);
+        outcome.FriendlyMessage.Should().Be(SqlErrorTranslator.TimeoutMessage);
         runner.Calls.Should().Be(1, "não gasta outro container com código que trava");
     }
 
@@ -180,7 +199,78 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
 
         var act = () => SubmitAsync(userId, exerciseId, "SELECT 1;", new FakeRunner(_ => CorrectStdout));
 
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*1 tentativas*");
+        (await act.Should().ThrowAsync<AttemptsExhaustedException>()).Which.Message.Should().Be("Você já usou a única tentativa deste exercício.");
+    }
+
+    [Fact]
+    public async Task DoisEnviosAoMesmoTempo_NaoPassamDoLimite()
+    {
+        var slug = await CreateDatasetAsync();
+        var (userId, exerciseId) = await CreateExerciseAsync(TestCases(slug), maxAttempts: 1);
+
+        // Os dois passam pela contagem inicial (0 de 1) antes de qualquer um gravar.
+        var envios = Enumerable.Range(0, 2).Select(async _ =>
+        {
+            try
+            {
+                return await SubmitAsync(userId, exerciseId, "SELECT 1;",
+                    new FakeRunner(_ => CorrectStdout, delay: TimeSpan.FromMilliseconds(500)));
+            }
+            catch (AttemptsExhaustedException)
+            {
+                return null;
+            }
+        }).ToList();
+        var results = await Task.WhenAll(envios);
+
+        results.Count(r => r is not null).Should().Be(1, "só uma tentativa cabe no limite");
+        await using var db = fixture.CreateDbContext();
+        (await db.CodeSubmissions.CountAsync(s => s.ExerciseId == exerciseId && s.UserId == userId)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TentativasRestantes_DescontaOEnvioAtual()
+    {
+        var slug = await CreateDatasetAsync();
+        var (userId, exerciseId) = await CreateExerciseAsync(TestCases(slug), maxAttempts: 3);
+
+        var first = await SubmitAsync(userId, exerciseId, "SELECT 1;", new FakeRunner(_ => CorrectStdout));
+        var second = await SubmitAsync(userId, exerciseId, "SELECT 1;", new FakeRunner(_ => CorrectStdout));
+
+        first.RemainingAttempts.Should().Be(2);
+        second.RemainingAttempts.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task PreparacaoQuebrada_ErroDoExercicio_NaoContaTentativa()
+    {
+        var slug = await CreateDatasetAsync();
+        var (userId, exerciseId) = await CreateExerciseAsync(TestCases(slug), maxAttempts: 1);
+        var runner = new FakeRunner(_ => "", exitCode: PostgresSqlCodeRunner.SetupFailedExitCode, stderr: "ERROR: syntax error");
+
+        var outcome = await SubmitAsync(userId, exerciseId, "SELECT 1;", runner);
+
+        outcome.Status.Should().Be(ExecutionStatus.Error);
+        outcome.FriendlyMessage.Should().Be(ExerciseSubmissionService.SetupFailedMessage);
+        outcome.TechnicalDetail.Should().BeNull("o erro é do conteúdo, não do aluno");
+        outcome.SubmissionId.Should().BeNull();
+        outcome.RemainingAttempts.Should().Be(1);
+        await using var db = fixture.CreateDbContext();
+        (await db.CodeSubmissions.CountAsync(s => s.ExerciseId == exerciseId)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DatasetDoExercicio_ValeQuandoOCasoNaoCita()
+    {
+        var slug = await CreateDatasetAsync();
+        var (userId, exerciseId) = await CreateExerciseAsync(
+            """[{ "name": "um", "columns": ["titulo"], "rows": [["Dom Casmurro"]] }]""", dataset: slug);
+        var runner = new FakeRunner(_ => "titulo\n[{\"titulo\":\"Dom Casmurro\"}]\n");
+
+        var outcome = await SubmitAsync(userId, exerciseId, "SELECT titulo FROM livros WHERE id = 1;", runner);
+
+        outcome.Status.Should().Be(ExecutionStatus.Pass, Shown(outcome));
+        runner.Preparations.Should().ContainSingle().Which.Should().StartWith(MiniDatasetSql);
     }
 
     [Theory]
@@ -218,12 +308,13 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
             "SELECT titulo, preco FROM livros WHERE preco IS NOT NULL ORDER BY preco;", RealRunner());
         var error = await SubmitAsync(userId, exerciseId, "SELECT titulo FROM tabela_errada", RealRunner());
 
-        pass.Result.Should().Be(SubmissionResult.Pass, pass.Feedback);
+        pass.Status.Should().Be(ExecutionStatus.Pass, Shown(pass));
         pass.ExecutionTimeMs.Should().BePositive();
-        wrongOrder.Result.Should().Be(SubmissionResult.Fail);
-        wrongOrder.Feedback.Should().Contain("fora de ordem");
-        error.Result.Should().Be(SubmissionResult.Fail);
-        error.Feedback.Should().Contain("A tabela \"tabela_errada\" não existe");
+        pass.Columns.Should().Equal("t", "p");
+        wrongOrder.Status.Should().Be(ExecutionStatus.Fail);
+        Shown(wrongOrder).Should().Contain("fora de ordem");
+        error.Status.Should().Be(ExecutionStatus.Error);
+        error.FriendlyMessage.Should().Contain("A tabela \"tabela_errada\" não existe");
     }
 
     [DockerFact]
@@ -234,21 +325,24 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
 
         var outcome = await SubmitAsync(userId, exerciseId, "SELECT 1; \\! id", RealRunner());
 
-        outcome.Result.Should().Be(SubmissionResult.Fail);
-        outcome.Feedback.Should().Contain(SqlErrorTranslator.MetaCommandMessage).And.NotContain("uid=");
+        outcome.Status.Should().Be(ExecutionStatus.Error);
+        outcome.FriendlyMessage.Should().Be(SqlErrorTranslator.MetaCommandMessage);
+        Shown(outcome).Should().NotContain("uid=");
     }
 
-    private sealed class FakeRunner(Func<string?, string> stdout, bool timedOut = false, int exitCode = 0, string stderr = "") : ICodeRunner
+    private sealed class FakeRunner(Func<string?, string> stdout, bool timedOut = false, int exitCode = 0, string stderr = "",
+        TimeSpan delay = default) : ICodeRunner
     {
         public int Calls { get; private set; }
         public List<string?> Preparations { get; } = [];
         public string Language => "sql";
 
-        public Task<SandboxResult> RunAsync(string code, string? preparation = null, CancellationToken cancellationToken = default)
+        public async Task<SandboxResult> RunAsync(string code, string? preparation = null, CancellationToken cancellationToken = default)
         {
             Calls++;
             Preparations.Add(preparation);
-            return Task.FromResult(new SandboxResult(stdout(preparation), stderr, timedOut ? 137 : exitCode, TimeSpan.FromMilliseconds(5),
+            await Task.Delay(delay, cancellationToken);
+            return (new SandboxResult(stdout(preparation), stderr, timedOut ? 137 : exitCode, TimeSpan.FromMilliseconds(5),
                 timedOut, OomKilled: false, OutputTruncated: false, "fake"));
         }
     }

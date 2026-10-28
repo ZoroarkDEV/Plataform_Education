@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <!--
+    DevPath.Worker: o ÚNICO processo que executa código de aluno (ADR-004 / ADR-006).
+    Consome jobs da fila do Redis, roda no sandbox Docker e devolve o resultado.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DevPath.Application\DevPath.Application.csproj" />
+    <ProjectReference Include="..\DevPath.Infrastructure\DevPath.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
