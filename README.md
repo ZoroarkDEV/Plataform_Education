@@ -165,6 +165,8 @@ Uma tarefa só está pronta quando:
 
 As pastas vazias têm um `.gitkeep` só para existirem no Git até receberem arquivos.
 
+As decisões de arquitetura já tomadas estão no [índice de ADRs](docs/adr/README.md).
+
 ### Status das fases
 
 | Fase | Escopo | Status |
