@@ -1,2 +1,6 @@
-﻿<script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
-<script src="~/lib/jquery-validation-unobtrusive/dist/jquery.validate.unobtrusive.min.js"></script>
+@*
+    No-op de propósito: o template trazia jQuery + jquery-validation aqui, mas a stack do DevPath
+    é só Tailwind + HTMX. A validação fica no servidor (DataAnnotations + ModelState) e, quando
+    fizer sentido, nos atributos HTML5 (required, type="email", etc.).
+    O arquivo foi mantido para não quebrar views que fazem <partial name="_ValidationScriptsPartial" />.
+*@
