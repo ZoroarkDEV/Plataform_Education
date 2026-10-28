@@ -1,7 +1,10 @@
 namespace DevPath.Domain.Achievements;
 
 /// <summary>Registro de que um aluno ganhou uma conquista. Chave composta: (UserId, AchievementId).</summary>
-/// <remarks>UserId sem navegação até a issue #9 (ApplicationUser / Identity).</remarks>
+/// <remarks>
+/// UserId aponta para o ApplicationUser (Identity, na Infrastructure). A FK existe no banco,
+/// mas não há navegação aqui para o Domain não depender do Identity.
+/// </remarks>
 public sealed class UserAchievement
 {
     public Guid UserId { get; private set; }

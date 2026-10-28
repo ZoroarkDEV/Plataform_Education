@@ -1,4 +1,7 @@
+using DevPath.Application.Auth;
+using DevPath.Infrastructure.Identity;
 using DevPath.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,13 +13,14 @@ public static class DependencyInjection
     public const string ConnectionStringName = "DevPath";
 
     /// <summary>
-    /// Registra os serviços de infraestrutura (banco, e no futuro Redis, e-mail...).
+    /// Registra os serviços de infraestrutura: banco (EF Core) e ASP.NET Identity.
     /// Chamado uma vez no Program.cs do DevPath.Web.
     /// </summary>
     /// <remarks>
     /// A connection string vem de <c>ConnectionStrings:DevPath</c>. Em desenvolvimento,
     /// defina a variável de ambiente <c>ConnectionStrings__DevPath</c> (veja o .env.example);
     /// nunca coloque a senha no appsettings.
+    /// O cookie (caminhos de login, expiração) é configurado na Web, que é quem conhece as rotas.
     /// </remarks>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
@@ -30,6 +34,39 @@ public static class DependencyInjection
 
         services.AddDbContext<DevPathDbContext>(options => options.UseNpgsql(connectionString));
 
+        services.AddIdentityServices();
+
         return services;
+    }
+
+    private static void AddIdentityServices(this IServiceCollection services)
+    {
+        // AddIdentity registra UserManager, SignInManager e o esquema de cookie "Identity.Application".
+        services
+            .AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
+            {
+                // Senha: no mínimo 8 caracteres com número, minúscula e maiúscula. Símbolo é opcional.
+                options.Password.RequiredLength = 8;
+                options.Password.RequireDigit = true;
+                options.Password.RequireLowercase = true;
+                options.Password.RequireUppercase = true;
+                options.Password.RequireNonAlphanumeric = false;
+
+                // Lockout: 5 senhas erradas bloqueiam a conta por 15 minutos (freia força bruta).
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                options.Lockout.AllowedForNewUsers = true;
+
+                options.User.RequireUniqueEmail = true;
+
+                // Confirmação de e-mail fica para quando houver envio de e-mail.
+                options.SignIn.RequireConfirmedEmail = false;
+            })
+            .AddEntityFrameworkStores<DevPathDbContext>()
+            .AddDefaultTokenProviders()
+            .AddErrorDescriber<PortugueseIdentityErrorDescriber>()
+            .AddClaimsPrincipalFactory<DevPathUserClaimsPrincipalFactory>();
+
+        services.AddScoped<IAuthService, AuthService>();
     }
 }

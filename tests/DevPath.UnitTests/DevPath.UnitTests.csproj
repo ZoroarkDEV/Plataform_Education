@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DevPath.Domain\DevPath.Domain.csproj" />
     <ProjectReference Include="..\..\src\DevPath.Application\DevPath.Application.csproj" />
+    <ProjectReference Include="..\..\src\DevPath.Web\DevPath.Web.csproj" />
   </ItemGroup>
 
 </Project>

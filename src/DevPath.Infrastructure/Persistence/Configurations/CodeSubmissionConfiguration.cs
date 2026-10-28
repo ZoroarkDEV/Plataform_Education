@@ -1,5 +1,6 @@
 using DevPath.Domain.CareerPaths;
 using DevPath.Domain.Progress;
+using DevPath.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -20,5 +21,8 @@ internal sealed class CodeSubmissionConfiguration : IEntityTypeConfiguration<Cod
         builder.HasIndex(s => new { s.UserId, s.ExerciseId });
 
         builder.HasOne<Exercise>().WithMany().HasForeignKey(s => s.ExerciseId).OnDelete(DeleteBehavior.Cascade);
+
+        // UserId -> AspNetUsers: apagar o usuário apaga as submissões dele (LGPD: dado do aluno sai junto).
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }

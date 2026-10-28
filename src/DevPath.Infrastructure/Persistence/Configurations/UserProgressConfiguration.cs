@@ -1,5 +1,6 @@
 using DevPath.Domain.CareerPaths;
 using DevPath.Domain.Progress;
+using DevPath.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -29,6 +30,7 @@ internal sealed class UserProgressConfiguration : IEntityTypeConfiguration<UserP
         builder.HasOne<Exercise>().WithMany().HasForeignKey(p => p.ExerciseId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<Module>().WithMany().HasForeignKey(p => p.ModuleId).OnDelete(DeleteBehavior.Cascade);
 
-        // UserId: a FK para AspNetUsers entra na issue #9 (ApplicationUser / Identity).
+        // UserId -> AspNetUsers: apagar o usuário apaga o progresso dele (LGPD: dado do aluno sai junto).
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }

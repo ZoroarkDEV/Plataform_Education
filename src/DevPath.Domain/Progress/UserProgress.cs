@@ -4,8 +4,8 @@ namespace DevPath.Domain.Progress;
 /// Progresso de um aluno em uma aula, exercício ou módulo (um dos três IDs é preenchido).
 /// </summary>
 /// <remarks>
-/// <see cref="UserId"/> é só o ID por enquanto: o usuário vira <c>ApplicationUser</c>
-/// (ASP.NET Identity) na issue #9, e aí ligamos a chave estrangeira.
+/// <see cref="UserId"/> aponta para o <c>ApplicationUser</c> (ASP.NET Identity, na Infrastructure).
+/// A FK existe no banco, mas não há navegação aqui para o Domain não depender do Identity.
 /// </remarks>
 public sealed class UserProgress
 {

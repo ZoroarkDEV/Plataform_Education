@@ -1,6 +1,9 @@
 using DevPath.Domain.Achievements;
 using DevPath.Domain.CareerPaths;
 using DevPath.Domain.Progress;
+using DevPath.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevPath.Infrastructure.Persistence;
@@ -12,9 +15,12 @@ namespace DevPath.Infrastructure.Persistence;
 /// O mapeamento de cada entidade fica em <c>Persistence/Configurations</c>
 /// (uma classe <see cref="IEntityTypeConfiguration{TEntity}"/> por entidade), assim
 /// o Domain continua sem nenhuma dependência do EF Core.
+/// Herda de <see cref="IdentityDbContext{TUser, TRole, TKey}"/> para ganhar as tabelas AspNetUsers,
+/// AspNetRoles etc. com chave <see cref="Guid"/>, a mesma usada nos <c>UserId</c> do Domain.
 /// O schema é criado só por migrations (<c>dotnet ef database update</c>), nunca por EnsureCreated.
 /// </remarks>
-public sealed class DevPathDbContext(DbContextOptions<DevPathDbContext> options) : DbContext(options)
+public sealed class DevPathDbContext(DbContextOptions<DevPathDbContext> options) :
+    IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
 {
     public DbSet<CareerPath> CareerPaths => Set<CareerPath>();
     public DbSet<Module> Modules => Set<Module>();
@@ -28,6 +34,9 @@ public sealed class DevPathDbContext(DbContextOptions<DevPathDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Primeiro o Identity mapeia as tabelas dele; depois as nossas configurações.
+        base.OnModelCreating(modelBuilder);
+
         // Aplica todas as classes IEntityTypeConfiguration<T> deste assembly.
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(DevPathDbContext).Assembly);
     }
