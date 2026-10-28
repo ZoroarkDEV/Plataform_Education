@@ -142,9 +142,9 @@ public sealed class StudentJourneyServiceTests(StudentJourneyFixture fx) : IClas
         var paths = await RunAsync(s => s.GetActivePathsAsync());
 
         paths.Select(p => p.Title).Should().Equal("SQL & Dados", "Backend NET", "Trilha Vazia");
-        paths[0].Should().Be(new PathSummaryDto(fx.Sql.Slug, "SQL & Dados", "Aprenda SQL do zero.", DifficultyLevel.Beginner, 20, 4));
-        paths[1].AvailableLessons.Should().Be(0); // só rascunho → "Aulas em breve"
-        paths[2].AvailableLessons.Should().Be(0);
+        paths[0].Should().Be(new PathSummaryDto(fx.Sql.Slug, "SQL & Dados", "Aprenda SQL do zero.", DifficultyLevel.Beginner, 20, 4, 6));
+        (paths[1].AvailableLessons, paths[1].TotalLessons).Should().Be((0, 1)); // só rascunho → "Aulas em breve"
+        (paths[2].AvailableLessons, paths[2].TotalLessons).Should().Be((0, 0)); // sem aula nenhuma
     }
 
     [Fact]
@@ -173,8 +173,14 @@ public sealed class StudentJourneyServiceTests(StudentJourneyFixture fx) : IClas
         var user = await fx.CreateUserAsync();
         await EnrolledDashboardAsync(user);
 
-        (await RunAsync(s => s.EnrollAsync(user, fx.Sql.Slug))).Should().Be(EnrollmentResult.AlreadyEnrolled());
-        (await RunAsync(s => s.EnrollAsync(user, fx.Backend.Slug))).Should().Be(EnrollmentResult.AlreadyEnrolled());
+        (await RunAsync(s => s.EnrollAsync(user, fx.Sql.Slug))).Should().Be(EnrollmentResult.AlreadyEnrolled("SQL & Dados"));
+
+        // Outra trilha: devolve o título da trilha ATUAL. Também vence PathNotFound/NoLessons.
+        var other = await RunAsync(s => s.EnrollAsync(user, fx.Backend.Slug));
+        other.Should().Be(EnrollmentResult.AlreadyEnrolled("SQL & Dados"));
+        other.HasPath.Should().BeTrue();
+        (await RunAsync(s => s.EnrollAsync(user, "nao-existe"))).Should().Be(EnrollmentResult.AlreadyEnrolled("SQL & Dados"));
+        (await RunAsync(s => s.EnrollAsync(user, fx.Empty.Slug))).Should().Be(EnrollmentResult.AlreadyEnrolled("SQL & Dados"));
 
         await using var db = fx.CreateDbContext();
         (await db.Users.SingleAsync(u => u.Id == user)).CurrentPathId.Should().Be(fx.Sql.Id);
@@ -182,14 +188,15 @@ public sealed class StudentJourneyServiceTests(StudentJourneyFixture fx) : IClas
     }
 
     [Fact]
-    public async Task Enroll_SlugInexistenteOuTrilhaDesativada_PathNotFound_TrilhaSemAula_Unavailable()
+    public async Task Enroll_SlugInexistenteOuTrilhaDesativada_PathNotFound_TrilhaSemAula_NoLessons()
     {
         var user = await fx.CreateUserAsync();
 
         (await RunAsync(s => s.EnrollAsync(user, "nao-existe"))).Kind.Should().Be(EnrollmentResultKind.PathNotFound);
         (await RunAsync(s => s.EnrollAsync(user, fx.Old.Slug))).Kind.Should().Be(EnrollmentResultKind.PathNotFound);
         (await RunAsync(s => s.EnrollAsync(user, ""))).Kind.Should().Be(EnrollmentResultKind.PathNotFound);
-        (await RunAsync(s => s.EnrollAsync(user, fx.Empty.Slug))).Kind.Should().Be(EnrollmentResultKind.Unavailable);
+        (await RunAsync(s => s.EnrollAsync(user, fx.Empty.Slug))).Should().Be(EnrollmentResult.NoLessons());
+        EnrollmentResult.NoLessons().HasPath.Should().BeFalse();
 
         (await RunAsync(s => s.HasCurrentPathAsync(user))).Should().BeFalse();
         await using var db = fx.CreateDbContext();
@@ -197,10 +204,17 @@ public sealed class StudentJourneyServiceTests(StudentJourneyFixture fx) : IClas
     }
 
     [Fact]
-    public async Task Enroll_UsuarioInexistente_Lanca()
+    public async Task UsuarioInexistente_EnrollUserNotFound_HasCurrentPathFalse_DashboardNull()
     {
-        var act = () => RunAsync(s => s.EnrollAsync(Guid.NewGuid(), fx.Sql.Slug));
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        var missing = Guid.NewGuid();
+
+        (await RunAsync(s => s.EnrollAsync(missing, fx.Sql.Slug))).Should().Be(EnrollmentResult.UserNotFound());
+        (await RunAsync(s => s.EnrollAsync(missing, "nao-existe"))).Should().Be(EnrollmentResult.UserNotFound()); // verificado primeiro
+        (await RunAsync(s => s.HasCurrentPathAsync(missing))).Should().BeFalse();
+        (await RunAsync(s => s.GetDashboardAsync(missing))).Should().BeNull();
+
+        await using var db = fx.CreateDbContext();
+        (await db.UserPathEnrollments.AnyAsync(e => e.UserId == missing)).Should().BeFalse();
     }
 
     [Theory]
@@ -219,6 +233,9 @@ public sealed class StudentJourneyServiceTests(StudentJourneyFixture fx) : IClas
 
             results.Select(r => r.Kind).Should().BeEquivalentTo(
                 [EnrollmentResultKind.Enrolled, EnrollmentResultKind.AlreadyEnrolled]);
+
+            // Quem perdeu a corrida recebe o título da trilha de quem ganhou.
+            results.Select(r => r.PathTitle).Distinct().Should().ContainSingle();
 
             await using var db = fx.CreateDbContext();
             var enrollments = await db.UserPathEnrollments.Where(e => e.UserId == user).ToListAsync();

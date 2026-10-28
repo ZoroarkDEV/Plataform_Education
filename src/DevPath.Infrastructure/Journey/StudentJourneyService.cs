@@ -25,6 +25,8 @@ public sealed class StudentJourneyService(DevPathDbContext db) : IStudentJourney
                 p.DifficultyLevel,
                 p.EstimatedHours,
                 db.Lessons.Count(l => l.IsPublished && !l.IsDraft
+                    && db.Modules.Any(m => m.Id == l.ModuleId && m.CareerPathId == p.Id && m.IsPublished)),
+                db.Lessons.Count(l => l.IsPublished
                     && db.Modules.Any(m => m.Id == l.ModuleId && m.CareerPathId == p.Id && m.IsPublished))))
             .ToListAsync(ct);
 
@@ -34,6 +36,12 @@ public sealed class StudentJourneyService(DevPathDbContext db) : IStudentJourney
     public async Task<EnrollmentResult> EnrollAsync(Guid userId, string pathSlug, CancellationToken ct = default)
     {
         var slug = (pathSlug ?? string.Empty).Trim().ToLowerInvariant();
+
+        var current = await CurrentPathAsync(userId, ct);
+        if (current is not null)
+        {
+            return current;
+        }
 
         var path = await db.CareerPaths.AsNoTracking()
             .Where(p => p.Slug == slug && p.IsActive)
@@ -54,7 +62,7 @@ public sealed class StudentJourneyService(DevPathDbContext db) : IStudentJourney
             .FirstOrDefaultAsync(ct);
         if (firstModuleId is null)
         {
-            return EnrollmentResult.Unavailable();
+            return EnrollmentResult.NoLessons();
         }
 
         // "Uma trilha por vez" é garantido por um UPDATE condicional (CurrentPathId IS NULL): no Postgres,
@@ -69,13 +77,9 @@ public sealed class StudentJourneyService(DevPathDbContext db) : IStudentJourney
 
             if (claimed == 0)
             {
+                // Outro POST matriculou primeiro (ou o usuário foi apagado no meio).
                 await tx.RollbackAsync(ct);
-                if (!await db.Users.AnyAsync(u => u.Id == userId, ct))
-                {
-                    throw new InvalidOperationException($"Usuário {userId} não existe.");
-                }
-
-                return EnrollmentResult.AlreadyEnrolled();
+                return await CurrentPathAsync(userId, ct) ?? EnrollmentResult.UserNotFound();
             }
 
             // Sem trilha atual não pode haver matrícula ativa (ex.: trilha antiga apagada deixou lixo).
@@ -104,8 +108,33 @@ public sealed class StudentJourneyService(DevPathDbContext db) : IStudentJourney
         {
             await tx.RollbackAsync(CancellationToken.None);
             db.ChangeTracker.Clear();
-            return EnrollmentResult.AlreadyEnrolled();
+            return await CurrentPathAsync(userId, ct) ?? EnrollmentResult.UserNotFound();
         }
+    }
+
+    /// <summary>
+    /// UserNotFound se o usuário não existe; AlreadyEnrolled(título da trilha atual) se ele já tem trilha;
+    /// null se ele existe e está livre para se matricular.
+    /// </summary>
+    private async Task<EnrollmentResult?> CurrentPathAsync(Guid userId, CancellationToken ct)
+    {
+        var user = await (
+                from u in db.Users.AsNoTracking()
+                where u.Id == userId
+                select new
+                {
+                    u.CurrentPathId,
+                    Title = db.CareerPaths.Where(p => p.Id == u.CurrentPathId).Select(p => p.Title).FirstOrDefault()
+                })
+            .SingleOrDefaultAsync(ct);
+
+        if (user is null)
+        {
+            return EnrollmentResult.UserNotFound();
+        }
+
+        // CurrentPathId tem FK com SET NULL, então com Id preenchido o título sempre existe.
+        return user.CurrentPathId is null ? null : EnrollmentResult.AlreadyEnrolled(user.Title ?? string.Empty);
     }
 
     public async Task<DashboardDto?> GetDashboardAsync(Guid userId, CancellationToken ct = default)
