@@ -8,7 +8,12 @@ internal sealed class CareerPathConfiguration : IEntityTypeConfiguration<CareerP
 {
     public void Configure(EntityTypeBuilder<CareerPath> builder)
     {
-        builder.ToTable("CareerPaths");
+        builder.ToTable("CareerPaths", t =>
+        {
+            // CHECK constraints: o banco também barra valores que o domínio proíbe.
+            t.HasCheckConstraint("CK_CareerPaths_EstimatedHours_NonNegative", "\"EstimatedHours\" >= 0");
+            t.HasCheckConstraint("CK_CareerPaths_Order_NonNegative", "\"Order\" >= 0");
+        });
         builder.HasKey(p => p.Id);
 
         builder.Property(p => p.Title).HasMaxLength(200).IsRequired();

@@ -8,7 +8,11 @@ internal sealed class ExerciseConfiguration : IEntityTypeConfiguration<Exercise>
 {
     public void Configure(EntityTypeBuilder<Exercise> builder)
     {
-        builder.ToTable("Exercises");
+        builder.ToTable("Exercises", t =>
+        {
+            t.HasCheckConstraint("CK_Exercises_Points_NonNegative", "\"Points\" >= 0");
+            t.HasCheckConstraint("CK_Exercises_MaxAttempts_Positive", "\"MaxAttempts\" IS NULL OR \"MaxAttempts\" > 0");
+        });
         builder.HasKey(e => e.Id);
 
         builder.Property(e => e.Title).HasMaxLength(200).IsRequired();

@@ -9,7 +9,8 @@ internal sealed class CodeSubmissionConfiguration : IEntityTypeConfiguration<Cod
 {
     public void Configure(EntityTypeBuilder<CodeSubmission> builder)
     {
-        builder.ToTable("CodeSubmissions");
+        builder.ToTable("CodeSubmissions", t =>
+            t.HasCheckConstraint("CK_CodeSubmissions_ExecutionTimeMs_NonNegative", "\"ExecutionTimeMs\" >= 0"));
         builder.HasKey(s => s.Id);
 
         builder.Property(s => s.SubmittedCode).IsRequired();

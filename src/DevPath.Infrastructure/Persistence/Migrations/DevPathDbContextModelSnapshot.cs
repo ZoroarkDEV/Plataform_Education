@@ -113,7 +113,12 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.HasIndex("Slug")
                         .IsUnique();
 
-                    b.ToTable("CareerPaths", (string)null);
+                    b.ToTable("CareerPaths", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CareerPaths_EstimatedHours_NonNegative", "\"EstimatedHours\" >= 0");
+
+                            t.HasCheckConstraint("CK_CareerPaths_Order_NonNegative", "\"Order\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("DevPath.Domain.CareerPaths.Exercise", b =>
@@ -161,7 +166,12 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("LessonId");
 
-                    b.ToTable("Exercises", (string)null);
+                    b.ToTable("Exercises", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Exercises_MaxAttempts_Positive", "\"MaxAttempts\" IS NULL OR \"MaxAttempts\" > 0");
+
+                            t.HasCheckConstraint("CK_Exercises_Points_NonNegative", "\"Points\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("DevPath.Domain.CareerPaths.Lesson", b =>
@@ -204,9 +214,15 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ModuleId", "Order");
+                    b.HasIndex("ModuleId", "Order")
+                        .IsUnique();
 
-                    b.ToTable("Lessons", (string)null);
+                    b.ToTable("Lessons", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Lessons_EstimatedMinutes_NonNegative", "\"EstimatedMinutes\" >= 0");
+
+                            t.HasCheckConstraint("CK_Lessons_Order_NonNegative", "\"Order\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("DevPath.Domain.CareerPaths.Module", b =>
@@ -239,9 +255,15 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CareerPathId", "Order");
+                    b.HasIndex("CareerPathId", "Order")
+                        .IsUnique();
 
-                    b.ToTable("Modules", (string)null);
+                    b.ToTable("Modules", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Modules_EstimatedMinutes_NonNegative", "\"EstimatedMinutes\" >= 0");
+
+                            t.HasCheckConstraint("CK_Modules_Order_NonNegative", "\"Order\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("DevPath.Domain.Progress.CodeSubmission", b =>
@@ -280,7 +302,10 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId", "ExerciseId");
 
-                    b.ToTable("CodeSubmissions", (string)null);
+                    b.ToTable("CodeSubmissions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CodeSubmissions_ExecutionTimeMs_NonNegative", "\"ExecutionTimeMs\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("DevPath.Domain.Progress.UserPathEnrollment", b =>
@@ -310,7 +335,10 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CurrentModuleId");
 
-                    b.ToTable("UserPathEnrollments", (string)null);
+                    b.ToTable("UserPathEnrollments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_UserPathEnrollments_ProgressPercentage_Range", "\"ProgressPercentage\" BETWEEN 0 AND 100");
+                        });
                 });
 
             modelBuilder.Entity("DevPath.Domain.Progress.UserProgress", b =>
@@ -358,7 +386,14 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId", "LessonId");
 
-                    b.ToTable("UserProgress", (string)null);
+                    b.ToTable("UserProgress", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_UserProgress_ExactlyOneTarget", "num_nonnulls(\"LessonId\", \"ExerciseId\", \"ModuleId\") = 1");
+
+                            t.HasCheckConstraint("CK_UserProgress_Score_NonNegative", "\"Score\" IS NULL OR \"Score\" >= 0");
+
+                            t.HasCheckConstraint("CK_UserProgress_TimeSpentSeconds_NonNegative", "\"TimeSpentSeconds\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("DevPath.Domain.Achievements.UserAchievement", b =>

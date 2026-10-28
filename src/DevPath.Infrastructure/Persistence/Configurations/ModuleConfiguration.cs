@@ -8,14 +8,20 @@ internal sealed class ModuleConfiguration : IEntityTypeConfiguration<Module>
 {
     public void Configure(EntityTypeBuilder<Module> builder)
     {
-        builder.ToTable("Modules");
+        builder.ToTable("Modules", t =>
+        {
+            t.HasCheckConstraint("CK_Modules_Order_NonNegative", "\"Order\" >= 0");
+            t.HasCheckConstraint("CK_Modules_EstimatedMinutes_NonNegative", "\"EstimatedMinutes\" >= 0");
+        });
         builder.HasKey(m => m.Id);
 
         builder.Property(m => m.Title).HasMaxLength(200).IsRequired();
         builder.Property(m => m.Description).HasMaxLength(2000);
 
-        // Listar os módulos de uma trilha em ordem (SPEC §4.3).
-        builder.HasIndex(m => new { m.CareerPathId, m.Order });
+        // Listar os módulos de uma trilha em ordem (SPEC §4.3). Único: dois módulos
+        // não podem ocupar a mesma posição. (Para reordenar, troque as posições numa transação
+        // passando por um valor temporário, ou torne o índice DEFERRABLE numa migration futura.)
+        builder.HasIndex(m => new { m.CareerPathId, m.Order }).IsUnique();
 
         // Module 1:N Lesson
         builder.HasMany(m => m.Lessons)

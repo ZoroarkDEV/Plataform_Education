@@ -8,7 +8,11 @@ internal sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
 {
     public void Configure(EntityTypeBuilder<Lesson> builder)
     {
-        builder.ToTable("Lessons");
+        builder.ToTable("Lessons", t =>
+        {
+            t.HasCheckConstraint("CK_Lessons_Order_NonNegative", "\"Order\" >= 0");
+            t.HasCheckConstraint("CK_Lessons_EstimatedMinutes_NonNegative", "\"EstimatedMinutes\" >= 0");
+        });
         builder.HasKey(l => l.Id);
 
         builder.Property(l => l.Title).HasMaxLength(200).IsRequired();
@@ -19,7 +23,8 @@ internal sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
         builder.Property(l => l.ContentType).HasConversion<string>().HasMaxLength(20);
         builder.Property(l => l.Difficulty).HasConversion<string>().HasMaxLength(20);
 
-        builder.HasIndex(l => new { l.ModuleId, l.Order });
+        // Único: duas aulas não podem ocupar a mesma posição no módulo.
+        builder.HasIndex(l => new { l.ModuleId, l.Order }).IsUnique();
 
         // Lesson 1:N Exercise
         builder.HasMany(l => l.Exercises)

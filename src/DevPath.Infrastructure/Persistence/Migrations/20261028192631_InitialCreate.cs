@@ -43,6 +43,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_CareerPaths", x => x.Id);
+                    table.CheckConstraint("CK_CareerPaths_EstimatedHours_NonNegative", "\"EstimatedHours\" >= 0");
+                    table.CheckConstraint("CK_CareerPaths_Order_NonNegative", "\"Order\" >= 0");
                 });
 
             migrationBuilder.CreateTable(
@@ -79,6 +81,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Modules", x => x.Id);
+                    table.CheckConstraint("CK_Modules_EstimatedMinutes_NonNegative", "\"EstimatedMinutes\" >= 0");
+                    table.CheckConstraint("CK_Modules_Order_NonNegative", "\"Order\" >= 0");
                     table.ForeignKey(
                         name: "FK_Modules_CareerPaths_CareerPathId",
                         column: x => x.CareerPathId,
@@ -104,6 +108,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Lessons", x => x.Id);
+                    table.CheckConstraint("CK_Lessons_EstimatedMinutes_NonNegative", "\"EstimatedMinutes\" >= 0");
+                    table.CheckConstraint("CK_Lessons_Order_NonNegative", "\"Order\" >= 0");
                     table.ForeignKey(
                         name: "FK_Lessons_Modules_ModuleId",
                         column: x => x.ModuleId,
@@ -126,6 +132,7 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_UserPathEnrollments", x => new { x.UserId, x.CareerPathId });
+                    table.CheckConstraint("CK_UserPathEnrollments_ProgressPercentage_Range", "\"ProgressPercentage\" BETWEEN 0 AND 100");
                     table.ForeignKey(
                         name: "FK_UserPathEnrollments_CareerPaths_CareerPathId",
                         column: x => x.CareerPathId,
@@ -158,6 +165,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Exercises", x => x.Id);
+                    table.CheckConstraint("CK_Exercises_MaxAttempts_Positive", "\"MaxAttempts\" IS NULL OR \"MaxAttempts\" > 0");
+                    table.CheckConstraint("CK_Exercises_Points_NonNegative", "\"Points\" >= 0");
                     table.ForeignKey(
                         name: "FK_Exercises_Lessons_LessonId",
                         column: x => x.LessonId,
@@ -182,6 +191,7 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_CodeSubmissions", x => x.Id);
+                    table.CheckConstraint("CK_CodeSubmissions_ExecutionTimeMs_NonNegative", "\"ExecutionTimeMs\" >= 0");
                     table.ForeignKey(
                         name: "FK_CodeSubmissions_Exercises_ExerciseId",
                         column: x => x.ExerciseId,
@@ -208,6 +218,9 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_UserProgress", x => x.Id);
+                    table.CheckConstraint("CK_UserProgress_ExactlyOneTarget", "num_nonnulls(\"LessonId\", \"ExerciseId\", \"ModuleId\") = 1");
+                    table.CheckConstraint("CK_UserProgress_Score_NonNegative", "\"Score\" IS NULL OR \"Score\" >= 0");
+                    table.CheckConstraint("CK_UserProgress_TimeSpentSeconds_NonNegative", "\"TimeSpentSeconds\" >= 0");
                     table.ForeignKey(
                         name: "FK_UserProgress_Exercises_ExerciseId",
                         column: x => x.ExerciseId,
@@ -252,12 +265,14 @@ namespace DevPath.Infrastructure.Persistence.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Lessons_ModuleId_Order",
                 table: "Lessons",
-                columns: new[] { "ModuleId", "Order" });
+                columns: new[] { "ModuleId", "Order" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Modules_CareerPathId_Order",
                 table: "Modules",
-                columns: new[] { "CareerPathId", "Order" });
+                columns: new[] { "CareerPathId", "Order" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserAchievements_AchievementId",

@@ -9,7 +9,8 @@ internal sealed class UserPathEnrollmentConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<UserPathEnrollment> builder)
     {
-        builder.ToTable("UserPathEnrollments");
+        builder.ToTable("UserPathEnrollments", t =>
+            t.HasCheckConstraint("CK_UserPathEnrollments_ProgressPercentage_Range", "\"ProgressPercentage\" BETWEEN 0 AND 100"));
 
         // Chave composta: um aluno se matricula uma única vez em cada trilha.
         builder.HasKey(e => new { e.UserId, e.CareerPathId });
