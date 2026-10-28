@@ -1,5 +1,5 @@
 # Trilha Backend .NET: metadados lidos pelo ContentSeeder.
-# O nome da pasta precisa ser o slug do título (ex.: "SQL & Dados" -> sql-dados).
+# O nome da pasta é o slug da trilha (fixo: é por ele que o seed acha a trilha no banco; o título pode mudar).
 title: "Backend .NET"
 description: "Trilha principal do DevPath: do zero até um sistema completo com C#, ASP.NET Core MVC, Entity Framework Core, SQL e Docker."
 icon: server

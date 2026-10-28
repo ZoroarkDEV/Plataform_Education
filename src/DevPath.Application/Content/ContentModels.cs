@@ -5,9 +5,9 @@ namespace DevPath.Application.Content;
 // Modelos do conteúdo lido de /content, antes de virar entidade no banco.
 // São só dados (records): quem lê os arquivos é a Infrastructure, quem valida é o ContentValidator.
 
-/// <summary>Uma trilha lida de <c>content/paths/&lt;slug&gt;/path.yaml</c>.</summary>
+/// <summary>Uma trilha lida de <c>content/paths/&lt;slug&gt;/path.yaml</c>. O slug é o nome da pasta.</summary>
 public sealed record PathContent(
-    string FolderName,
+    string Slug,
     string Title,
     string Description,
     string? Icon,
@@ -24,9 +24,13 @@ public sealed record ModuleContent(
     int Order,
     IReadOnlyList<LessonContent> Lessons);
 
-/// <summary>Uma aula em Markdown: metadados do frontmatter + corpo do texto.</summary>
+/// <summary>
+/// Uma aula em Markdown: metadados do frontmatter + corpo do texto.
+/// O slug vem do nome do arquivo sem o prefixo de ordem (<c>02-joins.md</c> -> <c>joins</c>).
+/// </summary>
 public sealed record LessonContent(
     string SourceFile,
+    string Slug,
     string Title,
     string ModuleSlug,
     int Order,

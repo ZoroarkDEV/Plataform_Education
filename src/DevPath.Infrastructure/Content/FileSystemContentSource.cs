@@ -1,4 +1,6 @@
 using DevPath.Application.Content;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using DevPath.Domain.Common;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
@@ -15,7 +17,7 @@ namespace DevPath.Infrastructure.Content;
 /// e lança uma única <see cref="ContentValidationException"/> no fim, para quem edita o conteúdo
 /// ver tudo de uma vez.
 /// </remarks>
-public sealed class FileSystemContentSource(string contentRoot) : IContentSource
+public sealed partial class FileSystemContentSource(string contentRoot) : IContentSource
 {
     // snake_case nos arquivos (estimated_minutes) -> PascalCase nas classes (EstimatedMinutes).
     // Chave desconhecida gera erro: assim um erro de digitação não passa em silêncio.
@@ -62,7 +64,7 @@ public sealed class FileSystemContentSource(string contentRoot) : IContentSource
             return null;
         }
 
-        var file = Deserialize<PathFile>(File.ReadAllText(yamlFile), yamlFile, errors);
+        var file = Deserialize<PathFile>(File.ReadAllText(yamlFile), yamlFile, firstLine: 1, errors);
         if (file is null)
         {
             return null;
@@ -117,7 +119,7 @@ public sealed class FileSystemContentSource(string contentRoot) : IContentSource
         }
 
         return new PathContent(
-            FolderName: Path.GetFileName(pathDir),
+            Slug: Path.GetFileName(pathDir),
             Title: title,
             Description: description,
             Icon: string.IsNullOrWhiteSpace(file.Icon) ? null : file.Icon.Trim(),
@@ -137,10 +139,25 @@ public sealed class FileSystemContentSource(string contentRoot) : IContentSource
             return null;
         }
 
-        var file = Deserialize<LessonFile>(frontmatter, lessonFile, errors);
+        // O frontmatter começa na linha 2 do arquivo (a linha 1 é o '---').
+        var file = Deserialize<LessonFile>(frontmatter, lessonFile, firstLine: 2, errors);
         if (file is null)
         {
             return null;
+        }
+
+        // 02-joins.md -> ordem 2, slug "joins". O slug identifica a aula no banco (progresso fica preso a ele).
+        var name = LessonFileName().Match(Path.GetFileName(lessonFile));
+        if (!name.Success)
+        {
+            errors.Add($"{where}: o nome do arquivo deve seguir o padrão NN-slug.md (ex.: 02-joins.md).");
+            return null;
+        }
+
+        var order = RequiredNumber(file.Order, "order", where, errors);
+        if (file.Order is not null && int.Parse(name.Groups["order"].Value) != order)
+        {
+            errors.Add($"{where}: o prefixo do arquivo ({name.Groups["order"].Value}) não bate com order: {order}.");
         }
 
         if (string.IsNullOrWhiteSpace(body))
@@ -150,9 +167,10 @@ public sealed class FileSystemContentSource(string contentRoot) : IContentSource
 
         return new LessonContent(
             SourceFile: where,
+            Slug: name.Groups["slug"].Value,
             Title: Required(file.Title, "title", where, errors),
             ModuleSlug: Required(file.Module, "module", where, errors),
-            Order: RequiredNumber(file.Order, "order", where, errors),
+            Order: order,
             EstimatedMinutes: RequiredNumber(file.EstimatedMinutes, "estimated_minutes", where, errors),
             Language: string.IsNullOrWhiteSpace(file.Language) ? null : file.Language.Trim().ToLowerInvariant(),
             Difficulty: ParseDifficulty(file.Difficulty, "difficulty", where, errors),
@@ -179,7 +197,8 @@ public sealed class FileSystemContentSource(string contentRoot) : IContentSource
         return (frontmatter, body);
     }
 
-    private T? Deserialize<T>(string yaml, string file, List<string> errors) where T : class
+    // firstLine: em que linha do arquivo o YAML começa (path.yaml = 1; frontmatter = 2).
+    private T? Deserialize<T>(string yaml, string file, int firstLine, List<string> errors) where T : class
     {
         try
         {
@@ -193,10 +212,54 @@ public sealed class FileSystemContentSource(string contentRoot) : IContentSource
         }
         catch (YamlException ex)
         {
-            errors.Add($"{Relative(file)}: YAML inválido ({ex.Message} {ex.InnerException?.Message})".Trim());
+            errors.Add($"{Relative(file)}, linha {ex.Start.Line + firstLine - 1}: {DescribeYamlError<T>(ex, yaml)}");
             return null;
         }
     }
+
+    // Traduz o erro do YamlDotNet para algo útil a quem edita conteúdo, sem nomes de tipos .NET.
+    private static string DescribeYamlError<T>(YamlException ex, string yaml)
+    {
+        var unknownKey = UnknownPropertyMessage().Match(ex.Message);
+        if (unknownKey.Success)
+        {
+            return $"chave desconhecida '{unknownKey.Groups["key"].Value}'. Chaves aceitas: {string.Join(", ", AcceptedKeys(ex, typeof(T)))}.";
+        }
+
+        // Erro de valor (ex.: "order: dois"): descobre a chave pela própria linha do YAML.
+        var lines = yaml.ReplaceLineEndings("\n").Split('\n');
+        var lineIndex = (int)ex.Start.Line - 1;
+        var key = lineIndex >= 0 && lineIndex < lines.Length ? KeyOfLine().Match(lines[lineIndex]) : Match.Empty;
+
+        if (ex is not SyntaxErrorException && key.Success)
+        {
+            var field = key.Groups["key"].Value;
+            return NumericKeys.Contains(field)
+                ? $"valor inválido em '{field}': esperado um número inteiro."
+                : $"valor inválido em '{field}'.";
+        }
+
+        return "YAML mal formatado (confira indentação, ':' depois de cada chave e aspas/colchetes fechados).";
+    }
+
+    private static readonly HashSet<string> NumericKeys = ["order", "estimated_minutes", "estimated_hours"];
+
+    // Lista as chaves do bloco onde a chave desconhecida apareceu (raiz do arquivo ou item de modules).
+    private static IEnumerable<string> AcceptedKeys(YamlException ex, Type rootType)
+    {
+        var type = rootType == typeof(PathFile) && ex.Start.Column > 1 ? typeof(ModuleEntry) : rootType;
+        return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => UnderscoredNamingConvention.Instance.Apply(p.Name));
+    }
+
+    [GeneratedRegex(@"Property '(?<key>[^']+)' not found")]
+    private static partial Regex UnknownPropertyMessage();
+
+    [GeneratedRegex(@"^\s*(-\s*)?(?<key>[A-Za-z_][A-Za-z0-9_]*)\s*:")]
+    private static partial Regex KeyOfLine();
+
+    [GeneratedRegex(@"^(?<order>\d+)-(?<slug>.+)\.md$")]
+    private static partial Regex LessonFileName();
 
     private static string Required(string? value, string field, string where, List<string> errors)
     {

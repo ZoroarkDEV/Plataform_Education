@@ -8,23 +8,30 @@ namespace DevPath.Infrastructure.Content;
 
 /// <summary>
 /// Importa as trilhas de <c>/content</c> para o banco fazendo upsert: cria o que não existe e
-/// atualiza o que mudou. Rodar duas vezes seguidas não duplica nada (a segunda não altera linha alguma).
+/// atualiza o que mudou. Rodar duas vezes seguidas não altera nada na segunda.
 /// </summary>
 /// <remarks>
-/// <para>Como cada item é encontrado no banco:</para>
+/// <para>Cada item é encontrado no banco pelo slug, que nunca muda sozinho (o progresso do aluno fica preso a ele):</para>
 /// <list type="bullet">
-/// <item>Trilha: pelo <c>Slug</c> (derivado do título, igual ao nome da pasta).</item>
-/// <item>Módulo: pela <c>Order</c> dentro da trilha. Aula: pela <c>Order</c> dentro do módulo.</item>
+/// <item>Trilha: nome da pasta (<c>content/paths/sql-dados</c>).</item>
+/// <item>Módulo: <c>slug</c> no <c>path.yaml</c> (igual ao nome da pasta do módulo), dentro da trilha.</item>
+/// <item>Aula: nome do arquivo sem o prefixo de ordem (<c>02-joins.md</c> -> <c>joins</c>), dentro do módulo.</item>
 /// </list>
 /// <para>
-/// As entidades do Domain só têm setters privados e não têm métodos de atualização. Para atualizar
-/// sem mexer no Domain, o seeder altera os valores pelo <c>ChangeTracker</c> do EF Core (que enxerga
-/// os setters privados). Criação continua passando pelas factories do Domain (<c>Create</c>).
+/// Mudar título ou ordem atualiza a mesma linha. Como (trilha, ordem) e (módulo, ordem) são únicos no banco,
+/// a reordenação é feita em dois passos na mesma transação: primeiro os itens que mudam de ordem são
+/// "estacionados" numa ordem temporária alta (<see cref="ParkingOffset"/> + ordem atual), depois recebem a ordem final.
 /// </para>
-/// <para>O seeder nunca apaga dados: o que existe no banco e sumiu de /content só gera um aviso no log.</para>
+/// <para>
+/// Nada é apagado. O que existe no banco e sumiu de /content: trilha é desativada, módulo é despublicado,
+/// e ambos (e aulas) vão para o fim da ordem, com aviso no log. Se voltarem para /content, são reativados.
+/// </para>
 /// </remarks>
 public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, ILogger<ContentSeeder> logger) : IContentSeeder
 {
+    /// <summary>Ordem temporária usada durante a reordenação (o CHECK do banco não aceita ordem negativa).</summary>
+    public const int ParkingOffset = 1_000_000;
+
     public async Task<ContentSeedResult> SeedAsync(CancellationToken cancellationToken = default)
     {
         var paths = source.LoadPaths();
@@ -40,19 +47,58 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         // Tudo ou nada: se algo falhar no meio, nenhuma trilha fica pela metade.
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        foreach (var path in paths.OrderBy(p => p.Order))
+        var existing = await db.CareerPaths
+            .Include(p => p.Modules)
+            .ThenInclude(m => m.Lessons)
+            .AsSplitQuery()
+            .ToListAsync(cancellationToken);
+
+        var plan = paths
+            .OrderBy(p => p.Order)
+            .Select(content => new PathPlan(content, existing.SingleOrDefault(p => p.Slug == content.Slug)))
+            .ToList();
+
+        var targets = plan.Where(p => p.Entity is not null)
+            .Select(p => ComputeTargetOrders(p.Entity!, p.Content))
+            .SelectMany(t => t)
+            .ToDictionary(t => t.Key, t => t.Value, ReferenceEqualityComparer.Instance);
+
+        var changes = new ChangeCounter();
+
+        // Passo 1: estaciona quem vai mudar de ordem, para não bater no índice único no passo 2.
+        foreach (var (entity, order) in targets)
         {
-            await UpsertPathAsync(path, cancellationToken);
+            Park(entity, order);
         }
 
-        var entries = db.ChangeTracker.Entries().ToList();
-        var result = new ContentSeedResult(
-            Inserted: entries.Count(e => e.State == EntityState.Added),
-            Updated: entries.Count(e => e.State == EntityState.Modified));
+        if (db.ChangeTracker.HasChanges())
+        {
+            changes.Collect(db);
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
+        // Passo 2: valores finais.
+        foreach (var item in plan)
+        {
+            UpsertPath(item, targets);
+        }
+
+        var contentSlugs = paths.Select(p => p.Slug).ToHashSet();
+        foreach (var orphan in existing.Where(p => !contentSlugs.Contains(p.Slug)))
+        {
+            logger.LogWarning(
+                "Trilha '{Path}' existe no banco mas não em content/paths. Foi desativada; nada foi apagado.", orphan.Slug);
+            if (orphan.IsActive)
+            {
+                orphan.Deactivate();
+            }
+        }
+
+        changes.Collect(db);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        var result = changes.ToResult();
         logger.LogInformation(
             "Seed de conteúdo concluído: {Paths} trilhas lidas, {Inserted} linhas inseridas, {Updated} atualizadas.",
             paths.Count, result.Inserted, result.Updated);
@@ -60,30 +106,81 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         return result;
     }
 
-    private async Task UpsertPathAsync(PathContent content, CancellationToken cancellationToken)
+    /// <summary>
+    /// Ordem final de cada módulo/aula que já existe no banco. Itens de /content ficam com a ordem do arquivo;
+    /// órfãos vão para o fim, mantendo a ordem relativa entre eles.
+    /// </summary>
+    private static Dictionary<object, int> ComputeTargetOrders(CareerPath path, PathContent content)
     {
-        var slug = content.FolderName; // o ContentValidator garante que é o slug do título
+        var targets = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
+        var moduleContents = content.Modules.ToDictionary(m => m.Slug);
 
-        var path = await db.CareerPaths
-            .Include(p => p.Modules)
-            .ThenInclude(m => m.Lessons)
-            .SingleOrDefaultAsync(p => p.Slug == slug, cancellationToken);
+        AssignTargets(path.Modules, m => m.Slug, m => m.Order,
+            slug => moduleContents.TryGetValue(slug, out var c) ? c.Order : null, content.Modules.Count, targets);
+
+        foreach (var module in path.Modules)
+        {
+            if (!moduleContents.TryGetValue(module.Slug, out var moduleContent))
+            {
+                continue; // módulo órfão: as aulas ficam como estão
+            }
+
+            var lessonOrders = moduleContent.Lessons.ToDictionary(l => l.Slug, l => l.Order);
+            AssignTargets(module.Lessons, l => l.Slug, l => l.Order,
+                slug => lessonOrders.TryGetValue(slug, out var order) ? order : null, moduleContent.Lessons.Count, targets);
+        }
+
+        return targets;
+    }
+
+    private static void AssignTargets<T>(
+        IEnumerable<T> items, Func<T, string> slugOf, Func<T, int> orderOf,
+        Func<string, int?> contentOrder, int contentCount, Dictionary<object, int> targets) where T : class
+    {
+        var next = contentCount;
+        foreach (var item in items.OrderBy(orderOf))
+        {
+            targets[item] = contentOrder(slugOf(item)) ?? ++next;
+        }
+    }
+
+    private static void Park(object entity, int target)
+    {
+        switch (entity)
+        {
+            case Module m when m.Order != target:
+                m.UpdateDetails(m.Title, m.Description, ParkingOffset + m.Order, m.EstimatedMinutes);
+                break;
+            case Lesson l when l.Order != target:
+                l.UpdateContent(l.Title, l.ContentType, l.Content, ParkingOffset + l.Order, l.EstimatedMinutes, l.CodeLanguage, l.Difficulty);
+                break;
+        }
+    }
+
+    private void UpsertPath(PathPlan item, Dictionary<object, int> targets)
+    {
+        var content = item.Content;
+        var path = item.Entity;
 
         if (path is null)
         {
             path = CareerPath.Create(
                 content.Title, content.Description, content.DifficultyLevel,
                 content.EstimatedHours, content.Order, content.Icon);
+            ApplySlug(path.Slug, content.Slug, path.ChangeSlug);
             db.CareerPaths.Add(path);
         }
         else
         {
-            SetIfChanged(path, nameof(CareerPath.Title), content.Title);
-            SetIfChanged(path, nameof(CareerPath.Description), content.Description);
-            SetIfChanged(path, nameof(CareerPath.Icon), content.Icon);
-            SetIfChanged(path, nameof(CareerPath.DifficultyLevel), content.DifficultyLevel);
-            SetIfChanged(path, nameof(CareerPath.EstimatedHours), content.EstimatedHours);
-            SetIfChanged(path, nameof(CareerPath.Order), content.Order);
+            path.UpdateDetails(
+                content.Title, content.Description, content.DifficultyLevel,
+                content.EstimatedHours, content.Order, content.Icon);
+
+            if (!path.IsActive)
+            {
+                logger.LogInformation("Trilha '{Path}' voltou para content/paths e foi reativada.", path.Slug);
+                path.Activate();
+            }
         }
 
         foreach (var moduleContent in content.Modules)
@@ -91,7 +188,20 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
             UpsertModule(path, moduleContent);
         }
 
-        WarnAboutOrphans(path, content);
+        var moduleSlugs = content.Modules.Select(m => m.Slug).ToHashSet();
+        foreach (var orphan in path.Modules.Where(m => !moduleSlugs.Contains(m.Slug)))
+        {
+            logger.LogWarning(
+                "Módulo '{Module}' ('{Title}') da trilha '{Path}' existe no banco mas não em /content. "
+                + "Foi despublicado e movido para o fim (ordem {Order}); nada foi apagado.",
+                orphan.Slug, orphan.Title, path.Slug, targets[orphan]);
+
+            orphan.UpdateDetails(orphan.Title, orphan.Description, targets[orphan], orphan.EstimatedMinutes);
+            if (orphan.IsPublished)
+            {
+                orphan.Unpublish();
+            }
+        }
     }
 
     private void UpsertModule(CareerPath path, ModuleContent content)
@@ -99,17 +209,16 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         // O tempo do módulo é a soma das aulas, para não ter dois números para manter.
         var estimatedMinutes = content.Lessons.Sum(l => l.EstimatedMinutes);
 
-        var module = path.Modules.FirstOrDefault(m => m.Order == content.Order);
+        var module = path.Modules.FirstOrDefault(m => m.Slug == content.Slug);
         if (module is null)
         {
             module = Module.Create(path.Id, content.Title, content.Order, content.Description, estimatedMinutes);
+            ApplySlug(module.Slug, content.Slug, module.ChangeSlug);
             db.Modules.Add(module);
         }
         else
         {
-            SetIfChanged(module, nameof(Module.Title), content.Title);
-            SetIfChanged(module, nameof(Module.Description), content.Description);
-            SetIfChanged(module, nameof(Module.EstimatedMinutes), estimatedMinutes);
+            module.UpdateDetails(content.Title, content.Description, content.Order, estimatedMinutes);
         }
 
         // Conteúdo que está versionado em /content é conteúdo publicado.
@@ -122,58 +231,76 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         {
             UpsertLesson(module, lessonContent);
         }
+
+        var lessonSlugs = content.Lessons.Select(l => l.Slug).ToHashSet();
+        var nextOrder = content.Lessons.Count;
+        foreach (var orphan in module.Lessons.Where(l => !lessonSlugs.Contains(l.Slug)).OrderBy(l => l.Order).ToList())
+        {
+            // Lesson não tem flag de publicação no Domain: a aula órfã só vai para o fim do módulo.
+            var order = ++nextOrder;
+            logger.LogWarning(
+                "Aula '{Lesson}' ('{Title}') do módulo '{Module}' da trilha '{Path}' existe no banco mas não em /content. "
+                + "Foi movida para o fim do módulo (ordem {Order}); nada foi apagado.",
+                orphan.Slug, orphan.Title, module.Slug, path.Slug, order);
+
+            orphan.UpdateContent(orphan.Title, orphan.ContentType, orphan.Content, order,
+                orphan.EstimatedMinutes, orphan.CodeLanguage, orphan.Difficulty);
+        }
     }
 
     private void UpsertLesson(Module module, LessonContent content)
     {
-        var lesson = module.Lessons.FirstOrDefault(l => l.Order == content.Order);
+        var lesson = module.Lessons.FirstOrDefault(l => l.Slug == content.Slug);
         if (lesson is null)
         {
             lesson = Lesson.Create(
                 module.Id, content.Title, ContentType.Markdown, content.Body, content.Order,
                 content.EstimatedMinutes, content.Language, content.Difficulty);
+            ApplySlug(lesson.Slug, content.Slug, lesson.ChangeSlug);
             db.Lessons.Add(lesson);
             return;
         }
 
-        SetIfChanged(lesson, nameof(Lesson.Title), content.Title);
-        SetIfChanged(lesson, nameof(Lesson.ContentType), ContentType.Markdown);
-        SetIfChanged(lesson, nameof(Lesson.Content), content.Body);
-        SetIfChanged(lesson, nameof(Lesson.EstimatedMinutes), content.EstimatedMinutes);
-        SetIfChanged(lesson, nameof(Lesson.CodeLanguage), content.Language);
-        SetIfChanged(lesson, nameof(Lesson.Difficulty), content.Difficulty);
+        lesson.UpdateContent(
+            content.Title, ContentType.Markdown, content.Body, content.Order,
+            content.EstimatedMinutes, content.Language, content.Difficulty);
     }
 
-    // Só marca a propriedade como alterada se o valor mudou de verdade (é o que torna o seed idempotente).
-    private void SetIfChanged<TEntity>(TEntity entity, string propertyName, object? value) where TEntity : class
+    // O Create do Domain gera o slug a partir do título; aqui o slug vem do arquivo/pasta.
+    // SlugGenerator remove hífens de dentro das palavras ("sql-dados" -> "sqldados"), então
+    // passamos as partes separadas por espaço ("sql dados" -> "sql-dados").
+    private static void ApplySlug(string current, string wanted, Action<string> changeSlug)
     {
-        var property = db.Entry(entity).Property(propertyName);
-        if (!Equals(property.CurrentValue, value))
+        if (current != wanted)
         {
-            property.CurrentValue = value;
+            changeSlug(wanted.Replace('-', ' '));
         }
     }
 
-    private void WarnAboutOrphans(CareerPath path, PathContent content)
-    {
-        var moduleOrders = content.Modules.Select(m => m.Order).ToHashSet();
-        foreach (var module in path.Modules.Where(m => !moduleOrders.Contains(m.Order)))
-        {
-            logger.LogWarning(
-                "Módulo '{Module}' (ordem {Order}) da trilha '{Path}' existe no banco mas não em /content. Nada foi apagado.",
-                module.Title, module.Order, path.Slug);
-        }
+    private sealed record PathPlan(PathContent Content, CareerPath? Entity);
 
-        foreach (var moduleContent in content.Modules)
+    // Soma as mudanças dos dois SaveChanges sem contar a mesma linha duas vezes.
+    private sealed class ChangeCounter
+    {
+        private readonly HashSet<object> _inserted = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<object> _updated = new(ReferenceEqualityComparer.Instance);
+
+        public void Collect(DbContext db)
         {
-            var module = path.Modules.FirstOrDefault(m => m.Order == moduleContent.Order);
-            var lessonOrders = moduleContent.Lessons.Select(l => l.Order).ToHashSet();
-            foreach (var lesson in module?.Lessons.Where(l => !lessonOrders.Contains(l.Order)) ?? [])
+            db.ChangeTracker.DetectChanges();
+            foreach (var entry in db.ChangeTracker.Entries())
             {
-                logger.LogWarning(
-                    "Aula '{Lesson}' (ordem {Order}) do módulo '{Module}' existe no banco mas não em /content. Nada foi apagado.",
-                    lesson.Title, lesson.Order, moduleContent.Slug);
+                if (entry.State == EntityState.Added)
+                {
+                    _inserted.Add(entry.Entity);
+                }
+                else if (entry.State == EntityState.Modified)
+                {
+                    _updated.Add(entry.Entity);
+                }
             }
         }
+
+        public ContentSeedResult ToResult() => new(_inserted.Count, _updated.Count(e => !_inserted.Contains(e)));
     }
 }
