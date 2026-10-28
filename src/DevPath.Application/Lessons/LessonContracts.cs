@@ -22,14 +22,14 @@ public sealed record LessonDto(
     LessonBreadcrumb Breadcrumb,
     LessonLink? PreviousLesson,
     LessonLink? NextLesson,
-    int Position,
-    int TotalInModule);
+    int Position = 0,
+    int TotalInModule = 0);
 
 /// <summary>Trilha › Módulo: os links do "você está aqui" no topo da aula.</summary>
 public sealed record LessonBreadcrumb(string PathSlug, string PathTitle, string ModuleSlug, string ModuleTitle);
 
 /// <summary>Link para uma aula vizinha. <paramref name="IsDraft"/> = mostrar "Em breve" em vez de link.</summary>
-public sealed record LessonLink(string Slug, string Title, bool IsDraft);
+public sealed record LessonLink(string Slug, string Title, bool IsDraft = false);
 
 public enum LessonLoadErrorKind
 {
@@ -43,7 +43,7 @@ public enum LessonLoadErrorKind
     Draft
 }
 
-/// <param name="Detail">Mensagem em português, pronta para exibir ou registrar no log.</param>
+/// <param name="Detail">Detalhe técnico para log e para "Ver detalhe técnico". O texto amigável ao aluno é escolhido pela Web a partir de <see cref="Kind"/>.</param>
 public sealed record LessonLoadError(LessonLoadErrorKind Kind, string Detail);
 
 /// <summary>
@@ -72,4 +72,7 @@ public sealed record LessonLoadResult
     public static LessonLoadResult Malformed(string detail) => new(null, new LessonLoadError(LessonLoadErrorKind.Malformed, detail));
 
     public static LessonLoadResult Draft(string detail) => new(null, new LessonLoadError(LessonLoadErrorKind.Draft, detail));
+
+    /// <summary>Forma genérica (compatível com o contrato combinado com o Frontend em feat/aulas-markdown).</summary>
+    public static LessonLoadResult Failure(LessonLoadErrorKind kind, string detail) => new(null, new LessonLoadError(kind, detail));
 }
