@@ -224,6 +224,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
             }
 
             (await LessonSlugsInOrderAsync("consultas")).Should().Equal("joins", "subqueries-e-ctes", "agregacoes-group-by-having");
+            (await LessonPublishedAsync("consultas", "agregacoes-group-by-having")).Should().BeFalse();
             (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
 
             // Conteúdo de volta: tudo é republicado/reativado nas posições originais.
@@ -236,6 +237,81 @@ public sealed class ContentSeederTests : IAsyncLifetime
             (await after.Modules.CountAsync(m => !m.IsPublished)).Should().Be(0);
             (await after.Modules.SingleAsync(m => m.Slug == "crud")).Order.Should().Be(3);
             (await LessonSlugsInOrderAsync("consultas")).Should().Equal("joins", "agregacoes-group-by-having", "subqueries-e-ctes");
+            (await after.Lessons.CountAsync(l => !l.IsPublished)).Should().Be(0);
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_AulaRemovidaDoConteudo_EhDespublicadaEMantemOProgresso()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonId = await LessonIdAsync("ambiente", "instalando-docker-desktop");
+            var userId = await AddProgressAsync(lessonId);
+
+            // Remove a aula 02 e renumera as seguintes para 2..3.
+            var ambiente = ModuleDir(copy, "sql-dados", "ambiente");
+            File.Delete(Path.Combine(ambiente, "02-instalando-docker-desktop.md"));
+            RenumberLesson(ambiente, "03-docker-compose-com-postgresql.md", 2);
+            RenumberLesson(ambiente, "04-pgadmin-e-dbeaver.md", 3);
+
+            await SeedAsync(copy);
+
+            (await LessonSlugsInOrderAsync("ambiente")).Should().Equal(
+                "o-que-e-banco-relacional", "docker-compose-com-postgresql", "pgadmin-e-dbeaver", "instalando-docker-desktop");
+            await using (var db = CreateDbContext())
+            {
+                var removed = await db.Lessons.SingleAsync(l => l.Id == lessonId);
+                removed.IsPublished.Should().BeFalse("aula que sumiu de /content não pode continuar visível");
+                removed.Order.Should().Be(4);
+                (await db.Lessons.CountAsync(l => !l.IsPublished)).Should().Be(1, "só a aula removida é despublicada");
+                (await db.UserProgress.SingleAsync(p => p.UserId == userId)).LessonId.Should().Be(lessonId);
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_AulaRemovidaQueVoltaParaOConteudo_EhRepublicadaNaMesmaLinha()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonId = await LessonIdAsync("ambiente", "instalando-docker-desktop");
+            var userId = await AddProgressAsync(lessonId);
+
+            var ambiente = ModuleDir(copy, "sql-dados", "ambiente");
+            var removedFile = Path.Combine(ambiente, "02-instalando-docker-desktop.md");
+            var original = File.ReadAllText(removedFile);
+            File.Delete(removedFile);
+            RenumberLesson(ambiente, "03-docker-compose-com-postgresql.md", 2);
+            RenumberLesson(ambiente, "04-pgadmin-e-dbeaver.md", 3);
+            await SeedAsync(copy);
+            (await LessonPublishedAsync("ambiente", "instalando-docker-desktop")).Should().BeFalse();
+
+            // A aula volta para a posição original.
+            RenumberLesson(ambiente, "03-pgadmin-e-dbeaver.md", 4);
+            RenumberLesson(ambiente, "02-docker-compose-com-postgresql.md", 3);
+            File.WriteAllText(removedFile, original);
+
+            var result = await SeedAsync(copy);
+
+            result.Inserted.Should().Be(0, "a aula volta na mesma linha, não é criada de novo");
+            (await LessonSlugsInOrderAsync("ambiente")).Should().Equal(
+                "o-que-e-banco-relacional", "instalando-docker-desktop", "docker-compose-com-postgresql", "pgadmin-e-dbeaver");
+            await using (var db = CreateDbContext())
+            {
+                var back = await db.Lessons.SingleAsync(l => l.Slug == "instalando-docker-desktop");
+                back.Id.Should().Be(lessonId);
+                back.IsPublished.Should().BeTrue();
+                back.Order.Should().Be(2);
+                (await db.Lessons.CountAsync(l => !l.IsPublished)).Should().Be(0);
+                (await db.UserProgress.SingleAsync(p => p.UserId == userId)).LessonId.Should().Be(lessonId);
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
         });
     }
 
@@ -341,6 +417,24 @@ public sealed class ContentSeederTests : IAsyncLifetime
                 : e));
     }
 
+    private async Task<bool> LessonPublishedAsync(string module, string slug)
+    {
+        await using var db = CreateDbContext();
+        return await db.Lessons.Where(l => l.Slug == slug && db.Modules.Any(m => m.Id == l.ModuleId && m.Slug == module))
+            .Select(l => l.IsPublished).SingleAsync();
+    }
+
+    // UserProgress.UserId tem FK para AspNetUsers (Identity).
+    private async Task<Guid> AddProgressAsync(Guid lessonId)
+    {
+        var userId = Guid.NewGuid();
+        await using var db = CreateDbContext();
+        db.Users.Add(new ApplicationUser { Id = userId, UserName = $"{userId:N}@teste.dev", Email = $"{userId:N}@teste.dev", DisplayName = "Aluno" });
+        db.UserProgress.Add(UserProgress.StartLesson(userId, lessonId));
+        await db.SaveChangesAsync();
+        return userId;
+    }
+
     private async Task<Guid> LessonIdAsync(string module, string slug)
     {
         await using var db = CreateDbContext();
@@ -366,7 +460,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
         await using var db = CreateDbContext();
         var paths = await db.CareerPaths.Select(p => $"P|{p.Id}|{p.Slug}|{p.Title}|{p.Order}|{p.IsActive}").ToListAsync();
         var modules = await db.Modules.Select(m => $"M|{m.Id}|{m.Slug}|{m.Title}|{m.Order}|{m.IsPublished}|{m.EstimatedMinutes}").ToListAsync();
-        var lessons = await db.Lessons.Select(l => $"L|{l.Id}|{l.Slug}|{l.Title}|{l.Order}|{l.Content.Length}").ToListAsync();
+        var lessons = await db.Lessons.Select(l => $"L|{l.Id}|{l.Slug}|{l.Title}|{l.Order}|{l.IsPublished}|{l.Content.Length}").ToListAsync();
         return paths.Concat(modules).Concat(lessons).Order(StringComparer.Ordinal).ToList();
     }
 

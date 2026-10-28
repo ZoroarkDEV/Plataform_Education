@@ -23,8 +23,8 @@ namespace DevPath.Infrastructure.Content;
 /// "estacionados" numa ordem temporária alta (<see cref="ParkingOffset"/> + ordem atual), depois recebem a ordem final.
 /// </para>
 /// <para>
-/// Nada é apagado. O que existe no banco e sumiu de /content: trilha é desativada, módulo é despublicado,
-/// e ambos (e aulas) vão para o fim da ordem, com aviso no log. Se voltarem para /content, são reativados.
+/// Nada é apagado. O que existe no banco e sumiu de /content: trilha é desativada, módulo e aula são despublicados,
+/// e módulos e aulas vão para o fim da ordem, com aviso no log. Se voltarem para /content, são reativados/republicados.
 /// </para>
 /// </remarks>
 public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, ILogger<ContentSeeder> logger) : IContentSeeder
@@ -236,15 +236,19 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         var nextOrder = content.Lessons.Count;
         foreach (var orphan in module.Lessons.Where(l => !lessonSlugs.Contains(l.Slug)).OrderBy(l => l.Order).ToList())
         {
-            // Lesson não tem flag de publicação no Domain: a aula órfã só vai para o fim do módulo.
+            // A aula órfã some para o aluno (despublicada) e vai para o fim do módulo; o progresso continua preso a ela.
             var order = ++nextOrder;
             logger.LogWarning(
                 "Aula '{Lesson}' ('{Title}') do módulo '{Module}' da trilha '{Path}' existe no banco mas não em /content. "
-                + "Foi movida para o fim do módulo (ordem {Order}); nada foi apagado.",
+                + "Foi despublicada e movida para o fim do módulo (ordem {Order}); nada foi apagado.",
                 orphan.Slug, orphan.Title, module.Slug, path.Slug, order);
 
             orphan.UpdateContent(orphan.Title, orphan.ContentType, orphan.Content, order,
                 orphan.EstimatedMinutes, orphan.CodeLanguage, orphan.Difficulty);
+            if (orphan.IsPublished)
+            {
+                orphan.Unpublish();
+            }
         }
     }
 
@@ -264,16 +268,22 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         lesson.UpdateContent(
             content.Title, ContentType.Markdown, content.Body, content.Order,
             content.EstimatedMinutes, content.Language, content.Difficulty);
+
+        // Conteúdo que está versionado em /content é conteúdo publicado (a aula pode ter voltado depois de removida).
+        if (!lesson.IsPublished)
+        {
+            logger.LogInformation("Aula '{Lesson}' do módulo '{Module}' voltou para /content e foi republicada.", lesson.Slug, module.Slug);
+            lesson.Publish();
+        }
     }
 
     // O Create do Domain gera o slug a partir do título; aqui o slug vem do arquivo/pasta.
-    // SlugGenerator remove hífens de dentro das palavras ("sql-dados" -> "sqldados"), então
-    // passamos as partes separadas por espaço ("sql dados" -> "sql-dados").
+    // SlugGenerator mantém hífens como separadores ("sql-dados" -> "sql-dados"), então o slug vai direto.
     private static void ApplySlug(string current, string wanted, Action<string> changeSlug)
     {
         if (current != wanted)
         {
-            changeSlug(wanted.Replace('-', ' '));
+            changeSlug(wanted);
         }
     }
 
