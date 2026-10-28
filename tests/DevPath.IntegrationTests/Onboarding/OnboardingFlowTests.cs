@@ -12,8 +12,9 @@ namespace DevPath.IntegrationTests.Onboarding;
 
 /// <summary>
 /// Fluxo da issue #11 (US-11.1 a US-11.4): home → cadastro → "Escolha sua trilha" → dashboard.
-/// O serviço do Backend ainda não existe: os testes trocam a porta por <see cref="FakeStudentJourneyGateway"/>,
-/// e um teste garante que, SEM o dublê, as telas mostram o estado vazio (nunca 500).
+/// Os testes de tela trocam a porta por <see cref="FakeStudentJourneyGateway"/> (dados de exemplo em cada estado);
+/// um teste usa o serviço real com o banco sem trilhas (estado vazio, nunca 500). O fluxo com o serviço real e
+/// trilhas no banco está em <see cref="OnboardingRealServiceTests"/>.
 /// </summary>
 [Collection(WebAppCollection.Name)]
 public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
@@ -93,7 +94,7 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task SemServicoDoBackend_TelasMostramEstadoVazioSemErro()
+    public async Task ServicoReal_BancoSemTrilhas_TelasMostramEstadoVazioSemErro()
     {
         var client = factory.CreateBrowserClient();
         await RegisterAsync(client);
@@ -111,7 +112,7 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
         post.StatusCode.Should().Be(HttpStatusCode.Redirect);
         post.Headers.Location!.ToString().Should().Be(ChoosePathUrl);
         (await (await client.GetAsync(ChoosePathUrl)).ReadHtmlAsync())
-            .Should().Contain("Não conseguimos salvar sua escolha agora.");
+            .Should().Contain("Não encontramos essa trilha. Escolha uma das opções abaixo.");
     }
 
     [Fact]

@@ -9,7 +9,6 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevPath.UnitTests.Web.Onboarding;
 
@@ -54,9 +53,55 @@ public class OnboardingControllersTests
         controller.TempData[OnboardingController.FlashKey].Should().Be("Você começou a trilha SQL & Dados!");
     }
 
+    [Fact]
+    public async Task Escolha_MatriculouSemTitulo_UsaConfirmacaoGenerica()
+    {
+        var controller = Onboarding(new StubGateway { Outcome = new EnrollmentOutcome(EnrollmentStatus.Enrolled) });
+
+        await controller.ChoosePath("sql-dados", CancellationToken.None);
+
+        controller.TempData[OnboardingController.FlashKey].Should().Be("Você começou sua trilha!");
+    }
+
+    [Fact]
+    public async Task Escolha_JaMatriculado_VaiParaODashboardComAvisoDeUmaTrilhaPorVez()
+    {
+        var controller = Onboarding(new StubGateway { Outcome = EnrollmentOutcome.AlreadyEnrolled("SQL & Dados") });
+
+        var result = await controller.ChoosePath("backend-net", CancellationToken.None);
+
+        result.Should().BeOfType<RedirectToActionResult>().Which.ControllerName.Should().Be("Dashboard");
+        controller.TempData[OnboardingController.FlashKey].Should()
+            .Be("Você já está na trilha SQL & Dados. Por enquanto é uma trilha por vez: continue de onde parou.");
+    }
+
+    [Fact]
+    public async Task Escolha_JaMatriculadoSemTitulo_UsaAvisoGenerico()
+    {
+        var controller = Onboarding(new StubGateway { Outcome = EnrollmentOutcome.AlreadyEnrolled() });
+
+        await controller.ChoosePath("backend-net", CancellationToken.None);
+
+        controller.TempData[OnboardingController.FlashKey].Should().Be(OnboardingController.AlreadyEnrolledMessage);
+    }
+
+    [Fact]
+    public async Task Escolha_UsuarioNaoExisteMais_EncerraASessaoEVaiParaOLogin()
+    {
+        var auth = new SucceedingAuth();
+        var controller = WithContext(new OnboardingController(new StubGateway { Outcome = EnrollmentOutcome.UserNotFound() }, auth));
+
+        var result = await controller.ChoosePath("sql-dados", CancellationToken.None);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ControllerName.Should().Be("Account");
+        redirect.ActionName.Should().Be(nameof(AccountController.Login));
+        auth.LogoutCalls.Should().Be(1);
+    }
+
     [Theory]
     [InlineData(EnrollmentStatus.PathNotFound, "Não encontramos essa trilha.")]
-    [InlineData(EnrollmentStatus.Unavailable, "Não conseguimos salvar sua escolha agora.")]
+    [InlineData(EnrollmentStatus.NoLessons, "Essa trilha ainda não tem aulas.")]
     public async Task Escolha_Falhou_VoltaParaAEscolhaComMensagem(EnrollmentStatus status, string message)
     {
         var controller = Onboarding(new StubGateway { Outcome = new EnrollmentOutcome(status) });
@@ -128,19 +173,8 @@ public class OnboardingControllersTests
         redirect.ActionName.Should().Be(nameof(OnboardingController.ChoosePath));
     }
 
-    [Fact]
-    public async Task ServicoPendente_DevolveEstadosVaziosSemExcecao()
-    {
-        var pending = new PendingStudentJourneyGateway(NullLogger<PendingStudentJourneyGateway>.Instance);
-
-        (await pending.GetActivePathsAsync(CancellationToken.None)).Should().BeEmpty();
-        (await pending.HasCurrentPathAsync(UserId, CancellationToken.None)).Should().BeFalse();
-        (await pending.GetDashboardAsync(UserId, CancellationToken.None)).Should().BeNull();
-        (await pending.EnrollAsync(UserId, "sql-dados", CancellationToken.None)).Status.Should().Be(EnrollmentStatus.Unavailable);
-    }
-
     private static OnboardingController Onboarding(StubGateway gateway, bool withUser = true) =>
-        WithContext(new OnboardingController(gateway), withUser);
+        WithContext(new OnboardingController(gateway, new SucceedingAuth()), withUser);
 
     private static T WithContext<T>(T controller, bool withUser = true) where T : Controller
     {
@@ -164,7 +198,7 @@ public class OnboardingControllersTests
     {
         public IReadOnlyList<PathOptionViewModel> Paths { get; init; } = [];
         public bool HasPath { get; init; }
-        public EnrollmentOutcome Outcome { get; init; } = EnrollmentOutcome.Unavailable();
+        public EnrollmentOutcome Outcome { get; init; } = EnrollmentOutcome.PathNotFound();
         public DashboardViewModel? Dashboard { get; init; }
         public int EnrollCalls { get; private set; }
 
@@ -184,6 +218,12 @@ public class OnboardingControllersTests
     {
         public Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default) => Task.FromResult(AuthResult.Success());
         public Task<AuthResult> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default) => Task.FromResult(AuthResult.Success());
-        public Task LogoutAsync() => Task.CompletedTask;
+        public int LogoutCalls { get; private set; }
+
+        public Task LogoutAsync()
+        {
+            LogoutCalls++;
+            return Task.CompletedTask;
+        }
     }
 }

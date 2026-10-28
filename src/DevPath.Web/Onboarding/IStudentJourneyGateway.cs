@@ -3,23 +3,18 @@ using DevPath.Web.ViewModels.Onboarding;
 namespace DevPath.Web.Onboarding;
 
 /// <summary>
-/// PORTA PROVISÓRIA da Web para o onboarding e o dashboard (issue #11).
+/// Porta da Web para o onboarding e o dashboard (issue #11), no formato dos view models das telas.
 /// </summary>
 /// <remarks>
 /// <para>
 /// A regra de negócio (matrícula, desbloqueio R1, percentual R3, rascunhos R4, progresso R5) é do
-/// Backend e ainda não existe na <c>dev</c>. Esta interface só descreve o que as telas precisam ler,
-/// já no formato dos view models, para não duplicar nada que o Backend vá criar em
-/// <c>DevPath.Application</c>.
+/// Backend: <c>DevPath.Application.Journey.IStudentJourneyService</c>. A implementação desta porta é o
+/// adapter <see cref="StudentJourneyGateway"/>, que só mapeia os DTOs e traduz os casos de erro
+/// esperados (sem exceção para o controller).
 /// </para>
 /// <para>
-/// Quando o serviço real existir, a troca é: um adapter fino na Web que implementa esta interface
-/// chamando o serviço da Application e mapeando os DTOs (ou as views passam a usar os DTOs e esta
-/// interface é apagada). Contrato proposto: <c>docs/frontend.md</c>, seção "Onboarding e dashboard".
-/// </para>
-/// <para>
-/// Implementações: <see cref="PendingStudentJourneyGateway"/> (padrão, sem dados: as telas mostram os
-/// estados vazios, nunca erro 500) e um dublê com dados de exemplo que existe SÓ nos projetos de teste.
+/// Os controllers dependem desta porta (e não do serviço) para os testes de unidade e de tela poderem
+/// trocar o serviço por um dublê; o dublê com dados de exemplo existe SÓ nos projetos de teste.
 /// </para>
 /// </remarks>
 public interface IStudentJourneyGateway
@@ -38,7 +33,9 @@ public interface IStudentJourneyGateway
     Task<EnrollmentOutcome> EnrollAsync(Guid userId, string pathSlug, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Dashboard da trilha atual, já calculado. <c>null</c> quando o aluno ainda não escolheu trilha.
+    /// Dashboard da trilha atual, já calculado. <c>null</c> quando o aluno ainda não escolheu trilha
+    /// (ou o usuário não existe mais: o serviço devolve null nos dois casos e o dashboard manda para a escolha;
+    /// a conta apagada é detectada na matrícula, como <see cref="EnrollmentStatus.UserNotFound"/>).
     /// Módulos na ordem da trilha (<c>Module.Order</c>) e aulas na ordem do módulo (<c>Lesson.Order</c>):
     /// a tela numera "Módulo 1, 2..." pela posição na lista (no SQL &amp; Dados, "Primeiros passos com SQL"
     /// é o módulo 1, issue #22).
@@ -50,18 +47,28 @@ public interface IStudentJourneyGateway
 public sealed record EnrollmentOutcome(EnrollmentStatus Status, string? PathTitle = null)
 {
     public static EnrollmentOutcome Enrolled(string pathTitle) => new(EnrollmentStatus.Enrolled, pathTitle);
-    public static EnrollmentOutcome AlreadyEnrolled() => new(EnrollmentStatus.AlreadyEnrolled);
+    public static EnrollmentOutcome AlreadyEnrolled(string? currentPathTitle = null) => new(EnrollmentStatus.AlreadyEnrolled, currentPathTitle);
     public static EnrollmentOutcome PathNotFound() => new(EnrollmentStatus.PathNotFound);
-    public static EnrollmentOutcome Unavailable() => new(EnrollmentStatus.Unavailable);
+    public static EnrollmentOutcome NoLessons() => new(EnrollmentStatus.NoLessons);
+    public static EnrollmentOutcome UserNotFound() => new(EnrollmentStatus.UserNotFound);
 }
 
 public enum EnrollmentStatus
 {
+    /// <summary>Matrícula criada agora (<see cref="EnrollmentOutcome.PathTitle"/> preenchido).</summary>
     Enrolled,
-    /// <summary>O aluno já tem uma trilha; trocar de trilha está fora do escopo do #11.</summary>
+    /// <summary>
+    /// O aluno já tem uma trilha (a mesma ou outra); trocar de trilha está fora do escopo do #11.
+    /// <see cref="EnrollmentOutcome.PathTitle"/> = título da trilha atual do aluno.
+    /// </summary>
     AlreadyEnrolled,
     /// <summary>Slug inexistente ou trilha inativa.</summary>
     PathNotFound,
-    /// <summary>Serviço ainda não disponível (implementação pendente do Backend).</summary>
-    Unavailable
+    /// <summary>
+    /// A trilha está ativa, mas não tem nenhuma aula disponível (inclusive quando só tem rascunhos).
+    /// Não é serviço fora do ar.
+    /// </summary>
+    NoLessons,
+    /// <summary>O usuário do cookie não existe mais no banco (conta apagada): a Web encerra a sessão.</summary>
+    UserNotFound
 }

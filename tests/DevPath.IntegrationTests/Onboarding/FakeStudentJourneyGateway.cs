@@ -6,8 +6,8 @@ using DevPath.Web.ViewModels.Onboarding;
 namespace DevPath.IntegrationTests.Onboarding;
 
 /// <summary>
-/// DUBLÊ DE TESTE (só existe neste projeto de testes): faz o papel do serviço de onboarding/progresso
-/// que o Backend ainda vai implementar. Guarda a matrícula em memória e devolve um dashboard de exemplo.
+/// DUBLÊ DE TESTE (só existe neste projeto de testes, entra por DI nos testes de tela): substitui o adapter
+/// do serviço real para montar cada estado do dashboard. Guarda a matrícula em memória e devolve um dashboard de exemplo.
 /// </summary>
 public sealed class FakeStudentJourneyGateway : IStudentJourneyGateway
 {
@@ -44,7 +44,7 @@ public sealed class FakeStudentJourneyGateway : IStudentJourneyGateway
 
         return Task.FromResult(_enrollments.TryAdd(userId, pathSlug)
             ? EnrollmentOutcome.Enrolled(path.Title)
-            : EnrollmentOutcome.AlreadyEnrolled());
+            : EnrollmentOutcome.AlreadyEnrolled(Paths.FirstOrDefault(p => p.Slug == _enrollments[userId])?.Title));
     }
 
     public Task<DashboardViewModel?> GetDashboardAsync(Guid userId, CancellationToken cancellationToken) =>
