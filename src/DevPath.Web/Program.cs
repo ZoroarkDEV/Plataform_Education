@@ -2,6 +2,7 @@ using System.Net;
 using DevPath.Application.Content;
 using DevPath.Infrastructure;
 using DevPath.Infrastructure.Content;
+using DevPath.Web.Api;
 using DevPath.Web.Lessons;
 using Microsoft.AspNetCore.HttpOverrides;
 
@@ -33,6 +34,10 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;                     // renova enquanto o usuário estiver ativo
 });
+
+// API de execução de exercícios (issue #25, ADR-006): antiforgery por header, rate limit por aluno e 401 em /api.
+// A Web NÃO executa código nem fala com o Docker: só enfileira no Redis (o DevPath.Worker executa).
+builder.Services.AddExerciseExecutionApi(builder.Configuration);
 
 // Atrás de um proxy reverso (nginx, Traefik, load balancer) o HTTPS termina no proxy e a app recebe HTTP.
 // Os cabeçalhos X-Forwarded-Proto/For contam o esquema e o IP originais. Só confiamos neles quando
@@ -102,7 +107,12 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Depois da autenticação: o limite é por aluno, então precisa saber quem ele é.
+app.UseRateLimiter();
+
 app.MapStaticAssets();
+
+app.MapExerciseExecutionApi();
 
 app.MapControllerRoute(
     name: "default",
