@@ -100,6 +100,12 @@ Exemplos de decisões corretas:
 
 > Qualquer mudança de stack precisa de justificativa explícita e aprovação implícita da filosofia deste README.
 
+### Frontend (Tailwind + HTMX)
+
+O CSS é gerado pelo Tailwind standalone CLI (sem Node/npm): `dotnet build` baixa o CLI fixado e compila
+`src/DevPath.Web/Styles/app.css` → `wwwroot/css/site.css` (commitado). O HTMX fica versionado em
+`wwwroot/lib/htmx`. Detalhes, modo watch e exemplo de HTMX em [`docs/frontend.md`](docs/frontend.md).
+
 ---
 
 ## 5. Como o Agente Deve Trabalhar (Processo)

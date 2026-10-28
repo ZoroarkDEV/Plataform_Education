@@ -18,6 +18,13 @@ public class HomeController : Controller
         return View();
     }
 
+    // Endpoint do exemplo HTMX da Home: devolve só a partial, sem o layout.
+    [HttpGet]
+    public IActionResult ServerTime()
+    {
+        return PartialView("_ServerTime", new ServerTimeViewModel(DateTimeOffset.Now));
+    }
+
     public IActionResult Privacy()
     {
         return View();
