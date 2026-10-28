@@ -9,11 +9,12 @@ namespace DevPath.Infrastructure.Lessons;
 
 /// <inheritdoc />
 /// <remarks>
-/// Faz duas consultas pequenas e só de leitura (<c>AsNoTracking</c>: o EF não guarda as entidades
+/// Faz três consultas pequenas e só de leitura (<c>AsNoTracking</c>: o EF não guarda as entidades
 /// para detectar mudanças, o que é mais leve):
 /// 1) trilha + módulo + aula pelos slugs;
 /// 2) a lista "enxuta" (slug, título, rascunho) das aulas publicadas do módulo, para montar
-///    anterior/próxima e "Aula X de Y" sem carregar o Markdown de todas as aulas.
+///    anterior/próxima e "Aula X de Y" sem carregar o Markdown de todas as aulas;
+/// 3) o exercício da aula, projetado direto no <see cref="ExerciseDto"/> (sem solução nem casos de teste).
 /// Se o jsonb de objetivos estiver corrompido no banco, a aula volta como <see cref="LessonLoadErrorKind.Malformed"/>
 /// (com log) em vez de derrubar a página.
 /// </remarks>
@@ -101,6 +102,28 @@ public sealed class LessonContentService(DevPathDbContext db, ILogger<LessonCont
         LessonLink? ToLink(int i) =>
             i >= 0 && i < siblings.Count ? new LessonLink(siblings[i].Slug, siblings[i].Title, siblings[i].IsDraft) : null;
 
+        // Exercício: projeção só com o que o aluno pode ver (nunca SolutionCode nem TestCases).
+        // Um exercício por aula (um NN-aula.exercise.json); o mais antigo, se por acaso houver mais.
+        ExerciseDto? exercise;
+        try
+        {
+            exercise = await db.Exercises.AsNoTracking()
+                .Where(e => e.LessonId == current.Id)
+                .OrderBy(e => e.Id)
+                .Select(e => new ExerciseDto(
+                    e.Title, e.Statement, e.Language, e.Dataset,
+                    e.StarterCode == "" ? null : e.StarterCode,
+                    e.Hints, e.Points))
+                .FirstOrDefaultAsync(ct);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Exercício da aula {Route} tem Hints inválido no banco (não é uma lista de textos).", route);
+            return LessonLoadResult.Malformed(
+                $"O exercício da aula \"{current.Title}\" tem dicas inválidas no banco (esperado: lista de textos). "
+                + "Verifique o arquivo .exercise.json em /content e rode o seed de novo.");
+        }
+
         var dto = new LessonDto(
             LessonId: current.Id,
             Slug: current.Slug,
@@ -114,7 +137,8 @@ public sealed class LessonContentService(DevPathDbContext db, ILogger<LessonCont
             PreviousLesson: ToLink(index - 1),
             NextLesson: ToLink(index + 1),
             Position: index + 1,
-            TotalInModule: siblings.Count);
+            TotalInModule: siblings.Count,
+            Exercise: exercise);
 
         return LessonLoadResult.Success(dto);
     }

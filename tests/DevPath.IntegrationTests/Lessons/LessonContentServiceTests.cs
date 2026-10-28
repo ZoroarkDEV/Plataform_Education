@@ -36,10 +36,14 @@ public sealed class LessonContentFixture : IAsyncLifetime
             learningObjectives: ["Usar SELECT", "Filtrar com WHERE"]);
         module.AddLesson("Removida", ContentType.Markdown, "# Removida").Unpublish();
         module.AddLesson("Joins", ContentType.Markdown, "# JOIN", estimatedMinutes: 15, codeLanguage: "sql",
-            difficulty: DifficultyLevel.Intermediate);
+            difficulty: DifficultyLevel.Intermediate)
+            .AddExercise("Autores e livros", "Liste **título** e **autor**.", "sql", "[{\"name\":\"caso\",\"rows\":[[\"LINHA_SECRETA\"]]}]",
+                points: 10, starterCode: "SELECT ", solutionCode: "SELECT SOLUCAO_SECRETA;", dataset: "livraria",
+                hints: ["Dica geral", "Dica mais direta"]);
         module.AddLesson("Em Construção", ContentType.Markdown, "# Em breve", isDraft: true);
         module.AddLesson("Vazia", ContentType.Markdown, "   ");
-        module.AddLesson("Agregações", ContentType.Markdown, "# GROUP BY");
+        module.AddLesson("Agregações", ContentType.Markdown, "# GROUP BY")
+            .AddExercise("Sem starter", "Conte os livros.", "sql", "[]", points: 15);
 
         // Módulo ainda não publicado: suas aulas não podem abrir.
         path.AddModule("Módulo Oculto").AddLesson("Aula Oculta", ContentType.Markdown, "# oculta");
@@ -242,5 +246,41 @@ public sealed class LessonContentServiceTests(LessonContentFixture fixture) : IC
 
         (await act.Should().ThrowAsync<Npgsql.PostgresException>())
             .Which.ConstraintName.Should().Be("CK_Lessons_LearningObjectives_IsArray");
+    }
+
+    [Fact]
+    public async Task AulaComExercicio_TrazOExercicioSemSolucaoNemCasosDeTeste()
+    {
+        var result = await LoadAsync("joins");
+
+        result.Lesson!.Exercise.Should().Be(new ExerciseDto(
+            Title: "Autores e livros",
+            StatementMarkdown: "Liste **título** e **autor**.",
+            Language: "sql",
+            Dataset: "livraria",
+            StarterCode: "SELECT ",
+            Hints: result.Lesson.Exercise!.Hints,
+            Points: 10));
+        result.Lesson.Exercise.Hints.Should().Equal("Dica geral", "Dica mais direta");
+
+        // Nada do que é só do servidor pode sair no DTO (nem serializado para a Web).
+        var json = System.Text.Json.JsonSerializer.Serialize(result);
+        json.Should().NotContain("SOLUCAO_SECRETA").And.NotContain("LINHA_SECRETA");
+    }
+
+    [Fact]
+    public async Task ExercicioSemStarterCode_VemComStarterNuloEPontosDoBanco()
+    {
+        var exercise = (await LoadAsync("agregacoes")).Lesson!.Exercise!;
+        exercise.StarterCode.Should().BeNull();
+        exercise.Dataset.Should().BeNull();
+        exercise.Hints.Should().BeEmpty();
+        exercise.Points.Should().Be(15);
+    }
+
+    [Fact]
+    public async Task AulaSemExercicio_ExerciseNulo()
+    {
+        (await LoadAsync("select-basico")).Lesson!.Exercise.Should().BeNull();
     }
 }

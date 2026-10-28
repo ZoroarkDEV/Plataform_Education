@@ -10,6 +10,7 @@ namespace DevPath.Application.Lessons;
 /// <param name="TotalInModule">Quantas aulas publicadas o módulo tem (rascunhos contam).</param>
 /// <param name="PreviousLesson">Aula anterior no mesmo módulo, ou <c>null</c> se esta é a primeira.</param>
 /// <param name="NextLesson">Próxima aula no mesmo módulo, ou <c>null</c> se esta é a última.</param>
+/// <param name="Exercise">Exercício da aula (<c>NN-aula.exercise.json</c>), ou <c>null</c> se a aula não tem.</param>
 public sealed record LessonDto(
     Guid LessonId,
     string Slug,
@@ -23,7 +24,26 @@ public sealed record LessonDto(
     LessonLink? PreviousLesson,
     LessonLink? NextLesson,
     int Position = 0,
-    int TotalInModule = 0);
+    int TotalInModule = 0,
+    ExerciseDto? Exercise = null);
+
+/// <summary>
+/// O que o aluno vê do exercício. De propósito NÃO tem a solução, as linhas esperadas (<c>test_cases</c>)
+/// nem os <c>common_errors</c>: isso fica só no servidor (ADR-003, "solução protegida").
+/// </summary>
+/// <param name="StatementMarkdown">Enunciado em Markdown.</param>
+/// <param name="Dataset">Base usada no exercício (ex.: "livraria"), ou <c>null</c>.</param>
+/// <param name="StarterCode">Código que já aparece no editor, ou <c>null</c> se não houver.</param>
+/// <param name="Hints">Dicas na ordem em que devem ser reveladas: da mais geral para a mais direta.</param>
+/// <param name="Points">Pontos do exercício (provisório: 10 por exercício).</param>
+public sealed record ExerciseDto(
+    string Title,
+    string StatementMarkdown,
+    string Language,
+    string? Dataset,
+    string? StarterCode,
+    IReadOnlyList<string> Hints,
+    int Points = 10);
 
 /// <summary>Trilha › Módulo: os links do "você está aqui" no topo da aula.</summary>
 public sealed record LessonBreadcrumb(string PathSlug, string PathTitle, string ModuleSlug, string ModuleTitle);

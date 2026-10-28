@@ -50,6 +50,7 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         var existing = await db.CareerPaths
             .Include(p => p.Modules)
             .ThenInclude(m => m.Lessons)
+            .ThenInclude(l => l.Exercises)
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
 
@@ -262,6 +263,11 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
                 content.EstimatedMinutes, content.Language, content.Difficulty,
                 learningObjectives: content.Objectives, isDraft: content.IsDraft);
             ApplySlug(lesson.Slug, content.Slug, lesson.ChangeSlug);
+            if (content.Exercise is { } newExercise)
+            {
+                AddExercise(lesson, newExercise); // entra junto com a aula (grafo novo)
+            }
+
             db.Lessons.Add(lesson);
             return;
         }
@@ -278,7 +284,51 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
             logger.LogInformation("Aula '{Lesson}' do módulo '{Module}' voltou para /content e foi republicada.", lesson.Slug, module.Slug);
             lesson.Publish();
         }
+
+        UpsertExercise(lesson, content);
     }
+
+    /// <summary>
+    /// Um exercício por aula (<c>NN-aula.exercise.json</c>): o exercício existente é atualizado na mesma linha
+    /// (o Id não muda, então tentativas e pontos do aluno continuam presos a ele). Nada é apagado: se o arquivo
+    /// sumir, o exercício fica no banco, com aviso no log.
+    /// </summary>
+    private void UpsertExercise(Lesson lesson, LessonContent content)
+    {
+        var existing = lesson.Exercises.OrderBy(e => e.Id).FirstOrDefault();
+        if (content.Exercise is not { } exercise)
+        {
+            if (existing is not null)
+            {
+                logger.LogWarning(
+                    "Aula '{Lesson}' tem exercício no banco mas não em /content ({File}.exercise.json). O exercício foi mantido; nada foi apagado.",
+                    lesson.Slug, content.SourceFile[..^".md".Length]);
+            }
+
+            return;
+        }
+
+        if (existing is null)
+        {
+            db.Exercises.Add(AddExercise(lesson, exercise));
+            return;
+        }
+
+        // O jsonb do PostgreSQL reordena chaves e tira espaços: comparar o texto marcaria mudança em todo seed.
+        var testCases = SameJson(existing.TestCases, exercise.TestCasesJson) ? existing.TestCases : exercise.TestCasesJson;
+        existing.Update(
+            exercise.Title, exercise.Statement, exercise.Language, testCases, exercise.Points,
+            exercise.StarterCode, exercise.Solution, existing.MaxAttempts, exercise.Dataset, exercise.Hints);
+    }
+
+    private static bool SameJson(string a, string b) =>
+        System.Text.Json.Nodes.JsonNode.DeepEquals(
+            System.Text.Json.Nodes.JsonNode.Parse(a), System.Text.Json.Nodes.JsonNode.Parse(b));
+
+    private static Exercise AddExercise(Lesson lesson, ExerciseContent exercise) =>
+        lesson.AddExercise(
+            exercise.Title, exercise.Statement, exercise.Language, exercise.TestCasesJson, exercise.Points,
+            exercise.StarterCode, exercise.Solution, maxAttempts: null, exercise.Dataset, exercise.Hints);
 
     // O Create do Domain gera o slug a partir do título; aqui o slug vem do arquivo/pasta.
     // SlugGenerator mantém hífens como separadores ("sql-dados" -> "sql-dados"), então o slug vai direto.

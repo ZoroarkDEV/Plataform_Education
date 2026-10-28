@@ -67,7 +67,7 @@ internal sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
 }
 
 /// <summary>
-/// Leitura estrita do jsonb de <c>Lesson.LearningObjectives</c>: só aceita lista de textos não vazios.
+/// Leitura estrita de listas de textos em jsonb (<c>Lesson.LearningObjectives</c>, <c>Exercise.Hints</c>): só aceita lista de textos não vazios.
 /// Qualquer outra coisa (<c>{"a":1}</c>, <c>[1]</c>, <c>["ok", null]</c>) lança <see cref="JsonException"/>,
 /// que o <c>LessonContentService</c> transforma em "conteúdo malformado". <c>null</c> em JSON vira lista vazia.
 /// </summary>
@@ -78,7 +78,7 @@ internal static class LearningObjectivesJson
         var list = JsonSerializer.Deserialize<List<string?>>(json, (JsonSerializerOptions?)null) ?? [];
         if (list.Any(string.IsNullOrWhiteSpace))
         {
-            throw new JsonException("LearningObjectives tem item nulo ou vazio.");
+            throw new JsonException("Lista de textos em jsonb tem item nulo ou vazio.");
         }
 
         return list!;

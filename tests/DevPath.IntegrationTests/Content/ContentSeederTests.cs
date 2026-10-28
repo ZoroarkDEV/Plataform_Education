@@ -437,6 +437,67 @@ public sealed class ContentSeederTests : IAsyncLifetime
         });
     }
 
+    [Fact]
+    public async Task SeedAsync_GravaOExercicioDaAulaComDatasetDicasEPontos()
+    {
+        await SeedAsync(_repoContent);
+
+        await using var db = CreateDbContext();
+        var lessonId = await LessonIdAsync("primeiros-passos-com-sql", "seu-primeiro-select");
+        var exercise = await db.Exercises.AsNoTracking().SingleAsync(e => e.LessonId == lessonId);
+        exercise.Title.Should().Be("Lista de preços");
+        exercise.Language.Should().Be("sql");
+        exercise.Dataset.Should().Be("livraria");
+        exercise.Points.Should().Be(10);
+        exercise.SolutionCode.Should().Be("SELECT titulo, preco FROM livros;");
+        exercise.Hints.Should().HaveCount(2);
+        exercise.Hints[0].Should().StartWith("Você precisa de duas colunas", "as dicas mantêm a ordem do arquivo (mais geral primeiro)");
+        exercise.TestCases.Should().Contain("Dom Casmurro");
+
+        // Os 5 exercícios do módulo "Primeiros passos com SQL"; nenhum duplicado.
+        (await db.Exercises.CountAsync()).Should().Be(5);
+    }
+
+    [Fact]
+    public async Task SeedAsync_ExercicioEditado_AtualizaAMesmaLinhaEArquivoRemovidoNaoApaga()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonId = await LessonIdAsync("primeiros-passos-com-sql", "seu-primeiro-select");
+            Guid exerciseId;
+            await using (var db = CreateDbContext())
+            {
+                exerciseId = (await db.Exercises.SingleAsync(e => e.LessonId == lessonId)).Id;
+            }
+
+            var file = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.exercise.json");
+            var original = File.ReadAllText(file);
+            File.WriteAllText(file, original
+                .Replace("\"points\": 10", "\"points\": 20")
+                .Replace("\"hints\": [", "\"hints\": [\n    \"  Dica nova, a mais geral.  \","));
+
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                var exercise = await db.Exercises.AsNoTracking().SingleAsync(e => e.LessonId == lessonId);
+                exercise.Id.Should().Be(exerciseId);
+                exercise.Points.Should().Be(20);
+                exercise.Hints.Should().HaveCount(3);
+                exercise.Hints[0].Should().Be("Dica nova, a mais geral.");
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
+
+            File.Delete(file);
+            await SeedAsync(copy);
+            await using (var db = CreateDbContext())
+            {
+                (await db.Exercises.SingleAsync(e => e.LessonId == lessonId)).Id.Should().Be(exerciseId, "o seed nunca apaga");
+            }
+        });
+    }
+
     private static Task<DevPath.Domain.CareerPaths.Lesson> LessonAsync(DevPathDbContext db, string module, string slug) =>
         db.Lessons.AsNoTracking()
             .SingleAsync(l => l.Slug == slug && db.Modules.Any(m => m.Id == l.ModuleId && m.Slug == module));

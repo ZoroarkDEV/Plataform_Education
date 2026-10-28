@@ -127,6 +127,16 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Dataset")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Hints")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("Language")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -168,6 +178,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Exercises", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Exercises_Hints_IsArray", "jsonb_typeof(\"Hints\") = 'array'");
+
                             t.HasCheckConstraint("CK_Exercises_MaxAttempts_Positive", "\"MaxAttempts\" IS NULL OR \"MaxAttempts\" > 0");
 
                             t.HasCheckConstraint("CK_Exercises_Points_NonNegative", "\"Points\" >= 0");

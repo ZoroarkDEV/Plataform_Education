@@ -113,6 +113,11 @@ Fica ao lado da aula, com o mesmo nome (`01-seu-primeiro-select.md` →
 | `test_cases` | sim, ao menos 1 | resultado esperado: `columns`, `rows` (cada linha com um valor por coluna: texto, número, `true`/`false` ou `null`), `order_matters` e `check_column_names` (padrão `false`) |
 | `common_errors` | não | erros comuns: `example` (consulta errada) e `message` (explicação amigável) |
 
+O seed grava o exercício no banco junto com a aula (um exercício por aula, sempre na mesma linha:
+editar o arquivo atualiza o exercício sem perder tentativas). Apagar o `.exercise.json` não apaga o
+exercício do banco. Para o aluno só vão título, enunciado, linguagem, dataset, código inicial,
+dicas e pontos; `solution`, `test_cases` e `common_errors` ficam só no servidor.
+
 Como a resposta do aluno é comparada (regras do PO, issue #22):
 
 - Compara o **resultado**, não o texto da consulta.
