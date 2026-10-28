@@ -62,6 +62,44 @@ public sealed class ConstraintsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AulaDespublicada_EhGravadaComoFalse()
+    {
+        // Protege contra o "sentinela" do EF: com HasDefaultValue(true), false não seria enviado no INSERT.
+        Guid lessonId;
+        await using (var db = CreateDbContext())
+        {
+            var path = CareerPath.Create($"Trilha {Guid.NewGuid():N}");
+            var lesson = path.AddModule("Fundamentos").AddLesson("Removida", ContentType.Markdown, "# x");
+            lesson.Unpublish();
+            lessonId = lesson.Id;
+            db.CareerPaths.Add(path);
+            await db.SaveChangesAsync();
+        }
+
+        await using var check = CreateDbContext();
+        (await check.Lessons.SingleAsync(l => l.Id == lessonId)).IsPublished.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AulaInseridaSemIsPublished_FicaPublicadaPeloDefaultDaMigration()
+    {
+        await using var db = CreateDbContext();
+        var path = CareerPath.Create($"Trilha {Guid.NewGuid():N}");
+        var module = path.AddModule("Fundamentos");
+        db.CareerPaths.Add(path);
+        await db.SaveChangesAsync();
+
+        // Simula uma aula que já existia antes da migration AddLessonIsPublished.
+        var lessonId = Guid.NewGuid();
+        await db.Database.ExecuteSqlAsync($"""
+            INSERT INTO "Lessons" ("Id", "ModuleId", "Title", "Slug", "ContentType", "Content", "Order", "EstimatedMinutes", "Difficulty")
+            VALUES ({lessonId}, {module.Id}, 'Antiga', 'antiga', 'Markdown', '# antiga', 1, 0, 'Beginner')
+            """);
+
+        (await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == lessonId)).IsPublished.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ModulosComMesmoSlugNaMesmaTrilha_SaoRejeitados()
     {
         await using var db = CreateDbContext();

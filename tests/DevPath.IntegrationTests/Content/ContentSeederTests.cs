@@ -224,6 +224,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
             }
 
             (await LessonSlugsInOrderAsync("consultas")).Should().Equal("joins", "subqueries-e-ctes", "agregacoes-group-by-having");
+            (await LessonPublishedAsync("consultas", "agregacoes-group-by-having")).Should().BeFalse();
             (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
 
             // Conteúdo de volta: tudo é republicado/reativado nas posições originais.
@@ -236,6 +237,81 @@ public sealed class ContentSeederTests : IAsyncLifetime
             (await after.Modules.CountAsync(m => !m.IsPublished)).Should().Be(0);
             (await after.Modules.SingleAsync(m => m.Slug == "crud")).Order.Should().Be(3);
             (await LessonSlugsInOrderAsync("consultas")).Should().Equal("joins", "agregacoes-group-by-having", "subqueries-e-ctes");
+            (await after.Lessons.CountAsync(l => !l.IsPublished)).Should().Be(0);
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_AulaRemovidaDoConteudo_EhDespublicadaEMantemOProgresso()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonId = await LessonIdAsync("ambiente", "instalando-docker-desktop");
+            var userId = await AddProgressAsync(lessonId);
+
+            // Remove a aula 02 e renumera as seguintes para 2..3.
+            var ambiente = ModuleDir(copy, "sql-dados", "ambiente");
+            File.Delete(Path.Combine(ambiente, "02-instalando-docker-desktop.md"));
+            RenumberLesson(ambiente, "03-docker-compose-com-postgresql.md", 2);
+            RenumberLesson(ambiente, "04-pgadmin-e-dbeaver.md", 3);
+
+            await SeedAsync(copy);
+
+            (await LessonSlugsInOrderAsync("ambiente")).Should().Equal(
+                "o-que-e-banco-relacional", "docker-compose-com-postgresql", "pgadmin-e-dbeaver", "instalando-docker-desktop");
+            await using (var db = CreateDbContext())
+            {
+                var removed = await db.Lessons.SingleAsync(l => l.Id == lessonId);
+                removed.IsPublished.Should().BeFalse("aula que sumiu de /content não pode continuar visível");
+                removed.Order.Should().Be(4);
+                (await db.Lessons.CountAsync(l => !l.IsPublished)).Should().Be(1, "só a aula removida é despublicada");
+                (await db.UserProgress.SingleAsync(p => p.UserId == userId)).LessonId.Should().Be(lessonId);
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_AulaRemovidaQueVoltaParaOConteudo_EhRepublicadaNaMesmaLinha()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonId = await LessonIdAsync("ambiente", "instalando-docker-desktop");
+            var userId = await AddProgressAsync(lessonId);
+
+            var ambiente = ModuleDir(copy, "sql-dados", "ambiente");
+            var removedFile = Path.Combine(ambiente, "02-instalando-docker-desktop.md");
+            var original = File.ReadAllText(removedFile);
+            File.Delete(removedFile);
+            RenumberLesson(ambiente, "03-docker-compose-com-postgresql.md", 2);
+            RenumberLesson(ambiente, "04-pgadmin-e-dbeaver.md", 3);
+            await SeedAsync(copy);
+            (await LessonPublishedAsync("ambiente", "instalando-docker-desktop")).Should().BeFalse();
+
+            // A aula volta para a posição original.
+            RenumberLesson(ambiente, "03-pgadmin-e-dbeaver.md", 4);
+            RenumberLesson(ambiente, "02-docker-compose-com-postgresql.md", 3);
+            File.WriteAllText(removedFile, original);
+
+            var result = await SeedAsync(copy);
+
+            result.Inserted.Should().Be(0, "a aula volta na mesma linha, não é criada de novo");
+            (await LessonSlugsInOrderAsync("ambiente")).Should().Equal(
+                "o-que-e-banco-relacional", "instalando-docker-desktop", "docker-compose-com-postgresql", "pgadmin-e-dbeaver");
+            await using (var db = CreateDbContext())
+            {
+                var back = await db.Lessons.SingleAsync(l => l.Slug == "instalando-docker-desktop");
+                back.Id.Should().Be(lessonId);
+                back.IsPublished.Should().BeTrue();
+                back.Order.Should().Be(2);
+                (await db.Lessons.CountAsync(l => !l.IsPublished)).Should().Be(0);
+                (await db.UserProgress.SingleAsync(p => p.UserId == userId)).LessonId.Should().Be(lessonId);
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
         });
     }
 
@@ -276,6 +352,155 @@ public sealed class ContentSeederTests : IAsyncLifetime
             (await CountRowsAsync()).Should().Be((0, 0, 0));
         });
     }
+
+    [Fact]
+    public async Task SeedAsync_GravaObjectivesEDraftDoFrontmatter()
+    {
+        await SeedAsync(_repoContent);
+
+        await using var db = CreateDbContext();
+        var select = await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select");
+        select.IsDraft.Should().BeFalse();
+        select.LearningObjectives.Should().Equal(
+            "Entender que um banco de dados guarda informações em tabelas, com linhas e colunas",
+            "Ler dados de uma tabela com SELECT ... FROM ...",
+            "Escolher quais colunas aparecem no resultado");
+
+        var stub = await LessonAsync(db, "ambiente", "instalando-docker-desktop");
+        stub.IsDraft.Should().BeTrue("o stub tem draft: true no frontmatter");
+    }
+
+    [Fact]
+    public async Task SeedAsync_DraftLigadoEDesligado_AtualizaAMesmaAula()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonFile = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.md");
+            var original = File.ReadAllText(lessonFile);
+            var id = await LessonIdAsync("primeiros-passos-com-sql", "seu-primeiro-select");
+
+            // Liga o rascunho.
+            File.WriteAllText(lessonFile, original.Replace("difficulty: beginner\n", "difficulty: beginner\ndraft: true\n"));
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                var lesson = await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select");
+                lesson.Id.Should().Be(id);
+                lesson.IsDraft.Should().BeTrue();
+                lesson.IsPublished.Should().BeTrue("rascunho continua na navegação como \"Em breve\"");
+            }
+
+            // Desliga (tirar a chave volta ao padrão false).
+            File.WriteAllText(lessonFile, original);
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                (await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select")).IsDraft.Should().BeFalse();
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_ObjectivesTrocadosERemovidos_AtualizaALista()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonFile = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.md");
+            var original = File.ReadAllText(lessonFile).ReplaceLineEndings("\n");
+            var objectivesBlock = Regex.Match(original, @"(?m)^objectives:\n(  - .*\n)+").Value;
+            objectivesBlock.Should().NotBeEmpty();
+
+            // Troca a lista (com espaços nas pontas, que são removidos).
+            File.WriteAllText(lessonFile, original.Replace(objectivesBlock,
+                "objectives:\n  - \"  Ler uma tabela com SELECT  \"\n  - \"Escolher colunas\"\n"));
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                (await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select"))
+                    .LearningObjectives.Should().Equal("Ler uma tabela com SELECT", "Escolher colunas");
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue("mesma lista não conta como mudança");
+
+            // Tira a chave: a lista fica vazia.
+            File.WriteAllText(lessonFile, original.Replace(objectivesBlock, string.Empty));
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                (await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select"))
+                    .LearningObjectives.Should().BeEmpty();
+            }
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_GravaOExercicioDaAulaComDatasetDicasEPontos()
+    {
+        await SeedAsync(_repoContent);
+
+        await using var db = CreateDbContext();
+        var lessonId = await LessonIdAsync("primeiros-passos-com-sql", "seu-primeiro-select");
+        var exercise = await db.Exercises.AsNoTracking().SingleAsync(e => e.LessonId == lessonId);
+        exercise.Title.Should().Be("Lista de preços");
+        exercise.Language.Should().Be("sql");
+        exercise.Dataset.Should().Be("livraria");
+        exercise.Points.Should().Be(10);
+        exercise.SolutionCode.Should().Be("SELECT titulo, preco FROM livros;");
+        exercise.Hints.Should().HaveCount(2);
+        exercise.Hints[0].Should().StartWith("Você precisa de duas colunas", "as dicas mantêm a ordem do arquivo (mais geral primeiro)");
+        exercise.TestCases.Should().Contain("Dom Casmurro");
+
+        // Os 5 exercícios do módulo "Primeiros passos com SQL"; nenhum duplicado.
+        (await db.Exercises.CountAsync()).Should().Be(5);
+    }
+
+    [Fact]
+    public async Task SeedAsync_ExercicioEditado_AtualizaAMesmaLinhaEArquivoRemovidoNaoApaga()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonId = await LessonIdAsync("primeiros-passos-com-sql", "seu-primeiro-select");
+            Guid exerciseId;
+            await using (var db = CreateDbContext())
+            {
+                exerciseId = (await db.Exercises.SingleAsync(e => e.LessonId == lessonId)).Id;
+            }
+
+            var file = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.exercise.json");
+            var original = File.ReadAllText(file);
+            File.WriteAllText(file, original
+                .Replace("\"points\": 10", "\"points\": 20")
+                .Replace("\"hints\": [", "\"hints\": [\n    \"  Dica nova, a mais geral.  \","));
+
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                var exercise = await db.Exercises.AsNoTracking().SingleAsync(e => e.LessonId == lessonId);
+                exercise.Id.Should().Be(exerciseId);
+                exercise.Points.Should().Be(20);
+                exercise.Hints.Should().HaveCount(3);
+                exercise.Hints[0].Should().Be("Dica nova, a mais geral.");
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
+
+            File.Delete(file);
+            await SeedAsync(copy);
+            await using (var db = CreateDbContext())
+            {
+                (await db.Exercises.SingleAsync(e => e.LessonId == lessonId)).Id.Should().Be(exerciseId, "o seed nunca apaga");
+            }
+        });
+    }
+
+    private static Task<DevPath.Domain.CareerPaths.Lesson> LessonAsync(DevPathDbContext db, string module, string slug) =>
+        db.Lessons.AsNoTracking()
+            .SingleAsync(l => l.Slug == slug && db.Modules.Any(m => m.Id == l.ModuleId && m.Slug == module));
 
     private async Task<ContentSeedResult> SeedAsync(string contentRoot)
     {
@@ -341,6 +566,24 @@ public sealed class ContentSeederTests : IAsyncLifetime
                 : e));
     }
 
+    private async Task<bool> LessonPublishedAsync(string module, string slug)
+    {
+        await using var db = CreateDbContext();
+        return await db.Lessons.Where(l => l.Slug == slug && db.Modules.Any(m => m.Id == l.ModuleId && m.Slug == module))
+            .Select(l => l.IsPublished).SingleAsync();
+    }
+
+    // UserProgress.UserId tem FK para AspNetUsers (Identity).
+    private async Task<Guid> AddProgressAsync(Guid lessonId)
+    {
+        var userId = Guid.NewGuid();
+        await using var db = CreateDbContext();
+        db.Users.Add(new ApplicationUser { Id = userId, UserName = $"{userId:N}@teste.dev", Email = $"{userId:N}@teste.dev", DisplayName = "Aluno" });
+        db.UserProgress.Add(UserProgress.StartLesson(userId, lessonId));
+        await db.SaveChangesAsync();
+        return userId;
+    }
+
     private async Task<Guid> LessonIdAsync(string module, string slug)
     {
         await using var db = CreateDbContext();
@@ -366,7 +609,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
         await using var db = CreateDbContext();
         var paths = await db.CareerPaths.Select(p => $"P|{p.Id}|{p.Slug}|{p.Title}|{p.Order}|{p.IsActive}").ToListAsync();
         var modules = await db.Modules.Select(m => $"M|{m.Id}|{m.Slug}|{m.Title}|{m.Order}|{m.IsPublished}|{m.EstimatedMinutes}").ToListAsync();
-        var lessons = await db.Lessons.Select(l => $"L|{l.Id}|{l.Slug}|{l.Title}|{l.Order}|{l.Content.Length}").ToListAsync();
+        var lessons = await db.Lessons.Select(l => $"L|{l.Id}|{l.Slug}|{l.Title}|{l.Order}|{l.IsPublished}|{l.Content.Length}").ToListAsync();
         return paths.Concat(modules).Concat(lessons).Order(StringComparer.Ordinal).ToList();
     }
 

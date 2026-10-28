@@ -86,3 +86,36 @@ para não quebrar views que o referenciam; a validação fica no servidor (DataA
   e `aria-invalid="true"` quando o campo tem erro. O `<span asp-validation-for>` precisa de `id="{Campo}-error"`.
 - `Views/Shared/_LoginPartial.cshtml` aparece no header (desktop) e no menu mobile
   (`view-data` com `Variant = "mobile"`). O logout é sempre um `<form method="post">` com antiforgery.
+
+## Tela de aula (Markdown) — issue #12
+
+Rota: `GET /trilhas/{pathSlug}/{moduleSlug}/{lessonSlug}` (`Controllers/LessonsController.cs`, fino, `[Authorize]`:
+sem login vai para `/Account/Login?ReturnUrl=...`).
+
+| Peça | Onde | O que faz |
+|------|------|-----------|
+| Contrato | `DevPath.Application/Lessons/` (do **Backend**) | `ILessonContentService.GetLessonAsync(...)` devolve `LessonLoadResult` (aula **ou** erro `NotFound`/`Malformed`/`Draft`, sem exceção). `Detail` é técnico (log / "Ver detalhe técnico"); o texto amigável a Web escolhe pelo `Kind`. |
+| Serviço real | `DevPath.Infrastructure/Lessons/LessonContentService.cs` | Lê do banco (seed de `/content`), registrado em `AddInfrastructure`. Não há fake em Development; nos testes de integração a tela usa `InMemoryLessonContentService` (ConfigureTestServices + Replace), que imita as regras do real. |
+| Markdown → HTML | `DevPath.Web/Lessons/LessonMarkdownRenderer.cs` | Markdig com `.DisableHtml()` (HTML cru sai escapado), links só `http(s)`/`mailto`/relativos (`javascript:` vira `#`), tabelas. Remove o `# Título` inicial e separa as seções `## O que você vai aprender` (usada só se o DTO não trouxer `LearningObjectives`) e `## Resumo`. |
+| Exercício | `LessonDto.Exercise` (`ExerciseDto`, Application/Lessons), `Views/Lessons/_LessonExercise.cshtml` | Vem de dados estruturados (`NN-aula.exercise.json`), **não** do Markdown. A tela só recebe a visão segura `ExerciseDto` do Backend (título, enunciado em Markdown, linguagem, dataset, pontos, código inicial só leitura, dicas): **nunca** solução, linhas esperadas dos `test_cases` nem `common_errors`. Dicas em `<details>`, liberadas uma a uma com JS. `Exercise = null` (aula sem exercício) esconde a seção; o código inicial só aparece quando `StarterCode` não é `null`. |
+| Destaque de código | `DevPath.Web/Lessons/CodeHighlighter.cs` | No servidor, com ColorCode, só **SQL e C#** (sem JS, sem CDN). Gera `<span class="tok-...">`; cores em `Styles/app.css`. Outras linguagens saem como texto escapado. |
+| Views | `Views/Lessons/Show.cshtml`, `_LessonPager.cshtml`, `Unavailable.cshtml` | Ordem: breadcrumb, anterior/próxima, título, tempo (`~15 min`), nível (pt-BR), objetivos, conteúdo, exercício, resumo, anterior/próxima. |
+| JS | `wwwroot/js/site.js` | Botão **Copiar** (aparece só com JS; anuncia em `#copy-status`, `aria-live`) e botão de tema. |
+
+Regras de tela:
+
+- **Rascunho** (`LessonLink.IsDraft`): "Em breve", sem link; acesso direto = HTTP 404 com "Esta aula está sendo escrita".
+- **Aula com defeito / erro inesperado**: "Não conseguimos carregar esta aula agora. Tente de novo ou volte ao dashboard."
+  (HTTP 500) e `LogError` com o detalhe. "Ver detalhe técnico" (recolhido) só aparece em Development.
+- **Não encontrada / slug inválido**: página amigável com HTTP 404.
+- **Tema escuro**: variante `dark:` por classe (`.dark` no `<html>`), ligada pela preferência do sistema ou pelo botão
+  (salvo em `localStorage`). Por enquanto **só as páginas que definem `ViewData["SupportsDarkMode"] = true`** (aula e
+  página de aula indisponível); as outras telas ainda não têm classes `dark:`.
+- Blocos de código: fundo escuro nos dois temas, `overflow-x: auto`, `tabindex="0"` (rolagem pelo teclado), fonte 16 px.
+
+Testar no navegador (Development, logado): as aulas do seed, ex. `/trilhas/sql-dados/ambiente/o-que-e-banco-relacional`
+(veja os slugs na tabela `lessons`); `.../nao-existe` (404).
+
+Contrastes medidos no Chrome (WCAG AA pede 4.5:1 para texto normal): texto da aula 9.9:1 (claro) / 13.6:1 (escuro);
+links 7.5:1 / 16.3:1; código base 14.5:1; tokens sobre `#0f172b`: keyword 9.9, string 12.7, number 12.4,
+comment 7.0, function 12.3, type 9.7, operator 9.8; rodapé 4.8:1 / 6.8:1.

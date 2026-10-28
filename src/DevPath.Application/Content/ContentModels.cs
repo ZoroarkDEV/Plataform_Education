@@ -41,7 +41,7 @@ public sealed record LessonContent(
 {
     /// <summary>
     /// "O que você vai aprender": frases curtas do frontmatter (<c>objectives:</c>).
-    /// Vai para <c>Lesson.LearningObjectives</c> quando o Domain tiver o campo.
+    /// O seed grava em <c>Lesson.LearningObjectives</c>.
     /// </summary>
     public IReadOnlyList<string> Objectives { get; init; } = [];
 

@@ -23,8 +23,8 @@ namespace DevPath.Infrastructure.Content;
 /// "estacionados" numa ordem temporária alta (<see cref="ParkingOffset"/> + ordem atual), depois recebem a ordem final.
 /// </para>
 /// <para>
-/// Nada é apagado. O que existe no banco e sumiu de /content: trilha é desativada, módulo é despublicado,
-/// e ambos (e aulas) vão para o fim da ordem, com aviso no log. Se voltarem para /content, são reativados.
+/// Nada é apagado. O que existe no banco e sumiu de /content: trilha é desativada, módulo e aula são despublicados,
+/// e módulos e aulas vão para o fim da ordem, com aviso no log. Se voltarem para /content, são reativados/republicados.
 /// </para>
 /// </remarks>
 public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, ILogger<ContentSeeder> logger) : IContentSeeder
@@ -50,6 +50,7 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         var existing = await db.CareerPaths
             .Include(p => p.Modules)
             .ThenInclude(m => m.Lessons)
+            .ThenInclude(l => l.Exercises)
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
 
@@ -236,15 +237,19 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         var nextOrder = content.Lessons.Count;
         foreach (var orphan in module.Lessons.Where(l => !lessonSlugs.Contains(l.Slug)).OrderBy(l => l.Order).ToList())
         {
-            // Lesson não tem flag de publicação no Domain: a aula órfã só vai para o fim do módulo.
+            // A aula órfã some para o aluno (despublicada) e vai para o fim do módulo; o progresso continua preso a ela.
             var order = ++nextOrder;
             logger.LogWarning(
                 "Aula '{Lesson}' ('{Title}') do módulo '{Module}' da trilha '{Path}' existe no banco mas não em /content. "
-                + "Foi movida para o fim do módulo (ordem {Order}); nada foi apagado.",
+                + "Foi despublicada e movida para o fim do módulo (ordem {Order}); nada foi apagado.",
                 orphan.Slug, orphan.Title, module.Slug, path.Slug, order);
 
             orphan.UpdateContent(orphan.Title, orphan.ContentType, orphan.Content, order,
                 orphan.EstimatedMinutes, orphan.CodeLanguage, orphan.Difficulty);
+            if (orphan.IsPublished)
+            {
+                orphan.Unpublish();
+            }
         }
     }
 
@@ -255,25 +260,83 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         {
             lesson = Lesson.Create(
                 module.Id, content.Title, ContentType.Markdown, content.Body, content.Order,
-                content.EstimatedMinutes, content.Language, content.Difficulty);
+                content.EstimatedMinutes, content.Language, content.Difficulty,
+                learningObjectives: content.Objectives, isDraft: content.IsDraft);
             ApplySlug(lesson.Slug, content.Slug, lesson.ChangeSlug);
+            if (content.Exercise is { } newExercise)
+            {
+                AddExercise(lesson, newExercise); // entra junto com a aula (grafo novo)
+            }
+
             db.Lessons.Add(lesson);
             return;
         }
 
+        // objectives e draft vêm sempre do arquivo: tirar a chave do frontmatter limpa a lista / tira o rascunho.
         lesson.UpdateContent(
             content.Title, ContentType.Markdown, content.Body, content.Order,
-            content.EstimatedMinutes, content.Language, content.Difficulty);
+            content.EstimatedMinutes, content.Language, content.Difficulty,
+            learningObjectives: content.Objectives, isDraft: content.IsDraft);
+
+        // Conteúdo que está versionado em /content é conteúdo publicado (a aula pode ter voltado depois de removida).
+        if (!lesson.IsPublished)
+        {
+            logger.LogInformation("Aula '{Lesson}' do módulo '{Module}' voltou para /content e foi republicada.", lesson.Slug, module.Slug);
+            lesson.Publish();
+        }
+
+        UpsertExercise(lesson, content);
     }
 
+    /// <summary>
+    /// Um exercício por aula (<c>NN-aula.exercise.json</c>): o exercício existente é atualizado na mesma linha
+    /// (o Id não muda, então tentativas e pontos do aluno continuam presos a ele). Nada é apagado: se o arquivo
+    /// sumir, o exercício fica no banco, com aviso no log.
+    /// </summary>
+    private void UpsertExercise(Lesson lesson, LessonContent content)
+    {
+        var existing = lesson.Exercises.OrderBy(e => e.Id).FirstOrDefault();
+        if (content.Exercise is not { } exercise)
+        {
+            if (existing is not null)
+            {
+                logger.LogWarning(
+                    "Aula '{Lesson}' tem exercício no banco mas não em /content ({File}.exercise.json). O exercício foi mantido; nada foi apagado.",
+                    lesson.Slug, content.SourceFile[..^".md".Length]);
+            }
+
+            return;
+        }
+
+        if (existing is null)
+        {
+            db.Exercises.Add(AddExercise(lesson, exercise));
+            return;
+        }
+
+        // O jsonb do PostgreSQL reordena chaves e tira espaços: comparar o texto marcaria mudança em todo seed.
+        var testCases = SameJson(existing.TestCases, exercise.TestCasesJson) ? existing.TestCases : exercise.TestCasesJson;
+        existing.Update(
+            exercise.Title, exercise.Statement, exercise.Language, testCases, exercise.Points,
+            exercise.StarterCode, exercise.Solution, existing.MaxAttempts, exercise.Dataset, exercise.Hints);
+    }
+
+    private static bool SameJson(string a, string b) =>
+        System.Text.Json.Nodes.JsonNode.DeepEquals(
+            System.Text.Json.Nodes.JsonNode.Parse(a), System.Text.Json.Nodes.JsonNode.Parse(b));
+
+    private static Exercise AddExercise(Lesson lesson, ExerciseContent exercise) =>
+        lesson.AddExercise(
+            exercise.Title, exercise.Statement, exercise.Language, exercise.TestCasesJson, exercise.Points,
+            exercise.StarterCode, exercise.Solution, maxAttempts: null, exercise.Dataset, exercise.Hints);
+
     // O Create do Domain gera o slug a partir do título; aqui o slug vem do arquivo/pasta.
-    // SlugGenerator remove hífens de dentro das palavras ("sql-dados" -> "sqldados"), então
-    // passamos as partes separadas por espaço ("sql dados" -> "sql-dados").
+    // SlugGenerator mantém hífens como separadores ("sql-dados" -> "sql-dados"), então o slug vai direto.
     private static void ApplySlug(string current, string wanted, Action<string> changeSlug)
     {
         if (current != wanted)
         {
-            changeSlug(wanted.Replace('-', ' '));
+            changeSlug(wanted);
         }
     }
 

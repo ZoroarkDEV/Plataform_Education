@@ -61,9 +61,12 @@ public sealed class Module
         string content,
         int estimatedMinutes = 0,
         string? codeLanguage = null,
-        DifficultyLevel difficulty = DifficultyLevel.Beginner)
+        DifficultyLevel difficulty = DifficultyLevel.Beginner,
+        IEnumerable<string>? learningObjectives = null,
+        bool isDraft = false)
     {
-        var lesson = Lesson.Create(Id, title, contentType, content, order: _lessons.Count + 1, estimatedMinutes, codeLanguage, difficulty);
+        var lesson = Lesson.Create(Id, title, contentType, content, order: _lessons.Count + 1, estimatedMinutes, codeLanguage,
+            difficulty, learningObjectives, isDraft);
         _lessons.Add(lesson);
         return lesson;
     }

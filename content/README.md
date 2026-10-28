@@ -64,13 +64,13 @@ draft: true                         # opcional (padrão false): rascunho, aparec
   A tela da aula esconde do corpo a seção `## O que você vai aprender` até o próximo `## ` e mostra
   `objectives` no lugar, então a seção tem **só a lista** e vem seguida direto de outro título `## `
   (há um teste de conteúdo para isso).
-  Vai para `Lesson.LearningObjectives` quando o domínio tiver esse campo.
+  O seed grava em `Lesson.LearningObjectives` (jsonb).
 - **`draft: true`**: marca a aula como rascunho. A plataforma mostra a aula como **"Em breve"**.
   Todo stub com "Aula em construção" precisa ter `draft: true`. Sem a chave, vale `false`.
-  Vai para `Lesson.IsDraft` quando o domínio tiver esse campo.
+  O seed grava em `Lesson.IsDraft`.
 
-Por enquanto o seed só lê e valida essas duas chaves; gravar no banco depende da migration do
-Backend (`AddLessonObjectivesAndDraft`).
+O seed grava as duas chaves a cada execução (migration `AddLessonObjectivesAndDraft`): tirar
+`objectives` do frontmatter deixa a lista vazia, e tirar `draft` (ou `draft: false`) publica a aula como pronta.
 
 ### Exercício (`modules/<modulo>/NN-<aula>.exercise.json`)
 
@@ -112,6 +112,11 @@ Fica ao lado da aula, com o mesmo nome (`01-seu-primeiro-select.md` →
 | `hints` | não | dicas em ordem, da mais geral para a mais direta |
 | `test_cases` | sim, ao menos 1 | resultado esperado: `columns`, `rows` (cada linha com um valor por coluna: texto, número, `true`/`false` ou `null`), `order_matters` e `check_column_names` (padrão `false`) |
 | `common_errors` | não | erros comuns: `example` (consulta errada) e `message` (explicação amigável) |
+
+O seed grava o exercício no banco junto com a aula (um exercício por aula, sempre na mesma linha:
+editar o arquivo atualiza o exercício sem perder tentativas). Apagar o `.exercise.json` não apaga o
+exercício do banco. Para o aluno só vão título, enunciado, linguagem, dataset, código inicial,
+dicas e pontos; `solution`, `test_cases` e `common_errors` ficam só no servidor.
 
 Como a resposta do aluno é comparada (regras do PO, issue #22):
 
@@ -175,8 +180,8 @@ alunos fica preso à linha do banco, então o slug é a "identidade" do conteúd
 - **Remove um item** daqui: nada é apagado do banco.
   - Trilha removida: fica **desativada**.
   - Módulo removido: fica **despublicado** e vai para o fim da ordem da trilha.
-  - Aula removida: vai para o fim da ordem do módulo (ainda não há como despublicar uma aula no
-    domínio; isso depende de um campo novo em `Lesson`).
+  - Aula removida: fica **despublicada** (some da navegação e não abre) e vai para o fim da ordem
+    do módulo. O progresso dos alunos continua preso a ela.
   - O log mostra um aviso para cada item órfão. Se o item voltar para cá com o mesmo slug, ele é
     reativado/republicado na posição do arquivo.
 

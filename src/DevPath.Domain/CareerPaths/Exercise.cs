@@ -26,6 +26,14 @@ public sealed class Exercise
 
     public int Points { get; private set; }
 
+    /// <summary>Base de dados do exercício (<c>content/datasets/&lt;nome&gt;.sql</c>), ex.: "livraria". Opcional.</summary>
+    public string? Dataset { get; private set; }
+
+    /// <summary>Dicas na ordem do arquivo: da mais geral para a mais direta. Gravadas como jsonb.</summary>
+    public IReadOnlyList<string> Hints { get; private set; } = [];
+
+    public const int MaxDatasetLength = 100;
+
     private Exercise() { }
 
     public static Exercise Create(
@@ -37,14 +45,19 @@ public sealed class Exercise
         int points = 10,
         string starterCode = "",
         string solutionCode = "",
-        int? maxAttempts = null)
+        int? maxAttempts = null,
+        string? dataset = null,
+        IEnumerable<string>? hints = null)
     {
         var exercise = new Exercise { Id = Guid.NewGuid(), LessonId = lessonId };
-        exercise.Update(title, statement, language, testCasesJson, points, starterCode, solutionCode, maxAttempts);
+        exercise.Update(title, statement, language, testCasesJson, points, starterCode, solutionCode, maxAttempts,
+            dataset, hints ?? []);
         return exercise;
     }
 
     /// <summary>Atualiza o exercício (ex.: o seed corrigindo um enunciado), com as mesmas validações do Create.</summary>
+    /// <param name="dataset">Novo dataset (<c>null</c> = sem dataset).</param>
+    /// <param name="hints">Novas dicas; <c>null</c> mantém as atuais.</param>
     public void Update(
         string title,
         string statement,
@@ -53,7 +66,9 @@ public sealed class Exercise
         int points,
         string starterCode,
         string solutionCode,
-        int? maxAttempts)
+        int? maxAttempts,
+        string? dataset = null,
+        IEnumerable<string>? hints = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         ArgumentException.ThrowIfNullOrWhiteSpace(statement);
@@ -67,6 +82,29 @@ public sealed class Exercise
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxAttempts.Value);
         }
 
+        var normalizedDataset = string.IsNullOrWhiteSpace(dataset) ? null : dataset.Trim();
+        if (normalizedDataset is { Length: > MaxDatasetLength })
+        {
+            throw new ArgumentException($"Dataset deve ter no máximo {MaxDatasetLength} caracteres.", nameof(dataset));
+        }
+
+        // Valida antes de alterar qualquer campo: ou atualiza tudo, ou nada.
+        List<string>? normalizedHints = null;
+        if (hints is not null)
+        {
+            normalizedHints = [];
+            foreach (var hint in hints)
+            {
+                var trimmed = hint?.Trim();
+                if (string.IsNullOrEmpty(trimmed))
+                {
+                    throw new ArgumentException("Dica não pode ser vazia.", nameof(hints));
+                }
+
+                normalizedHints.Add(trimmed);
+            }
+        }
+
         Title = title.Trim();
         Statement = statement;
         Language = language.Trim().ToLowerInvariant();
@@ -75,5 +113,7 @@ public sealed class Exercise
         StarterCode = starterCode;
         SolutionCode = solutionCode;
         MaxAttempts = maxAttempts;
+        Dataset = normalizedDataset;
+        Hints = normalizedHints ?? Hints;
     }
 }

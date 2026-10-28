@@ -127,6 +127,16 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Dataset")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Hints")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("Language")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -168,6 +178,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Exercises", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Exercises_Hints_IsArray", "jsonb_typeof(\"Hints\") = 'array'");
+
                             t.HasCheckConstraint("CK_Exercises_MaxAttempts_Positive", "\"MaxAttempts\" IS NULL OR \"MaxAttempts\" > 0");
 
                             t.HasCheckConstraint("CK_Exercises_Points_NonNegative", "\"Points\" >= 0");
@@ -201,6 +213,18 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.Property<int>("EstimatedMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsDraft")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPublished")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LearningObjectives")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<Guid>("ModuleId")
                         .HasColumnType("uuid");
 
@@ -228,6 +252,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.ToTable("Lessons", null, t =>
                         {
                             t.HasCheckConstraint("CK_Lessons_EstimatedMinutes_NonNegative", "\"EstimatedMinutes\" >= 0");
+
+                            t.HasCheckConstraint("CK_Lessons_LearningObjectives_IsArray", "jsonb_typeof(\"LearningObjectives\") = 'array'");
 
                             t.HasCheckConstraint("CK_Lessons_Order_NonNegative", "\"Order\" >= 0");
                         });
@@ -379,6 +405,11 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.HasIndex("CareerPathId");
 
                     b.HasIndex("CurrentModuleId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserPathEnrollments_UserId_Active")
+                        .HasFilter("\"IsActive\"");
 
                     b.ToTable("UserPathEnrollments", null, t =>
                         {

@@ -9,6 +9,10 @@
         (Text: "Privacidade", Controller: "Home", Action: "Privacy"),
     };
 
+    // Tema escuro: por enquanto só nas páginas que pedem (tela de aula). As outras ainda não têm
+    // classes dark: e ficariam ilegíveis. Ver docs/frontend.md.
+    var supportsDarkMode = ViewData["SupportsDarkMode"] is true;
+
     bool IsActive(string controller, string action) =>
         string.Equals(controller, currentController, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(action, currentAction, StringComparison.OrdinalIgnoreCase);
@@ -19,20 +23,33 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - DevPath</title>
+    @if (supportsDarkMode)
+    {
+        @* Antes do CSS para não piscar: escolha salva (localStorage) ou a preferência do sistema. *@
+        <script>
+            (function () {
+                try {
+                    var saved = localStorage.getItem("devpath-theme");
+                    var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+                    document.documentElement.classList.toggle("dark", dark);
+                } catch (e) { /* sem localStorage: fica no tema claro */ }
+            })();
+        </script>
+    }
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @* HTMX 2.0.10 versionado em wwwroot/lib/htmx (sem CDN). *@
     <script src="~/lib/htmx/htmx.min.js" asp-append-version="true" defer></script>
 </head>
-<body class="flex min-h-full flex-col bg-slate-50 text-slate-800 antialiased">
+<body class="flex min-h-full flex-col bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200">
     <a href="#conteudo"
        class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-brand-700 focus:shadow-lg focus:outline-2 focus:outline-brand-600">
         Pular para o conteúdo
     </a>
 
-    <header class="border-b border-slate-200 bg-white">
+    <header class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <nav class="mx-auto flex max-w-6xl items-center px-4 py-3 sm:px-6" aria-label="Principal">
             <a asp-controller="Home" asp-action="Index"
-               class="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600">
+               class="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600">
                 <span class="grid size-8 place-items-center rounded-lg bg-brand-600 font-mono text-sm text-white" aria-hidden="true">&lt;/&gt;</span>
                 DevPath
             </a>
@@ -45,7 +62,7 @@
                     <li>
                         <a asp-controller="@link.Controller" asp-action="@link.Action"
                            aria-current="@(active ? "page" : null)"
-                           class="rounded-md px-3 py-2 text-sm font-medium hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-brand-600 @(active ? "bg-brand-50 text-brand-700" : "text-slate-600")">
+                           class="rounded-md px-3 py-2 text-sm font-medium hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-brand-600 dark:hover:bg-slate-800 dark:hover:text-white @(active ? "bg-brand-50 text-brand-700 dark:bg-slate-800 dark:text-brand-100" : "text-slate-600 dark:text-slate-300")">
                             @link.Text
                         </a>
                     </li>
@@ -58,7 +75,7 @@
 
             @* Botão do menu mobile (controlado por wwwroot/js/site.js) *@
             <button type="button" data-menu-toggle
-                    class="ml-auto inline-flex items-center justify-center rounded-md p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-600 sm:hidden"
+                    class="ml-auto inline-flex items-center justify-center rounded-md p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-600 dark:text-slate-300 dark:hover:bg-slate-800 sm:hidden"
                     aria-controls="menu-mobile" aria-expanded="false" aria-label="Abrir menu de navegação">
                 <svg class="size-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -67,7 +84,7 @@
         </nav>
 
         @* Menu mobile *@
-        <div id="menu-mobile" class="hidden border-t border-slate-200 px-4 py-3 sm:hidden">
+        <div id="menu-mobile" class="hidden border-t border-slate-200 px-4 py-3 dark:border-slate-800 sm:hidden">
             <ul class="space-y-1">
                 @foreach (var link in navLinks)
                 {
@@ -75,7 +92,7 @@
                     <li>
                         <a asp-controller="@link.Controller" asp-action="@link.Action"
                            aria-current="@(active ? "page" : null)"
-                           class="block rounded-md px-3 py-2 text-base font-medium hover:bg-slate-100 @(active ? "bg-brand-50 text-brand-700" : "text-slate-700")">
+                           class="block rounded-md px-3 py-2 text-base font-medium hover:bg-slate-100 dark:hover:bg-slate-800 @(active ? "bg-brand-50 text-brand-700 dark:bg-slate-800 dark:text-brand-100" : "text-slate-700 dark:text-slate-300")">
                             @link.Text
                         </a>
                     </li>
@@ -89,11 +106,11 @@
         @RenderBody()
     </main>
 
-    <footer class="border-t border-slate-200 bg-white">
-        <div class="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <footer class="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div class="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-sm text-slate-500 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <p>&copy; @DateTime.Now.Year DevPath. Aprenda programação do jeito que um dev trabalha.</p>
             <p>
-                <a asp-controller="Home" asp-action="Privacy" class="underline-offset-4 hover:text-slate-700 hover:underline">Privacidade</a>
+                <a asp-controller="Home" asp-action="Privacy" class="underline-offset-4 hover:text-slate-700 hover:underline dark:hover:text-slate-200">Privacidade</a>
             </p>
         </div>
     </footer>

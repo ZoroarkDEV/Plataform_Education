@@ -169,4 +169,11 @@ public class ContentValidatorTests
 
     private static LessonContent Lesson(string moduleSlug, int order, string? slug = null) =>
         new($"content/{moduleSlug}/{order:00}-aula-{order}.md", slug ?? $"aula-{order}", $"Aula {order}", moduleSlug, order, 10, "sql", DifficultyLevel.Beginner, "# Aula\n");
+
+    [Fact]
+    public void MaxObjectiveLength_EhOMesmoLimiteDoDominio()
+    {
+        // O validador barra no /content o que o Domain (Lesson.UpdateContent) recusaria no seed.
+        ContentValidator.MaxObjectiveLength.Should().Be(DevPath.Domain.CareerPaths.Lesson.MaxObjectiveLength);
+    }
 }
