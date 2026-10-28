@@ -8,7 +8,7 @@
   "solution": "SELECT livros.titulo, autores.nome FROM livros INNER JOIN autores ON livros.autor_id = autores.id;",
   "hints": [
     "O nome do autor está em outra tabela. Qual coluna de livros aponta para autores?",
-    "Junte as tabelas com FROM livros INNER JOIN autores ON livros.autor_id = autores.id e selecione livros.titulo, autores.nome."
+    "Esqueleto: SELECT livros.titulo, ______.nome FROM livros INNER JOIN ______ ON livros.________ = autores.id; Na lacuna do ON vai a coluna de livros que guarda o número do autor."
   ],
   "test_cases": [
     {
@@ -33,7 +33,7 @@
   "common_errors": [
     {
       "example": "SELECT l.titulo, a.nome FROM livros l JOIN autores a ON l.id = a.id;",
-      "message": "Os pares livro-autor não batem (ex.: 'O Hobbit' com Agatha Christie). O livro aponta para o autor pela coluna autor_id: compare livros.autor_id = autores.id."
+      "message": "Os pares livro-autor não batem (ex.: 'O Hobbit' com Agatha Christie). O livro aponta para o autor por outra coluna, não pelo id do livro. Veja qual coluna de livros guarda o número do autor."
     },
     {
       "example": "SELECT id, titulo, nome FROM livros JOIN autores ON livros.autor_id = autores.id;",
@@ -41,7 +41,7 @@
     },
     {
       "example": "SELECT titulo, nome FROM livros JOIN autores;",
-      "message": "Faltou dizer como as tabelas se ligam: ON livros.autor_id = autores.id."
+      "message": "Faltou dizer como as tabelas se ligam. Depois de JOIN autores, escreva ON e compare a coluna de livros que guarda o número do autor com o id de autores."
     },
     {
       "example": "SELECT l.titulo, autores.nome FROM livros JOIN autores ON livros.autor_id = autores.id;",

@@ -61,6 +61,9 @@ draft: true                         # opcional (padrão false): rascunho, aparec
   vazio (espaços nas pontas são removidos). Deve ser a mesma lista da seção
   `## O que você vai aprender` da aula (o teste de conteúdo compara as duas, ignorando `código`,
   **negrito** e ponto final). Toda aula pronta (sem `draft: true`) precisa ter `objectives`.
+  A tela da aula esconde do corpo a seção `## O que você vai aprender` até o próximo `## ` e mostra
+  `objectives` no lugar, então a seção tem **só a lista** e vem seguida direto de outro título `## `
+  (há um teste de conteúdo para isso).
   Vai para `Lesson.LearningObjectives` quando o domínio tiver esse campo.
 - **`draft: true`**: marca a aula como rascunho. A plataforma mostra a aula como **"Em breve"**.
   Todo stub com "Aula em construção" precisa ter `draft: true`. Sem a chave, vale `false`.

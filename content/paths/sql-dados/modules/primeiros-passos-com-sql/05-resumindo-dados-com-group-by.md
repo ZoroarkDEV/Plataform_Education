@@ -33,7 +33,12 @@ Para isso existem as **funções de agregação** (de resumo):
 | `COUNT(*)` | conta as linhas |
 | `SUM(coluna)` | soma os valores |
 | `AVG(coluna)` | tira a média |
-| `ROUND(valor, 2)` | arredonda para 2 casas decimais (útil com médias) |
+
+Em `COUNT(*)`, o `*` significa "conte as linhas inteiras", sem olhar uma coluna específica.
+
+E uma função de apoio:
+
+- `ROUND(valor, 2)`: não resume nada, só arredonda um número para 2 casas (útil com médias).
 
 ## Exemplos: resumo da tabela inteira
 
@@ -52,7 +57,8 @@ SELECT ROUND(AVG(preco), 2) AS preco_medio FROM livros;
 ```
 
 O `AS total_em_estoque` dá um **nome** à coluna do resultado. Sem ele, o banco inventa um nome
-(como `sum`), que não diz muito a quem lê.
+(como `sum`), que não diz muito a quem lê. É o mesmo `AS` que você usou para dar apelido às
+tabelas na aula de JOIN, agora dando nome a uma coluna.
 
 ## Resumo por grupo: GROUP BY
 

@@ -27,13 +27,16 @@ as linhas**: quer só os livros esgotados, só os clientes de uma cidade, só os
 É para isso que serve o `WHERE`. Ele funciona como o filtro de uma planilha: o banco olha linha
 por linha e só devolve as que atendem à condição.
 
+Uma **condição** é uma pergunta de sim ou não feita para cada linha, por exemplo "o estoque é
+zero?". Só as linhas com resposta "sim" aparecem no resultado.
+
 ```sql
 -- Formato geral (modelo, não é uma consulta para rodar)
 SELECT colunas FROM tabela WHERE condição;
 ```
 
-Por que filtrar no banco, e não depois, no programa? Porque o banco foi feito para isso: ele
-devolve só o necessário, em vez de mandar a tabela inteira para alguém filtrar depois.
+Por que filtrar no banco? Porque ele foi feito para isso: devolve só as linhas que você pediu, em
+vez de mandar a tabela inteira para alguém filtrar.
 
 ## Comparando valores
 

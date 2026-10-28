@@ -8,7 +8,7 @@
   "solution": "SELECT genero, COUNT(*) AS total_livros FROM livros GROUP BY genero;",
   "hints": [
     "Você quer uma linha por gênero, com uma contagem. Qual comando separa os livros em grupos?",
-    "Use SELECT genero, COUNT(*) FROM livros GROUP BY genero."
+    "Esqueleto: SELECT genero, ________ FROM livros GROUP BY ______; Na 1ª lacuna vai a função que conta linhas. Na 2ª, a coluna que forma os grupos. Lembre a regra de ouro."
   ],
   "test_cases": [
     {

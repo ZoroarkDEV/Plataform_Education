@@ -32,8 +32,9 @@ Por isso a regra é simples: **se a ordem importa, peça a ordem**. Em SQL, isso
 SELECT colunas FROM tabela ORDER BY coluna;
 ```
 
-- `ORDER BY coluna` ordena do menor para o maior. É o mesmo que escrever `ASC` (*ascending*).
-- `ORDER BY coluna DESC` ordena do maior para o menor (*descending*).
+- `ORDER BY coluna` ordena do menor para o maior (ordem **crescente**). É o mesmo que escrever
+  `ASC`, de *ascending*.
+- `DESC` ordena do maior para o menor (ordem **decrescente**), de *descending*.
 - Textos são ordenados em ordem alfabética; números, pelo valor.
 
 ## Exemplos

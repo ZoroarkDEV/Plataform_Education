@@ -6,36 +6,36 @@ estimated_minutes: 25
 language: sql
 difficulty: beginner
 objectives:
-  - "Entender por que os dados ficam separados em tabelas ligadas por um número (chave)"
+  - "Entender por que os dados ficam em tabelas separadas, ligadas por um número"
   - "Combinar duas tabelas com INNER JOIN ... ON ..."
-  - "Usar tabela.coluna e apelidos para evitar colunas ambíguas"
+  - "Usar tabela.coluna e apelidos quando as duas tabelas têm uma coluna com o mesmo nome"
 ---
 
 # Juntando tabelas com JOIN
 
 ## O que você vai aprender
 
-- Entender por que os dados ficam separados em tabelas ligadas por um número (chave).
+- Entender por que os dados ficam em tabelas separadas, ligadas por um número.
 - Combinar duas tabelas com `INNER JOIN ... ON ...`.
-- Usar `tabela.coluna` e apelidos para evitar colunas ambíguas.
+- Usar `tabela.coluna` e apelidos quando as duas tabelas têm uma coluna com o mesmo nome.
 
 ## Por que os dados ficam em tabelas separadas?
 
 Olhe de novo a tabela `livros`: ela **não** guarda o nome do autor, só o **número** dele, na
 coluna `autor_id`. O nome está na tabela `autores`.
 
-| livros.titulo | livros.autor_id | | autores.id | autores.nome |
-|---|---|---|---|---|
-| O Hobbit | 3 | → | 3 | J.R.R. Tolkien |
-| O Silmarillion | 3 | → | 3 | J.R.R. Tolkien |
+| livro (livros.titulo) | livros.autor_id | aponta para autores.id | autor (autores.nome) |
+|---|---|---|---|
+| O Hobbit | 3 | 3 | J.R.R. Tolkien |
+| O Silmarillion | 3 | 3 | J.R.R. Tolkien |
 
-Por que não escrever o nome do autor em cada livro? Porque Tolkien tem 3 livros na loja. Se o
-nome estivesse repetido em cada um, corrigir uma grafia exigiria mudar 3 linhas, e bastaria
-esquecer uma para os dados ficarem inconsistentes. Guardando o autor **uma vez só** e apontando
-para ele pelo número, cada informação mora em um único lugar.
+Por que não escrever o nome do autor em cada livro? Tolkien tem 3 livros. Se o nome dele estivesse
+em cada um, corrigir uma letra exigiria mudar 3 linhas, e bastaria esquecer uma para a loja mostrar
+dois nomes diferentes para a mesma pessoa. Guardando o autor **uma vez só** e apontando para ele
+pelo número, cada informação fica num único lugar.
 
-O preço dessa organização é que, para responder "quem escreveu cada livro?", precisamos
-**juntar** as duas tabelas. É isso que o `JOIN` faz.
+Em troca, para responder "quem escreveu cada livro?", precisamos **juntar** as duas tabelas. É
+isso que o `JOIN` faz.
 
 ## INNER JOIN ... ON ...
 

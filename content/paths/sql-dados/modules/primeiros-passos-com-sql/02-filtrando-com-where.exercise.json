@@ -1,5 +1,5 @@
 {
-  "title": "Fantasia até R$ 60",
+  "title": "Fantasia abaixo de R$ 60",
   "statement": "Um cliente procura livros de **Fantasia** que custem **menos de R$ 60**. Mostre o **título** e o **preço**.",
   "language": "sql",
   "dataset": "livraria",
@@ -8,7 +8,7 @@
   "solution": "SELECT titulo, preco FROM livros WHERE genero = 'Fantasia' AND preco < 60;",
   "hints": [
     "Você precisa de duas condições ao mesmo tempo: gênero e preço. Que palavra junta duas condições?",
-    "Use WHERE genero = 'Fantasia' AND preco < 60."
+    "Complete o filtro: WHERE genero = '______' AND preco ___ ___ . O gênero vai entre aspas simples, escrito igual à tabela (com a primeira letra maiúscula). O preço vai sem aspas."
   ],
   "test_cases": [
     {
@@ -49,7 +49,7 @@
     },
     {
       "example": "SELECT titulo, preco FROM livros WHERE genero = 'Fantasia' AND preco < 60,00;",
-      "message": "Números vão sem aspas e sem R$, com ponto decimal: 60 ou 60.00."
+      "message": "Em SQL o decimal usa ponto, não vírgula: escreva 60.00 (ou só 60). A vírgula serve para separar colunas."
     },
     {
       "example": "SELECT titulo, preco FROM livros WHERE genero = 'Fantasia';",

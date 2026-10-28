@@ -83,9 +83,9 @@ public class RepositoryContentTests
         module.Lessons.OrderBy(l => l.Order).Select(l => l.Slug).Should().Equal(
             "seu-primeiro-select",
             "filtrando-com-where",
-            "ordenando-com-order-by",
+            "ordenando-e-limitando-com-order-by-e-limit",
             "juntando-tabelas-com-join",
-            "agregando-com-group-by");
+            "resumindo-dados-com-group-by");
     }
 
     [Fact]
@@ -114,6 +114,19 @@ public class RepositoryContentTests
 
         // A seção usa `código`, **negrito** e ponto final; o frontmatter fica em texto puro.
         static string Normalize(string text) => text.Replace("`", "").Replace("**", "").Trim().TrimEnd('.');
+    }
+
+    [Fact]
+    public void OQueVoceVaiAprender_EhSoALista_SeguidaDeOutroTitulo()
+    {
+        // A tela da aula esconde do corpo a seção "O que você vai aprender" até o próximo "## " e mostra
+        // `objectives` no lugar. Qualquer texto entre a lista e o próximo título sumiria da tela.
+        // Vale para as aulas prontas; os stubs (draft: true) aparecem como "Em breve".
+        foreach (var lesson in AllLessons().Where(l => !l.IsDraft && l.Body.Contains("## O que você vai aprender")))
+        {
+            Regex.IsMatch(lesson.Body, @"## O que você vai aprender\n(?:\n|- .*\n)+## ").Should().BeTrue(
+                $"em {lesson.SourceFile}, a seção 'O que você vai aprender' deve ter só a lista e ser seguida direto por outro título '## '");
+        }
     }
 
     [Fact]

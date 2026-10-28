@@ -1,6 +1,6 @@
 {
   "title": "Vitrine Premium",
-  "statement": "Monte a vitrine 'Premium': os **3 livros mais caros**, do **mais caro para o mais barato**, com **título** e **preço**.",
+  "statement": "Monte a vitrine \"Premium\": os **3 livros mais caros**, do **mais caro para o mais barato**, com **título** e **preço**.",
   "language": "sql",
   "dataset": "livraria",
   "points": 10,
@@ -8,7 +8,7 @@
   "solution": "SELECT titulo, preco FROM livros ORDER BY preco DESC LIMIT 3;",
   "hints": [
     "Primeiro ordene pelo preço do maior para o menor, depois corte o resultado.",
-    "Termine a consulta com ORDER BY preco DESC LIMIT 3."
+    "Complete o final: ORDER BY ______ ____ LIMIT ___ . Qual palavra faz a ordem ir do maior para o menor?"
   ],
   "test_cases": [
     {

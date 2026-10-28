@@ -8,7 +8,7 @@
   "solution": "SELECT titulo, preco FROM livros;",
   "hints": [
     "Você precisa de duas colunas da tabela de livros. Lembre do formato: SELECT colunas FROM tabela.",
-    "As colunas se chamam titulo e preco, e a tabela é livros. Separe as colunas com vírgula."
+    "Complete as lacunas: SELECT ___, ___ FROM ___; Os nomes exatos estão na tabela de livros, no começo da aula. Atenção: eles são escritos sem acento."
   ],
   "test_cases": [
     {
@@ -54,6 +54,10 @@
     {
       "example": "SELECT titulo, preco;",
       "message": "Faltou dizer de qual tabela vêm os dados: use FROM livros."
+    },
+    {
+      "example": "SELECT título, preço FROM livros;",
+      "message": "Não existe coluna título. Os nomes das colunas são escritos sem acento: titulo, preco."
     }
   ]
 }

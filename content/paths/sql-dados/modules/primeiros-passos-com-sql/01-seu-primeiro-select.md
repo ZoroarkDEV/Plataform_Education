@@ -19,9 +19,9 @@ objectives:
 - Ler dados de uma tabela com `SELECT ... FROM ...`.
 - Escolher quais colunas aparecem no resultado.
 
-Você não precisa instalar nada: as consultas desta aula rodam aqui no navegador.
-
 ## Tabelas: o banco é um conjunto de planilhas
+
+Você não precisa instalar nada: as consultas desta aula rodam aqui no navegador.
 
 Um banco de dados guarda informações em **tabelas**, parecidas com planilhas:
 
@@ -57,6 +57,9 @@ Nas próximas aulas vamos usar o banco de uma pequena **livraria**, com duas tab
 | 10 | Laços de Família | 2 | Contos | 1960 | 27.90 | 9 |
 
 ## Pedindo dados ao banco: SELECT ... FROM ...
+
+**SQL** é a linguagem usada para conversar com bancos de dados. Cada pedido que você escreve em SQL
+se chama **consulta**.
 
 Para **ler** dados, você faz um pedido ao banco: *"selecione estas colunas da tabela tal"*.
 Em SQL, esse pedido se escreve assim:
@@ -96,17 +99,19 @@ SELECT nome, pais FROM autores;
 | Gabriel García Márquez | Colômbia |
 | Conceição Evaristo | Brasil |
 
-Repare em três detalhes:
+Repare em quatro detalhes:
 
 - As colunas aparecem **na ordem em que você pediu**.
 - As colunas são separadas por **vírgula**, e a última não leva vírgula.
-- O `;` marca o fim da consulta. Maiúsculas ou minúsculas nas palavras `SELECT` e `FROM` não fazem
-  diferença, mas escrever em maiúsculas deixa a consulta mais fácil de ler.
+- O `;` marca o fim da consulta.
+- Tanto faz escrever `SELECT` ou `select`. Usamos maiúsculas porque deixam a consulta mais fácil de
+  ler.
 
 ### Por que não usar sempre `SELECT *`?
 
-O `*` é ótimo para dar uma olhada rápida numa tabela. Num sistema de verdade, porém, pedir só as
-colunas de que você precisa deixa a consulta mais clara e evita trafegar dados à toa.
+O `*` é ótimo para dar uma olhada rápida numa tabela. Num sistema de verdade, é melhor pedir só as
+colunas de que você precisa: a consulta fica mais clara e o banco não envia dados que ninguém vai
+usar.
 
 ## Agora é sua vez
 
