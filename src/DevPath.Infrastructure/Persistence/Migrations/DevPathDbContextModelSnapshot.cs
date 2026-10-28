@@ -377,6 +377,11 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CurrentModuleId");
 
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserPathEnrollments_UserId_Active")
+                        .HasFilter("\"IsActive\"");
+
                     b.ToTable("UserPathEnrollments", null, t =>
                         {
                             t.HasCheckConstraint("CK_UserPathEnrollments_ProgressPercentage_Range", "\"ProgressPercentage\" BETWEEN 0 AND 100");

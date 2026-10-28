@@ -1,6 +1,8 @@
 using DevPath.Application.Auth;
+using DevPath.Application.Journey;
 using DevPath.Application.Lessons;
 using DevPath.Infrastructure.Identity;
+using DevPath.Infrastructure.Journey;
 using DevPath.Infrastructure.Lessons;
 using DevPath.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -41,6 +43,9 @@ public static class DependencyInjection
         // Leitura das aulas para a página /trilhas/{trilha}/{módulo}/{aula}. Scoped = um por requisição,
         // o mesmo tempo de vida do DbContext que ele usa.
         services.AddScoped<ILessonContentService, LessonContentService>();
+
+        // Onboarding + dashboard (#11). A Web adapta para IStudentJourneyGateway.
+        services.AddScoped<IStudentJourneyService, StudentJourneyService>();
 
         return services;
     }

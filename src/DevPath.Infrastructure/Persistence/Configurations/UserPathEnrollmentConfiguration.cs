@@ -16,6 +16,13 @@ internal sealed class UserPathEnrollmentConfiguration : IEntityTypeConfiguration
         // Chave composta: um aluno se matricula uma única vez em cada trilha.
         builder.HasKey(e => new { e.UserId, e.CareerPathId });
 
+        // Uma trilha por vez (SPEC §5.1, #11): no máximo uma matrícula ativa por aluno.
+        // Segunda trava contra POST duplo, além do UPDATE condicional em AspNetUsers.CurrentPathId.
+        builder.HasIndex(e => e.UserId)
+            .IsUnique()
+            .HasFilter("\"IsActive\"")
+            .HasDatabaseName("IX_UserPathEnrollments_UserId_Active");
+
         builder.Property(e => e.ProgressPercentage).HasPrecision(5, 2); // 0.00 a 100.00
 
         builder.HasOne<CareerPath>().WithMany().HasForeignKey(e => e.CareerPathId).OnDelete(DeleteBehavior.Cascade);
