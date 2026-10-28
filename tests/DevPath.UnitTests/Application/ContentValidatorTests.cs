@@ -135,6 +135,32 @@ public class ContentValidatorTests
             .Which.Errors.Should().HaveCountGreaterThan(1);
     }
 
+    [Fact]
+    public void Validate_ObjetivosValidos_NaoRetornaErros()
+    {
+        var lesson = Lesson("ambiente", 1) with { Objectives = ["Escrever um SELECT", new string('a', ContentValidator.MaxObjectiveLength)] };
+
+        ContentValidator.Validate([Path("sql-dados", "SQL", 1, Module("ambiente", 1, lesson))]).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_ObjetivoVazio_RetornaErroComPosicao()
+    {
+        var lesson = Lesson("ambiente", 1) with { Objectives = ["Escrever um SELECT", "  "] };
+
+        ContentValidator.Validate([Path("sql-dados", "SQL", 1, Module("ambiente", 1, lesson))])
+            .Should().ContainSingle(e => e.Contains("o item 2 de 'objectives' está vazio"));
+    }
+
+    [Fact]
+    public void Validate_ObjetivoComMaisDe200Caracteres_RetornaErro()
+    {
+        var lesson = Lesson("ambiente", 1) with { Objectives = [new string('a', ContentValidator.MaxObjectiveLength + 1)] };
+
+        ContentValidator.Validate([Path("sql-dados", "SQL", 1, Module("ambiente", 1, lesson))])
+            .Should().ContainSingle(e => e.Contains("o item 1 de 'objectives' tem 201 caracteres (máximo 200)"));
+    }
+
     private static PathContent Path(string folder, string title, int order, params ModuleContent[] modules) =>
         new(folder, title, "Descrição", "icon", DifficultyLevel.Beginner, 10, order, modules);
 

@@ -156,6 +156,148 @@ public sealed class FileSystemContentSourceTests : IDisposable
         Errors().Should().ContainSingle(e => e.Contains("'difficulty' inválido"));
     }
 
+    [Fact]
+    public void LoadPaths_ObjectivesEDraft_SaoLidos()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter()
+            .Replace("difficulty: beginner\n", "difficulty: beginner\nobjectives:\n  - \"  Escrever um SELECT  \"\n  - Filtrar com WHERE\ndraft: true\n") + "\n# Intro\n");
+
+        var lesson = new FileSystemContentSource(_root).LoadPaths().Single().Modules.Single().Lessons.Single();
+
+        lesson.Objectives.Should().Equal("Escrever um SELECT", "Filtrar com WHERE");
+        lesson.IsDraft.Should().BeTrue();
+    }
+
+    [Fact]
+    public void LoadPaths_SemObjectivesNemDraft_UsaPadroes()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter() + "\n# Intro\n");
+
+        var lesson = new FileSystemContentSource(_root).LoadPaths().Single().Modules.Single().Lessons.Single();
+
+        lesson.Objectives.Should().BeEmpty();
+        lesson.IsDraft.Should().BeFalse();
+        lesson.Exercise.Should().BeNull();
+    }
+
+    [Fact]
+    public void LoadPaths_DraftComValorInvalido_ErroDizOCampo()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter().Replace("difficulty: beginner\n", "difficulty: beginner\ndraft: talvez\n") + "\n# Intro\n");
+
+        Errors().Should().ContainSingle(e => e.Contains("valor inválido em 'draft'"));
+    }
+
+    [Fact]
+    public void LoadPaths_ExercicioValido_LeTodosOsCampos()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter() + "\n# Intro\n");
+        WriteDataset();
+        WriteLesson("ambiente", "01-intro.exercise.json", Exercise());
+
+        var exercise = new FileSystemContentSource(_root).LoadPaths().Single().Modules.Single().Lessons.Single().Exercise;
+
+        exercise.Should().NotBeNull();
+        exercise!.Title.Should().Be("Lista de preços");
+        exercise.Language.Should().Be("sql");
+        exercise.Dataset.Should().Be("livraria");
+        exercise.Points.Should().Be(10);
+        exercise.Solution.Should().Be("SELECT titulo, preco FROM livros;");
+        exercise.Hints.Should().Equal("Use SELECT.");
+        var test = exercise.TestCases.Single();
+        test.Columns.Should().Equal("titulo", "preco");
+        test.Rows.Single().Should().Equal("Dom Casmurro", 29.90m);
+        test.OrderMatters.Should().BeFalse();
+        exercise.CommonErrors.Single().Message.Should().Be("Faltou o FROM.");
+        exercise.TestCasesJson.Should().Contain("\"columns\":[\"titulo\",\"preco\"]");
+    }
+
+    [Fact]
+    public void LoadPaths_ExercicioComChaveDesconhecida_ErroComArquivoELinha()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter() + "\n# Intro\n");
+        WriteDataset();
+        WriteLesson("ambiente", "01-intro.exercise.json", Exercise().Replace("\"points\"", "\"pontos\""));
+
+        Errors().Should().ContainSingle().Which.Should()
+            .StartWith("content/paths/sql-dados/modules/ambiente/01-intro.exercise.json, linha")
+            .And.Contain("chave desconhecida 'pontos'");
+    }
+
+    [Fact]
+    public void LoadPaths_LinhaComQuantidadeErradaDeValores_LancaErro()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter() + "\n# Intro\n");
+        WriteDataset();
+        WriteLesson("ambiente", "01-intro.exercise.json", Exercise().Replace("[\"Dom Casmurro\", 29.90]", "[\"Dom Casmurro\"]"));
+
+        Errors().Should().ContainSingle(e => e.Contains("a linha 1 de 'rows' tem 1 valores, mas há 2 colunas"));
+    }
+
+    [Fact]
+    public void LoadPaths_DatasetInexistente_LancaErro()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter() + "\n# Intro\n");
+        WriteLesson("ambiente", "01-intro.exercise.json", Exercise());
+
+        Errors().Should().ContainSingle(e => e.Contains("dataset 'livraria' não encontrado"));
+    }
+
+    [Fact]
+    public void LoadPaths_ExercicioSemAula_LancaErro()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter() + "\n# Intro\n");
+        WriteDataset();
+        WriteLesson("ambiente", "02-outra.exercise.json", Exercise());
+
+        Errors().Should().ContainSingle(e => e.Contains("exercício sem aula") && e.Contains("02-outra.md"));
+    }
+
+    [Fact]
+    public void LoadPaths_ExercicioSemSolucaoNemCasoDeTeste_LancaErros()
+    {
+        WritePath();
+        WriteLesson("ambiente", "01-intro.md", Frontmatter() + "\n# Intro\n");
+        WriteDataset();
+        WriteLesson("ambiente", "01-intro.exercise.json", """{ "title": "X", "statement": "Y", "language": "sql", "test_cases": [] }""");
+
+        Errors().Should().Contain(e => e.Contains("'solution' ausente"))
+            .And.Contain(e => e.Contains("'test_cases' precisa ter pelo menos um caso"));
+    }
+
+    private void WriteDataset() => Write(Path.Combine("datasets", "livraria.sql"), "SELECT 1;\n");
+
+    private static string Exercise() => """
+        {
+          "title": "Lista de preços",
+          "statement": "Mostre título e preço.",
+          "language": "SQL",
+          "dataset": "livraria",
+          "points": 10,
+          "starter_code": "SELECT ",
+          "solution": "SELECT titulo, preco FROM livros;",
+          "hints": ["Use SELECT.", " "],
+          "test_cases": [
+            {
+              "name": "Todos os livros",
+              "columns": ["titulo", "preco"],
+              "rows": [["Dom Casmurro", 29.90]],
+              "order_matters": false,
+              "check_column_names": false
+            }
+          ],
+          "common_errors": [{ "example": "SELECT titulo, preco;", "message": "Faltou o FROM." }]
+        }
+        """;
+
     [Theory]
     [InlineData("---\ntitle: x\n---\ncorpo", "title: x", "corpo")]
     [InlineData("---\r\ntitle: x\r\n---\r\ncorpo", "title: x", "corpo")]

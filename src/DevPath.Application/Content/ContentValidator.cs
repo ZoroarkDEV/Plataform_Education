@@ -19,6 +19,9 @@ public static partial class ContentValidator
     public const int MaxIconLength = 100;
     public const int MaxLanguageLength = 50;
 
+    /// <summary>Cada item de <c>objectives</c> (combinado com o Backend para <c>Lesson.LearningObjectives</c>).</summary>
+    public const int MaxObjectiveLength = 200;
+
     /// <summary>Devolve a lista de problemas; lista vazia significa conteúdo válido.</summary>
     public static IReadOnlyList<string> Validate(IReadOnlyList<PathContent> paths)
     {
@@ -83,6 +86,24 @@ public static partial class ContentValidator
                     if (lesson.EstimatedMinutes < 0)
                     {
                         errors.Add($"{lesson.SourceFile}: estimated_minutes não pode ser negativo.");
+                    }
+
+                    foreach (var (objective, index) in lesson.Objectives.Select((o, i) => (o, i + 1)))
+                    {
+                        if (string.IsNullOrWhiteSpace(objective))
+                        {
+                            errors.Add($"{lesson.SourceFile}: o item {index} de 'objectives' está vazio.");
+                        }
+                        else if (objective.Length > MaxObjectiveLength)
+                        {
+                            errors.Add($"{lesson.SourceFile}: o item {index} de 'objectives' tem {objective.Length} caracteres (máximo {MaxObjectiveLength}).");
+                        }
+                    }
+
+                    if (lesson.Exercise is { } exercise)
+                    {
+                        CheckLength(exercise.Title, MaxTitleLength, "title", exercise.SourceFile, errors);
+                        CheckLength(exercise.Language, MaxLanguageLength, "language", exercise.SourceFile, errors);
                     }
                 }
             }

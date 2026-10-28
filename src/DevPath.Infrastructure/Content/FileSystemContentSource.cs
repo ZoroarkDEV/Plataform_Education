@@ -1,5 +1,7 @@
 using DevPath.Application.Content;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using DevPath.Domain.Common;
 using YamlDotNet.Core;
@@ -106,6 +108,13 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
                 .OfType<LessonContent>()
                 .ToList();
 
+            // Exercício sem a aula correspondente provavelmente é arquivo renomeado pela metade.
+            foreach (var exerciseFile in Directory.GetFiles(moduleDir, "*" + ExerciseSuffix)
+                         .Where(f => !File.Exists(f[..^ExerciseSuffix.Length] + ".md")))
+            {
+                errors.Add($"{Relative(exerciseFile)}: exercício sem aula. O arquivo da aula deveria ser {Path.GetFileName(exerciseFile)[..^ExerciseSuffix.Length]}.md.");
+            }
+
             modules.Add(new ModuleContent(slug, moduleTitle, (entry.Description ?? string.Empty).Trim(), moduleOrder, lessons));
         }
 
@@ -174,7 +183,168 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
             EstimatedMinutes: RequiredNumber(file.EstimatedMinutes, "estimated_minutes", where, errors),
             Language: string.IsNullOrWhiteSpace(file.Language) ? null : file.Language.Trim().ToLowerInvariant(),
             Difficulty: ParseDifficulty(file.Difficulty, "difficulty", where, errors),
-            Body: body.Trim() + Environment.NewLine);
+            Body: body.Trim() + Environment.NewLine)
+        {
+            Objectives = (file.Objectives ?? []).Select(o => (o ?? string.Empty).Trim()).ToList(),
+            IsDraft = file.Draft ?? false,
+            Exercise = ReadExercise(lessonFile[..^".md".Length] + ExerciseSuffix, errors)
+        };
+    }
+
+    // ---- Exercícios: NN-slug.exercise.json ao lado da aula ----
+
+    public const string ExerciseSuffix = ".exercise.json";
+
+    private static readonly JsonSerializerOptions ExerciseJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        ReadCommentHandling = JsonCommentHandling.Disallow,
+        WriteIndented = false,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private ExerciseContent? ReadExercise(string exerciseFile, List<string> errors)
+    {
+        if (!File.Exists(exerciseFile))
+        {
+            return null;
+        }
+
+        var where = Relative(exerciseFile);
+        ExerciseFile? file;
+        try
+        {
+            file = JsonSerializer.Deserialize<ExerciseFile>(File.ReadAllText(exerciseFile), ExerciseJson);
+        }
+        catch (JsonException ex)
+        {
+            var line = (ex.LineNumber ?? 0) + 1;
+            var unknown = UnmappedJsonMessage().Match(ex.Message);
+            errors.Add(unknown.Success
+                ? $"{where}, linha {line}: chave desconhecida '{unknown.Groups["key"].Value}'."
+                : $"{where}, linha {line}: JSON inválido ou valor com tipo errado em '{ex.Path}'.");
+            return null;
+        }
+
+        if (file is null)
+        {
+            errors.Add($"{where}: arquivo vazio.");
+            return null;
+        }
+
+        var testCases = new List<ExerciseTestCase>();
+        foreach (var (test, index) in (file.TestCases ?? []).Select((t, i) => (t, i)))
+        {
+            var testWhere = $"{where} (test_cases[{index}])";
+            var columns = (test.Columns ?? []).Select(c => (c ?? string.Empty).Trim()).ToList();
+            if (columns.Count == 0 || columns.Any(c => c.Length == 0))
+            {
+                errors.Add($"{testWhere}: 'columns' precisa listar o nome de cada coluna esperada.");
+            }
+
+            var rows = new List<IReadOnlyList<object?>>();
+            foreach (var (row, rowIndex) in (test.Rows ?? []).Select((r, i) => (r, i)))
+            {
+                if (row.Count != columns.Count)
+                {
+                    errors.Add($"{testWhere}: a linha {rowIndex + 1} de 'rows' tem {row.Count} valores, mas há {columns.Count} colunas.");
+                }
+
+                rows.Add(row.Select(v => ToValue(v, testWhere, errors)).ToList());
+            }
+
+            testCases.Add(new ExerciseTestCase(
+                Required(test.Name, "name", testWhere, errors), columns, rows,
+                test.OrderMatters ?? false, test.CheckColumnNames ?? false));
+        }
+
+        if (testCases.Count == 0)
+        {
+            errors.Add($"{where}: 'test_cases' precisa ter pelo menos um caso.");
+        }
+
+        var dataset = string.IsNullOrWhiteSpace(file.Dataset) ? null : file.Dataset.Trim();
+        if (dataset is not null && !File.Exists(DatasetPath(dataset)))
+        {
+            errors.Add($"{where}: dataset '{dataset}' não encontrado em content/datasets/{dataset}.sql.");
+        }
+
+        var points = file.Points ?? 10;
+        if (points <= 0)
+        {
+            errors.Add($"{where}: 'points' precisa ser maior que zero.");
+        }
+
+        var commonErrors = (file.CommonErrors ?? [])
+            .Select((e, i) => new ExerciseCommonError(
+                Required(e.Example, "example", $"{where} (common_errors[{i}])", errors),
+                Required(e.Message, "message", $"{where} (common_errors[{i}])", errors)))
+            .ToList();
+
+        return new ExerciseContent(
+            SourceFile: where,
+            Title: Required(file.Title, "title", where, errors),
+            Statement: Required(file.Statement, "statement", where, errors),
+            Language: Required(file.Language, "language", where, errors).ToLowerInvariant(),
+            Dataset: dataset,
+            Points: points,
+            StarterCode: file.StarterCode ?? string.Empty,
+            Solution: Required(file.Solution, "solution", where, errors),
+            Hints: (file.Hints ?? []).Select(h => (h ?? string.Empty).Trim()).Where(h => h.Length > 0).ToList(),
+            TestCases: testCases,
+            CommonErrors: commonErrors,
+            TestCasesJson: JsonSerializer.Serialize(file.TestCases ?? [], ExerciseJson));
+    }
+
+    /// <summary>Caminho do script de um dataset de exercícios (<c>content/datasets/&lt;nome&gt;.sql</c>).</summary>
+    public string DatasetPath(string dataset) => Path.Combine(ContentRoot, "datasets", dataset + ".sql");
+
+    private static object? ToValue(JsonElement value, string where, List<string> errors)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.String: return value.GetString();
+            case JsonValueKind.Number: return value.GetDecimal();
+            case JsonValueKind.True: return true;
+            case JsonValueKind.False: return false;
+            case JsonValueKind.Null: return null;
+            default:
+                errors.Add($"{where}: valor '{value}' em 'rows' precisa ser texto, número, true/false ou null.");
+                return null;
+        }
+    }
+
+    [GeneratedRegex(@"property '(?<key>[^']+)' could not be mapped")]
+    private static partial Regex UnmappedJsonMessage();
+
+    private sealed class ExerciseFile
+    {
+        public string? Title { get; set; }
+        public string? Statement { get; set; }
+        public string? Language { get; set; }
+        public string? Dataset { get; set; }
+        public int? Points { get; set; }
+        public string? StarterCode { get; set; }
+        public string? Solution { get; set; }
+        public List<string?>? Hints { get; set; }
+        public List<TestCaseEntry>? TestCases { get; set; }
+        public List<CommonErrorEntry>? CommonErrors { get; set; }
+    }
+
+    private sealed class TestCaseEntry
+    {
+        public string? Name { get; set; }
+        public List<string?>? Columns { get; set; }
+        public List<List<JsonElement>>? Rows { get; set; }
+        public bool? OrderMatters { get; set; }
+        public bool? CheckColumnNames { get; set; }
+    }
+
+    private sealed class CommonErrorEntry
+    {
+        public string? Example { get; set; }
+        public string? Message { get; set; }
     }
 
     // "---\n<yaml>\n---\n<markdown>" -> (yaml, markdown). Sem frontmatter -> (null, texto inteiro).
@@ -329,5 +499,7 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
         public int? EstimatedMinutes { get; set; }
         public string? Language { get; set; }
         public string? Difficulty { get; set; }
+        public List<string?>? Objectives { get; set; }
+        public bool? Draft { get; set; }
     }
 }
