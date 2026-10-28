@@ -1,0 +1,36 @@
+# Trilha SQL & Dados: metadados lidos pelo ContentSeeder.
+# O nome da pasta precisa ser o slug do título (ex.: "SQL & Dados" -> sql-dados).
+title: "SQL & Dados"
+description: "SQL do zero com PostgreSQL rodando em Docker: modelagem, CRUD, consultas, performance, transactions e como conectar o C# ao banco."
+icon: database
+difficulty_level: beginner
+# Estimativa inicial; ajuste quando as aulas estiverem prontas.
+estimated_hours: 40
+order: 2
+
+# Ordem dos módulos na trilha. Cada slug tem uma pasta em modules/<slug>/ com as aulas.
+modules:
+  - slug: ambiente
+    title: "Ambiente: banco relacional + Docker"
+    description: "O que é um banco relacional e como montar o ambiente local com Docker, docker-compose e um cliente SQL."
+    order: 1
+  - slug: estruturas
+    title: "Criando estruturas"
+    description: "CREATE DATABASE, CREATE TABLE e constraints."
+    order: 2
+  - slug: crud
+    title: "CRUD completo"
+    description: "INSERT, SELECT, UPDATE e DELETE."
+    order: 3
+  - slug: consultas
+    title: "Consultas"
+    description: "JOINs, agregações e consultas mais elaboradas com subqueries e CTEs."
+    order: 4
+  - slug: performance-e-confiabilidade
+    title: "Performance e confiabilidade"
+    description: "Índices e performance básica, transactions e ACID, backup e restore."
+    order: 5
+  - slug: conectando-csharp
+    title: "Conectando C# ao banco"
+    description: "Acesso ao PostgreSQL a partir do C# com ADO.NET e Entity Framework Core."
+    order: 6

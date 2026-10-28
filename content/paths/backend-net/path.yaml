@@ -1,0 +1,40 @@
+# Trilha Backend .NET: metadados lidos pelo ContentSeeder.
+# O nome da pasta precisa ser o slug do título (ex.: "SQL & Dados" -> sql-dados).
+title: "Backend .NET"
+description: "Trilha principal do DevPath: do zero até um sistema completo com C#, ASP.NET Core MVC, Entity Framework Core, SQL e Docker."
+icon: server
+difficulty_level: beginner
+# Estimativa inicial; ajuste quando as aulas estiverem prontas.
+estimated_hours: 120
+order: 1
+
+# Ordem dos módulos na trilha. Cada slug tem uma pasta em modules/<slug>/ com as aulas.
+modules:
+  - slug: fundamentos-programacao
+    title: "Fundamentos de Programação"
+    description: "Lógica, variáveis, tipos, estruturas de controle, funções e OOP básico. Comum a todas as trilhas."
+    order: 1
+  - slug: csharp-fundamentos
+    title: "C# Fundamentos"
+    description: "Sintaxe, tipos, classes, interfaces, generics, LINQ e async/await."
+    order: 2
+  - slug: sql-docker
+    title: "SQL + Docker"
+    description: "Banco relacional, PostgreSQL no Docker, CRUD, JOINs, índices, transactions e como conectar o C# ao banco. A trilha SQL & Dados aprofunda cada tópico."
+    order: 3
+  - slug: aspnet-core-mvc
+    title: "ASP.NET Core MVC"
+    description: "Controllers, Actions, Views e Razor, Model Binding, validação, Tag Helpers, layouts, rotas, injeção de dependência, middleware e Identity básico."
+    order: 4
+  - slug: entity-framework-core
+    title: "Entity Framework Core"
+    description: "DbContext, Migrations, Fluent API, relacionamentos, queries eficientes e Tracking vs NoTracking."
+    order: 5
+  - slug: apis-e-requisicoes
+    title: "APIs e Requisições"
+    description: "Minimal APIs e Controllers, HttpClient, princípios REST, status codes e Swagger."
+    order: 6
+  - slug: projeto-final
+    title: "Projeto Final"
+    description: "Sistema completo (ex.: Biblioteca, Task Manager ou Blog simples) com MVC + EF Core + SQL + Docker."
+    order: 7
