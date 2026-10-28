@@ -259,15 +259,18 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         {
             lesson = Lesson.Create(
                 module.Id, content.Title, ContentType.Markdown, content.Body, content.Order,
-                content.EstimatedMinutes, content.Language, content.Difficulty);
+                content.EstimatedMinutes, content.Language, content.Difficulty,
+                learningObjectives: content.Objectives, isDraft: content.IsDraft);
             ApplySlug(lesson.Slug, content.Slug, lesson.ChangeSlug);
             db.Lessons.Add(lesson);
             return;
         }
 
+        // objectives e draft vêm sempre do arquivo: tirar a chave do frontmatter limpa a lista / tira o rascunho.
         lesson.UpdateContent(
             content.Title, ContentType.Markdown, content.Body, content.Order,
-            content.EstimatedMinutes, content.Language, content.Difficulty);
+            content.EstimatedMinutes, content.Language, content.Difficulty,
+            learningObjectives: content.Objectives, isDraft: content.IsDraft);
 
         // Conteúdo que está versionado em /content é conteúdo publicado (a aula pode ter voltado depois de removida).
         if (!lesson.IsPublished)

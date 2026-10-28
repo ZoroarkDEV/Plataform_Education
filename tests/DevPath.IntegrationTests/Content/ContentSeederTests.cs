@@ -353,6 +353,94 @@ public sealed class ContentSeederTests : IAsyncLifetime
         });
     }
 
+    [Fact]
+    public async Task SeedAsync_GravaObjectivesEDraftDoFrontmatter()
+    {
+        await SeedAsync(_repoContent);
+
+        await using var db = CreateDbContext();
+        var select = await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select");
+        select.IsDraft.Should().BeFalse();
+        select.LearningObjectives.Should().Equal(
+            "Entender que um banco de dados guarda informações em tabelas, com linhas e colunas",
+            "Ler dados de uma tabela com SELECT ... FROM ...",
+            "Escolher quais colunas aparecem no resultado");
+
+        var stub = await LessonAsync(db, "ambiente", "instalando-docker-desktop");
+        stub.IsDraft.Should().BeTrue("o stub tem draft: true no frontmatter");
+    }
+
+    [Fact]
+    public async Task SeedAsync_DraftLigadoEDesligado_AtualizaAMesmaAula()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonFile = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.md");
+            var original = File.ReadAllText(lessonFile);
+            var id = await LessonIdAsync("primeiros-passos-com-sql", "seu-primeiro-select");
+
+            // Liga o rascunho.
+            File.WriteAllText(lessonFile, original.Replace("difficulty: beginner\n", "difficulty: beginner\ndraft: true\n"));
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                var lesson = await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select");
+                lesson.Id.Should().Be(id);
+                lesson.IsDraft.Should().BeTrue();
+                lesson.IsPublished.Should().BeTrue("rascunho continua na navegação como \"Em breve\"");
+            }
+
+            // Desliga (tirar a chave volta ao padrão false).
+            File.WriteAllText(lessonFile, original);
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                (await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select")).IsDraft.Should().BeFalse();
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_ObjectivesTrocadosERemovidos_AtualizaALista()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonFile = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.md");
+            var original = File.ReadAllText(lessonFile).ReplaceLineEndings("\n");
+            var objectivesBlock = Regex.Match(original, @"(?m)^objectives:\n(  - .*\n)+").Value;
+            objectivesBlock.Should().NotBeEmpty();
+
+            // Troca a lista (com espaços nas pontas, que são removidos).
+            File.WriteAllText(lessonFile, original.Replace(objectivesBlock,
+                "objectives:\n  - \"  Ler uma tabela com SELECT  \"\n  - \"Escolher colunas\"\n"));
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                (await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select"))
+                    .LearningObjectives.Should().Equal("Ler uma tabela com SELECT", "Escolher colunas");
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue("mesma lista não conta como mudança");
+
+            // Tira a chave: a lista fica vazia.
+            File.WriteAllText(lessonFile, original.Replace(objectivesBlock, string.Empty));
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                (await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select"))
+                    .LearningObjectives.Should().BeEmpty();
+            }
+        });
+    }
+
+    private static Task<DevPath.Domain.CareerPaths.Lesson> LessonAsync(DevPathDbContext db, string module, string slug) =>
+        db.Lessons.AsNoTracking()
+            .SingleAsync(l => l.Slug == slug && db.Modules.Any(m => m.Id == l.ModuleId && m.Slug == module));
+
     private async Task<ContentSeedResult> SeedAsync(string contentRoot)
     {
         await using var db = CreateDbContext();

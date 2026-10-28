@@ -241,6 +241,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_Lessons_EstimatedMinutes_NonNegative", "\"EstimatedMinutes\" >= 0");
 
+                            t.HasCheckConstraint("CK_Lessons_LearningObjectives_IsArray", "jsonb_typeof(\"LearningObjectives\") = 'array'");
+
                             t.HasCheckConstraint("CK_Lessons_Order_NonNegative", "\"Order\" >= 0");
                         });
                 });

@@ -51,8 +51,22 @@ public sealed class LessonContentFixture : IAsyncLifetime
         inactiveModule.Publish();
         inactiveModule.AddLesson("Aula", ContentType.Markdown, "# aula");
 
+        // Módulo à parte (para não mexer na navegação de "Fundamentos SQL"): jsonb de objetivos corrompido.
+        var broken = path.AddModule("Modulo Quebrado");
+        broken.Publish();
+        broken.AddLesson("Objetivos Numericos", ContentType.Markdown, "# a");
+        broken.AddLesson("Objetivos Com Nulo", ContentType.Markdown, "# b");
+        broken.AddLesson("Rascunho Quebrado", ContentType.Markdown, "# c", isDraft: true);
+        broken.AddLesson("Vizinha Boa", ContentType.Markdown, "# d", learningObjectives: ["Ok"]);
+
         db.CareerPaths.AddRange(path, inactive);
         await db.SaveChangesAsync();
+
+        // Grava JSON inválido direto no banco (o domínio nunca deixaria). São listas, então passam no CHECK.
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"Lessons\" SET \"LearningObjectives\" = '[1, 2]'::jsonb WHERE \"Slug\" = 'objetivos-numericos';");
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"Lessons\" SET \"LearningObjectives\" = '[\"ok\", null]'::jsonb WHERE \"Slug\" IN ('objetivos-com-nulo', 'rascunho-quebrado');");
     }
 
     public Task DisposeAsync() => _postgres.DisposeAsync().AsTask();
@@ -182,5 +196,51 @@ public sealed class LessonContentServiceTests(LessonContentFixture fixture) : IC
             (await check.Lessons.AsNoTracking().SingleAsync(l => l.Id == lesson.Id))
                 .LearningObjectives.Should().Equal("Novo 1", "Novo 2");
         }
+    }
+
+    [Theory]
+    [InlineData("objetivos-numericos")]  // [1, 2]
+    [InlineData("objetivos-com-nulo")]   // ["ok", null]
+    public async Task ObjetivosInvalidosNoBanco_RetornaMalformedSemLancar(string lessonSlug)
+    {
+        var act = () => LoadAsync(lessonSlug, moduleSlug: "modulo-quebrado");
+
+        var result = (await act.Should().NotThrowAsync()).Subject;
+        result.IsSuccess.Should().BeFalse();
+        result.Error!.Kind.Should().Be(LessonLoadErrorKind.Malformed);
+        result.Error.Detail.Should().Contain("objetivos de aprendizagem inválidos").And.NotContain("Exception");
+    }
+
+    [Fact]
+    public async Task ObjetivosInvalidosEmRascunho_RetornaDraft()
+    {
+        // A ordem das verificações continua: rascunho vem antes de "malformada".
+        var result = await LoadAsync("rascunho-quebrado", moduleSlug: "modulo-quebrado");
+        result.Error!.Kind.Should().Be(LessonLoadErrorKind.Draft);
+    }
+
+    [Fact]
+    public async Task VizinhaDeAulaComObjetivosInvalidos_AbreNormalmente()
+    {
+        // A lista de vizinhos não lê o jsonb, então uma aula quebrada não derruba as outras.
+        var lesson = (await LoadAsync("vizinha-boa", moduleSlug: "modulo-quebrado")).Lesson!;
+        lesson.LearningObjectives.Should().Equal("Ok");
+        lesson.PreviousLesson!.Slug.Should().Be("rascunho-quebrado");
+        lesson.TotalInModule.Should().Be(4, "rascunhos contam no total do módulo");
+    }
+
+    [Theory]
+    [InlineData("{\"a\": 1}")]
+    [InlineData("\"texto\"")]
+    [InlineData("1")]
+    public async Task ObjetivosQueNaoSaoLista_SaoBarradosPeloCheckDoBanco(string json)
+    {
+        await using var db = fixture.CreateDbContext();
+
+        var act = () => db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"Lessons\" SET \"LearningObjectives\" = {0}::jsonb WHERE \"Slug\" = 'vizinha-boa';", json);
+
+        (await act.Should().ThrowAsync<Npgsql.PostgresException>())
+            .Which.ConstraintName.Should().Be("CK_Lessons_LearningObjectives_IsArray");
     }
 }

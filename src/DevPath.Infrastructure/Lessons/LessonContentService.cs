@@ -1,6 +1,9 @@
+using System.Text.Json;
 using DevPath.Application.Lessons;
 using DevPath.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevPath.Infrastructure.Lessons;
 
@@ -11,9 +14,13 @@ namespace DevPath.Infrastructure.Lessons;
 /// 1) trilha + módulo + aula pelos slugs;
 /// 2) a lista "enxuta" (slug, título, rascunho) das aulas publicadas do módulo, para montar
 ///    anterior/próxima e "Aula X de Y" sem carregar o Markdown de todas as aulas.
+/// Se o jsonb de objetivos estiver corrompido no banco, a aula volta como <see cref="LessonLoadErrorKind.Malformed"/>
+/// (com log) em vez de derrubar a página.
 /// </remarks>
-public sealed class LessonContentService(DevPathDbContext db) : ILessonContentService
+public sealed class LessonContentService(DevPathDbContext db, ILogger<LessonContentService>? logger = null) : ILessonContentService
 {
+    private readonly ILogger _logger = logger ?? NullLogger<LessonContentService>.Instance;
+
     public async Task<LessonLoadResult> GetLessonAsync(
         string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default)
     {
@@ -22,27 +29,52 @@ public sealed class LessonContentService(DevPathDbContext db) : ILessonContentSe
         moduleSlug = (moduleSlug ?? string.Empty).Trim().ToLowerInvariant();
         lessonSlug = (lessonSlug ?? string.Empty).Trim().ToLowerInvariant();
 
-        var found = await (
-                from path in db.CareerPaths.AsNoTracking()
-                join module in db.Modules.AsNoTracking() on path.Id equals module.CareerPathId
-                join lesson in db.Lessons.AsNoTracking() on module.Id equals lesson.ModuleId
-                where path.Slug == pathSlug && path.IsActive
-                      && module.Slug == moduleSlug && module.IsPublished
-                      && lesson.Slug == lessonSlug && lesson.IsPublished
-                select new
-                {
-                    Lesson = lesson,
-                    PathTitle = path.Title,
-                    ModuleId = module.Id,
-                    ModuleTitle = module.Title
-                })
-            .SingleOrDefaultAsync(ct);
+        var visible =
+            from path in db.CareerPaths.AsNoTracking()
+            join module in db.Modules.AsNoTracking() on path.Id equals module.CareerPathId
+            join lesson in db.Lessons.AsNoTracking() on module.Id equals lesson.ModuleId
+            where path.Slug == pathSlug && path.IsActive
+                  && module.Slug == moduleSlug && module.IsPublished
+                  && lesson.Slug == lessonSlug && lesson.IsPublished
+            select new { path, module, lesson };
+
+        var route = $"/trilhas/{pathSlug}/{moduleSlug}/{lessonSlug}";
+
+        var found = default(FoundLesson);
+        try
+        {
+            found = await visible
+                .Select(x => new FoundLesson(x.lesson, x.path.Title, x.module.Id, x.module.Title))
+                .SingleOrDefaultAsync(ct);
+        }
+        catch (JsonException ex)
+        {
+            // O jsonb de LearningObjectives não é uma lista de textos (ex.: [1, null]). Relê sem essa coluna
+            // para respeitar a ordem das verificações (não encontrada > rascunho > malformada).
+            var header = await visible
+                .Select(x => new { x.lesson.Title, x.lesson.IsDraft })
+                .SingleOrDefaultAsync(ct);
+            if (header is null)
+            {
+                return LessonLoadResult.NotFound($"Aula não encontrada: {route}.");
+            }
+
+            if (header.IsDraft)
+            {
+                return LessonLoadResult.Draft("Esta aula ainda está em construção.");
+            }
+
+            _logger.LogError(ex, "Aula {Route} tem LearningObjectives inválido no banco (não é uma lista de textos).", route);
+            return LessonLoadResult.Malformed(
+                $"A aula \"{header.Title}\" tem objetivos de aprendizagem inválidos no banco (esperado: lista de textos). "
+                + "Verifique o arquivo em /content e rode o seed de novo.");
+        }
 
         // Ordem das verificações: primeiro "existe?", depois "está pronta?", por fim "está íntegra?".
         if (found is null)
         {
             return LessonLoadResult.NotFound(
-                $"Aula não encontrada: /trilhas/{pathSlug}/{moduleSlug}/{lessonSlug}.");
+                $"Aula não encontrada: {route}.");
         }
 
         var current = found.Lesson;
@@ -86,4 +118,6 @@ public sealed class LessonContentService(DevPathDbContext db) : ILessonContentSe
 
         return LessonLoadResult.Success(dto);
     }
+
+    private sealed record FoundLesson(Domain.CareerPaths.Lesson Lesson, string PathTitle, Guid ModuleId, string ModuleTitle);
 }

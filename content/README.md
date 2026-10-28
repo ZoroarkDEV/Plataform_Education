@@ -64,13 +64,13 @@ draft: true                         # opcional (padrão false): rascunho, aparec
   A tela da aula esconde do corpo a seção `## O que você vai aprender` até o próximo `## ` e mostra
   `objectives` no lugar, então a seção tem **só a lista** e vem seguida direto de outro título `## `
   (há um teste de conteúdo para isso).
-  Vai para `Lesson.LearningObjectives` quando o domínio tiver esse campo.
+  O seed grava em `Lesson.LearningObjectives` (jsonb).
 - **`draft: true`**: marca a aula como rascunho. A plataforma mostra a aula como **"Em breve"**.
   Todo stub com "Aula em construção" precisa ter `draft: true`. Sem a chave, vale `false`.
-  Vai para `Lesson.IsDraft` quando o domínio tiver esse campo.
+  O seed grava em `Lesson.IsDraft`.
 
-Por enquanto o seed só lê e valida essas duas chaves; gravar no banco depende da migration do
-Backend (`AddLessonObjectivesAndDraft`).
+O seed grava as duas chaves a cada execução (migration `AddLessonObjectivesAndDraft`): tirar
+`objectives` do frontmatter deixa a lista vazia, e tirar `draft` (ou `draft: false`) publica a aula como pronta.
 
 ### Exercício (`modules/<modulo>/NN-<aula>.exercise.json`)
 
