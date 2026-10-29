@@ -8,7 +8,8 @@ public class LessonAccessPolicyTests
     private static readonly LessonAccessPolicy Policy = new();
 
     private static ExerciseVisibility Visible() =>
-        new(Guid.NewGuid(), Guid.NewGuid(), PathActive: true, ModulePublished: true, LessonPublished: true, LessonDraft: false);
+        new(Guid.NewGuid(), Guid.NewGuid(), PathActive: true, ModulePublished: true, LessonPublished: true, LessonDraft: false,
+            ExercisePublished: true);
 
     [Fact]
     public void AulaVisivelEPronta_Libera() =>
@@ -29,6 +30,10 @@ public class LessonAccessPolicyTests
     [Fact]
     public void AulaNaoPublicada_NotFound() =>
         Policy.Evaluate(Guid.NewGuid(), Visible() with { LessonPublished = false }).Should().Be(ExerciseAccess.NotFound);
+
+    [Fact]
+    public void ExercicioDespublicado_NotFound() =>
+        Policy.Evaluate(Guid.NewGuid(), Visible() with { ExercisePublished = false }).Should().Be(ExerciseAccess.NotFound);
 
     [Fact]
     public void AulaEmRascunho_NotFound_NaoRevelaQueExiste() =>

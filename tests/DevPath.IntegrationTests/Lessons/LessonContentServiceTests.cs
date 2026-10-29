@@ -39,7 +39,7 @@ public sealed class LessonContentFixture : IAsyncLifetime
             difficulty: DifficultyLevel.Intermediate)
             .AddExercise("Autores e livros", "Liste **título** e **autor**.", "sql", "[{\"name\":\"caso\",\"rows\":[[\"LINHA_SECRETA\"]]}]",
                 points: 10, starterCode: "SELECT ", solutionCode: "SELECT SOLUCAO_SECRETA;", dataset: "livraria",
-                hints: ["Dica geral", "Dica mais direta"]);
+                hints: ["Dica geral", "Dica mais direta"], commonErrors: [new("SELECT ERRO_COMUM_SECRETO;", "MENSAGEM_ERRO_SECRETA")]);
         module.AddLesson("Em Construção", ContentType.Markdown, "# Em breve", isDraft: true);
         module.AddLesson("Vazia", ContentType.Markdown, "   ");
         module.AddLesson("Agregações", ContentType.Markdown, "# GROUP BY")
@@ -62,6 +62,12 @@ public sealed class LessonContentFixture : IAsyncLifetime
         broken.AddLesson("Objetivos Com Nulo", ContentType.Markdown, "# b");
         broken.AddLesson("Rascunho Quebrado", ContentType.Markdown, "# c", isDraft: true);
         broken.AddLesson("Vizinha Boa", ContentType.Markdown, "# d", learningObjectives: ["Ok"]);
+
+        // Exercício cujo .exercise.json saiu do /content: o seed despublica (#24).
+        var orphanModule = path.AddModule("Modulo Exercicio Removido");
+        orphanModule.Publish();
+        orphanModule.AddLesson("Aula Com Exercicio Removido", ContentType.Markdown, "# e")
+            .AddExercise("Removido", "Não aparece.", "sql", "[]").Unpublish();
 
         db.CareerPaths.AddRange(path, inactive);
         await db.SaveChangesAsync();
@@ -265,7 +271,8 @@ public sealed class LessonContentServiceTests(LessonContentFixture fixture) : IC
 
         // Nada do que é só do servidor pode sair no DTO (nem serializado para a Web).
         var json = System.Text.Json.JsonSerializer.Serialize(result);
-        json.Should().NotContain("SOLUCAO_SECRETA").And.NotContain("LINHA_SECRETA");
+        json.Should().NotContain("SOLUCAO_SECRETA").And.NotContain("LINHA_SECRETA")
+            .And.NotContain("ERRO_COMUM_SECRETO").And.NotContain("MENSAGEM_ERRO_SECRETA");
     }
 
     [Fact]
@@ -276,6 +283,14 @@ public sealed class LessonContentServiceTests(LessonContentFixture fixture) : IC
         exercise.Dataset.Should().BeNull();
         exercise.Hints.Should().BeEmpty();
         exercise.Points.Should().Be(15);
+    }
+
+    [Fact]
+    public async Task ExercicioDespublicado_AulaAbreSemOExercicio()
+    {
+        var result = await LoadAsync("aula-com-exercicio-removido", moduleSlug: "modulo-exercicio-removido");
+        result.Lesson.Should().NotBeNull();
+        result.Lesson!.Exercise.Should().BeNull();
     }
 
     [Fact]

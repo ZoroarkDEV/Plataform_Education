@@ -108,7 +108,7 @@ public sealed class LessonContentService(DevPathDbContext db, ILogger<LessonCont
         try
         {
             exercise = await db.Exercises.AsNoTracking()
-                .Where(e => e.LessonId == current.Id)
+                .Where(e => e.LessonId == current.Id && e.IsPublished) // despublicado = .exercise.json saiu de /content
                 .OrderBy(e => e.Id)
                 .Select(e => new ExerciseDto(
                     e.Title, e.Statement, e.Language, e.Dataset,

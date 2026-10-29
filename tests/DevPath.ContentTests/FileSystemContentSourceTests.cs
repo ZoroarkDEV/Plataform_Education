@@ -213,8 +213,25 @@ public sealed class FileSystemContentSourceTests : IDisposable
         test.Rows.Single().Should().Equal("Dom Casmurro", 29.90m);
         test.OrderMatters.Should().BeFalse();
         exercise.CommonErrors.Single().Message.Should().Be("Faltou o FROM.");
-        exercise.TestCasesJson.Should().Contain("\"columns\":[\"titulo\",\"preco\"]");
     }
+
+    [Fact]
+    public void LoadDatasets_LeCadaArquivoSqlComSlugIgualAoNome()
+    {
+        Write(Path.Combine("datasets", "livraria.sql"), "CREATE TABLE livros (id int);\n");
+        Write(Path.Combine("datasets", "escola.sql"), "CREATE TABLE alunos (id int);\n");
+        Write(Path.Combine("datasets", "leia-me.txt"), "não é dataset");
+
+        var datasets = new FileSystemContentSource(_root).LoadDatasets();
+
+        datasets.Select(d => d.Slug).Should().Equal("escola", "livraria");
+        datasets[1].SourceFile.Should().Be("content/datasets/livraria.sql");
+        datasets[1].Sql.Should().Be("CREATE TABLE livros (id int);\n", "o script vai como está no arquivo");
+    }
+
+    [Fact]
+    public void LoadDatasets_SemPasta_ListaVazia() =>
+        new FileSystemContentSource(_root).LoadDatasets().Should().BeEmpty();
 
     [Fact]
     public void LoadPaths_ExercicioComChaveDesconhecida_ErroComArquivoELinha()

@@ -56,6 +56,10 @@ public sealed record LessonContent(
 /// Exercício de uma aula, lido de <c>NN-slug.exercise.json</c>. A solução fica só aqui (e no banco),
 /// nunca no Markdown da aula: é a "solução protegida" do ADR-003.
 /// </summary>
+/// <remarks>
+/// Os casos de teste ficam estruturados aqui (lidos do snake_case do arquivo); o seed os grava em
+/// <c>Exercise.TestCases</c> no formato do runner (camelCase), via <see cref="ExerciseTestCaseFormat"/>.
+/// </remarks>
 public sealed record ExerciseContent(
     string SourceFile,
     string Title,
@@ -67,8 +71,7 @@ public sealed record ExerciseContent(
     string Solution,
     IReadOnlyList<string> Hints,
     IReadOnlyList<ExerciseTestCase> TestCases,
-    IReadOnlyList<ExerciseCommonError> CommonErrors,
-    string TestCasesJson);
+    IReadOnlyList<ExerciseCommonError> CommonErrors);
 
 /// <summary>
 /// Resultado esperado de uma consulta. Compara-se o resultado, não o texto da consulta:
@@ -86,3 +89,12 @@ public sealed record ExerciseTestCase(
 
 /// <summary>Erro comum de iniciante e a mensagem amigável para ele (o exemplo nunca pode passar no teste).</summary>
 public sealed record ExerciseCommonError(string Example, string Message);
+
+/// <summary>
+/// Um dataset de exercícios: <c>content/datasets/&lt;slug&gt;.sql</c> (script que cria e preenche as tabelas).
+/// O seed grava na tabela <c>Datasets</c>, casando pelo slug (nome do arquivo sem <c>.sql</c>).
+/// </summary>
+/// <param name="SourceFile">Caminho para mensagens de erro (ex.: <c>content/datasets/livraria.sql</c>).</param>
+/// <param name="Slug">Nome do arquivo sem <c>.sql</c> (ex.: <c>livraria</c>).</param>
+/// <param name="Sql">Conteúdo do arquivo, como está.</param>
+public sealed record DatasetContent(string SourceFile, string Slug, string Sql);

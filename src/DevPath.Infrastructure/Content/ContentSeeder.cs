@@ -1,5 +1,6 @@
 using DevPath.Application.Content;
 using DevPath.Domain.CareerPaths;
+using DevPath.Domain.Datasets;
 using DevPath.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -23,8 +24,14 @@ namespace DevPath.Infrastructure.Content;
 /// "estacionados" numa ordem temporária alta (<see cref="ParkingOffset"/> + ordem atual), depois recebem a ordem final.
 /// </para>
 /// <para>
-/// Nada é apagado. O que existe no banco e sumiu de /content: trilha é desativada, módulo e aula são despublicados,
-/// e módulos e aulas vão para o fim da ordem, com aviso no log. Se voltarem para /content, são reativados/republicados.
+/// Nada é apagado. O que existe no banco e sumiu de /content: trilha é desativada, módulo, aula e exercício são
+/// despublicados, e módulos e aulas vão para o fim da ordem, com aviso no log. Se voltarem para /content, são
+/// reativados/republicados na mesma linha.
+/// </para>
+/// <para>
+/// Datasets (<c>content/datasets/&lt;slug&gt;.sql</c>) vão para a tabela <c>Datasets</c> na mesma transação, casados
+/// pelo slug; o script só é regravado quando o SHA-256 muda. Exercício que cita dataset sem arquivo barra o seed
+/// inteiro antes de qualquer gravação.
 /// </para>
 /// </remarks>
 public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, ILogger<ContentSeeder> logger) : IContentSeeder
@@ -35,7 +42,8 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
     public async Task<ContentSeedResult> SeedAsync(CancellationToken cancellationToken = default)
     {
         var paths = source.LoadPaths();
-        ContentValidator.EnsureValid(paths);
+        var datasets = source.LoadDatasets();
+        ContentValidator.EnsureValid(paths, datasets);
 
         var pending = await db.Database.GetPendingMigrationsAsync(cancellationToken);
         if (pending.Any())
@@ -65,6 +73,8 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
             .ToDictionary(t => t.Key, t => t.Value, ReferenceEqualityComparer.Instance);
 
         var changes = new ChangeCounter();
+
+        await UpsertDatasetsAsync(datasets, cancellationToken);
 
         // Passo 1: estaciona quem vai mudar de ordem, para não bater no índice único no passo 2.
         foreach (var (entity, order) in targets)
@@ -105,6 +115,38 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
             paths.Count, result.Inserted, result.Updated);
 
         return result;
+    }
+
+    /// <summary>
+    /// Upsert de <c>content/datasets/*.sql</c> pelo slug. O <see cref="Dataset.ContentHash"/> (SHA-256 do arquivo)
+    /// diz se mudou: hash igual não toca na linha. Dataset que sumiu de /content fica no banco (exercícios antigos
+    /// podem citá-lo), com aviso no log.
+    /// </summary>
+    private async Task UpsertDatasetsAsync(IReadOnlyList<DatasetContent> contents, CancellationToken cancellationToken)
+    {
+        var existing = await db.Datasets.ToDictionaryAsync(d => d.Slug, StringComparer.Ordinal, cancellationToken);
+
+        foreach (var content in contents)
+        {
+            if (!existing.TryGetValue(content.Slug, out var dataset))
+            {
+                db.Datasets.Add(Dataset.Create(content.Slug, content.Sql));
+                continue;
+            }
+
+            if (dataset.ContentHash != Dataset.ComputeHash(content.Sql))
+            {
+                logger.LogInformation("Dataset '{Dataset}' mudou em {File}; o script foi atualizado.", content.Slug, content.SourceFile);
+                dataset.UpdateSql(content.Sql);
+            }
+        }
+
+        var contentSlugs = contents.Select(d => d.Slug).ToHashSet(StringComparer.Ordinal);
+        foreach (var orphan in existing.Keys.Where(slug => !contentSlugs.Contains(slug)))
+        {
+            logger.LogWarning(
+                "Dataset '{Dataset}' existe no banco mas não em content/datasets. Foi mantido; nada foi apagado.", orphan);
+        }
     }
 
     /// <summary>
@@ -290,19 +332,24 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
 
     /// <summary>
     /// Um exercício por aula (<c>NN-aula.exercise.json</c>): o exercício existente é atualizado na mesma linha
-    /// (o Id não muda, então tentativas e pontos do aluno continuam presos a ele). Nada é apagado: se o arquivo
-    /// sumir, o exercício fica no banco, com aviso no log.
+    /// (o Id não muda, então tentativas e pontos do aluno continuam presos a ele). Os casos de teste são gravados
+    /// no formato do runner (<see cref="ExerciseTestCaseFormat"/>, camelCase) e os erros comuns em
+    /// <see cref="Exercise.CommonErrors"/>. Nada é apagado: se o arquivo sumir, o exercício é despublicado
+    /// (some da aula e não pode ser executado), com aviso no log; se o arquivo voltar, é republicado.
     /// </summary>
     private void UpsertExercise(Lesson lesson, LessonContent content)
     {
-        var existing = lesson.Exercises.OrderBy(e => e.Id).FirstOrDefault();
+        var ordered = lesson.Exercises.OrderBy(e => e.Id).ToList();
+        var existing = ordered.FirstOrDefault();
         if (content.Exercise is not { } exercise)
         {
-            if (existing is not null)
+            foreach (var orphan in ordered.Where(e => e.IsPublished))
             {
                 logger.LogWarning(
-                    "Aula '{Lesson}' tem exercício no banco mas não em /content ({File}.exercise.json). O exercício foi mantido; nada foi apagado.",
+                    "Aula '{Lesson}' tem exercício no banco mas não em /content ({File}.exercise.json). "
+                    + "O exercício foi despublicado; nada foi apagado.",
                     lesson.Slug, content.SourceFile[..^".md".Length]);
+                orphan.Unpublish();
             }
 
             return;
@@ -315,10 +362,27 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         }
 
         // O jsonb do PostgreSQL reordena chaves e tira espaços: comparar o texto marcaria mudança em todo seed.
-        var testCases = SameJson(existing.TestCases, exercise.TestCasesJson) ? existing.TestCases : exercise.TestCasesJson;
+        var json = ExerciseTestCaseFormat.ToStoredJson(exercise);
+        var testCases = SameJson(existing.TestCases, json) ? existing.TestCases : json;
         existing.Update(
             exercise.Title, exercise.Statement, exercise.Language, testCases, exercise.Points,
-            exercise.StarterCode, exercise.Solution, existing.MaxAttempts, exercise.Dataset, exercise.Hints);
+            exercise.StarterCode, exercise.Solution, existing.MaxAttempts, exercise.Dataset, exercise.Hints,
+            ToCommonErrors(exercise));
+
+        if (!existing.IsPublished)
+        {
+            logger.LogInformation("Exercício da aula '{Lesson}' voltou para /content e foi republicado.", lesson.Slug);
+            existing.Publish();
+        }
+
+        // O conteúdo só tem um exercício por aula: outro exercício da mesma aula no banco não vem mais de /content.
+        foreach (var extra in ordered.Skip(1).Where(e => e.IsPublished))
+        {
+            logger.LogWarning(
+                "Aula '{Lesson}' tem mais de um exercício no banco; o exercício {ExerciseId} ('{Title}') não está em /content "
+                + "e foi despublicado. Nada foi apagado.", lesson.Slug, extra.Id, extra.Title);
+            extra.Unpublish();
+        }
     }
 
     private static bool SameJson(string a, string b) =>
@@ -327,8 +391,12 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
 
     private static Exercise AddExercise(Lesson lesson, ExerciseContent exercise) =>
         lesson.AddExercise(
-            exercise.Title, exercise.Statement, exercise.Language, exercise.TestCasesJson, exercise.Points,
-            exercise.StarterCode, exercise.Solution, maxAttempts: null, exercise.Dataset, exercise.Hints);
+            exercise.Title, exercise.Statement, exercise.Language, ExerciseTestCaseFormat.ToStoredJson(exercise), exercise.Points,
+            exercise.StarterCode, exercise.Solution, maxAttempts: null, exercise.Dataset, exercise.Hints,
+            ToCommonErrors(exercise));
+
+    private static IEnumerable<CommonError> ToCommonErrors(ExerciseContent exercise) =>
+        exercise.CommonErrors.Select(e => new CommonError(e.Example, e.Message));
 
     // O Create do Domain gera o slug a partir do título; aqui o slug vem do arquivo/pasta.
     // SlugGenerator mantém hífens como separadores ("sql-dados" -> "sql-dados"), então o slug vai direto.

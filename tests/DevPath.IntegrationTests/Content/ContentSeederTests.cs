@@ -541,9 +541,251 @@ public sealed class ContentSeederTests : IAsyncLifetime
             await SeedAsync(copy);
             await using (var db = CreateDbContext())
             {
-                (await db.Exercises.SingleAsync(e => e.LessonId == lessonId)).Id.Should().Be(exerciseId, "o seed nunca apaga");
+                var orphan = await db.Exercises.SingleAsync(e => e.LessonId == lessonId);
+                orphan.Id.Should().Be(exerciseId, "o seed nunca apaga");
+                orphan.IsPublished.Should().BeFalse("exercício sem .exercise.json não fica ativo");
             }
         });
+    }
+
+    // ---- #24: formato dos casos, erros comuns, datasets e exercícios órfãos ----
+
+    [Fact]
+    public async Task SeedAsync_GravaCasosNoFormatoDoRunnerEErrosComuns()
+    {
+        await SeedAsync(_repoContent);
+
+        await using var db = CreateDbContext();
+        var lessonId = await LessonIdAsync("primeiros-passos-com-sql", "seu-primeiro-select");
+        var exercise = await db.Exercises.AsNoTracking().SingleAsync(e => e.LessonId == lessonId);
+
+        using (var doc = System.Text.Json.JsonDocument.Parse(exercise.TestCases))
+        {
+            var first = doc.RootElement[0];
+            first.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo( // jsonb não guarda a ordem das chaves
+                ["name", "dataset", "setup", "columns", "rows", "orderMatters", "checkColumnNames"]);
+            first.GetProperty("rows").EnumerateArray().SelectMany(r => r.EnumerateArray())
+                .Should().Contain(v => v.ValueKind == System.Text.Json.JsonValueKind.Number, "preço continua número");
+        }
+
+        exercise.TestCases.Should().NotContain("order_matters").And.NotContain("check_column_names");
+        var cases = DevPath.Application.CodeExecution.TestCaseSpec.ParseList(exercise.TestCases);
+        cases.Should().NotBeEmpty().And.OnlyContain(c => c.Dataset == "livraria" && c.Setup == null);
+
+        exercise.CommonErrors.Should().NotBeEmpty().And.OnlyContain(e => e.Example.Length > 0 && e.Message.Length > 0);
+        exercise.MaxAttempts.Should().BeNull();
+        exercise.IsPublished.Should().BeTrue();
+        (await db.Exercises.CountAsync(e => e.CommonErrors.Count == 0)).Should().Be(0);
+
+        // Os erros comuns ficam só no servidor: não aparecem no DTO da aula nem do exercício.
+        typeof(DevPath.Application.Lessons.ExerciseDto).GetProperties().Select(p => p.Name)
+            .Should().NotContain(n => n.Contains("Error", StringComparison.OrdinalIgnoreCase));
+        typeof(DevPath.Application.Lessons.LessonDto).GetProperties().Select(p => p.Name)
+            .Should().NotContain(n => n.Contains("Error", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SeedAsync_CasosNoFormatoAntigoNoBanco_SaoConvertidos()
+    {
+        await SeedAsync(_repoContent);
+        await using (var db = CreateDbContext())
+        {
+            // Como o seed antigo gravava: o JSON do arquivo, em snake_case.
+            await db.Database.ExecuteSqlRawAsync(
+                """UPDATE "Exercises" SET "TestCases" = '[{{"name":"x","columns":["a"],"rows":[[1]],"order_matters":false}}]'::jsonb""");
+        }
+
+        (await SeedAsync(_repoContent)).Updated.Should().Be(5);
+
+        await using (var db = CreateDbContext())
+        {
+            foreach (var testCases in await db.Exercises.Select(e => e.TestCases).ToListAsync())
+            {
+                DevPath.Application.CodeExecution.TestCaseSpec.ParseList(testCases).Should().NotBeEmpty();
+            }
+        }
+
+        (await SeedAsync(_repoContent)).NothingChanged.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SeedAsync_GravaOsDatasetsComSlugEHash()
+    {
+        await SeedAsync(_repoContent);
+
+        var file = Path.Combine(_repoContent, "datasets", "livraria.sql");
+        var sql = File.ReadAllText(file);
+        await using var db = CreateDbContext();
+        var dataset = await db.Datasets.AsNoTracking().SingleAsync();
+        dataset.Slug.Should().Be("livraria");
+        dataset.Sql.Should().Be(sql);
+        dataset.ContentHash.Should().Be(
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(file))),
+            "SHA-256 do conteúdo do arquivo");
+    }
+
+    [Fact]
+    public async Task SeedAsync_DatasetComMesmoHash_NaoReescreve_ComHashNovo_AtualizaAMesmaLinha()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            Guid datasetId;
+            string originalHash;
+            await using (var db = CreateDbContext())
+            {
+                var dataset = await db.Datasets.AsNoTracking().SingleAsync();
+                (datasetId, originalHash) = (dataset.Id, dataset.ContentHash);
+                // Marca o texto no banco sem mexer no hash: se o seed reescrevesse com hash igual, a marca sumiria.
+                await db.Database.ExecuteSqlRawAsync("""UPDATE "Datasets" SET "Sql" = "Sql" || '-- marca do teste'""");
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue("hash igual = nada a fazer");
+            await using (var db = CreateDbContext())
+            {
+                (await db.Datasets.AsNoTracking().SingleAsync()).Sql.Should().EndWith("-- marca do teste");
+            }
+
+            var file = Path.Combine(copy, "datasets", "livraria.sql");
+            File.AppendAllText(file, "\nINSERT INTO autores (nome, pais) VALUES ('Autora Nova', 'Brasil');\n");
+
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                var dataset = await db.Datasets.AsNoTracking().SingleAsync();
+                dataset.Id.Should().Be(datasetId);
+                dataset.Sql.Should().Be(File.ReadAllText(file));
+                dataset.ContentHash.Should().NotBe(originalHash).And.Be(DevPath.Domain.Datasets.Dataset.ComputeHash(File.ReadAllText(file)));
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_DatasetNovo_EhInseridoEDatasetRemovidoFica()
+    {
+        await WithContentCopy(async copy =>
+        {
+            File.WriteAllText(Path.Combine(copy, "datasets", "escola.sql"), "CREATE TABLE alunos (id int);\n");
+            (await SeedAsync(copy)).Inserted.Should().BeGreaterThan(0);
+
+            File.Delete(Path.Combine(copy, "datasets", "escola.sql"));
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue("dataset sem arquivo não é apagado (só avisa no log)");
+
+            await using var db = CreateDbContext();
+            (await db.Datasets.Select(d => d.Slug).OrderBy(s => s).ToListAsync()).Should().Equal("escola", "livraria");
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_ExercicioComDatasetInexistente_FalhaComONomeDoArquivoENaoGravaNada()
+    {
+        await WithContentCopy(async copy =>
+        {
+            var file = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "02-filtrando-com-where.exercise.json");
+            File.WriteAllText(file, File.ReadAllText(file).Replace("\"dataset\": \"livraria\"", "\"dataset\": \"escola\""));
+
+            var act = () => SeedAsync(copy);
+
+            (await act.Should().ThrowAsync<ContentValidationException>())
+                .Which.Errors.Should().ContainSingle(e => e.Contains("02-filtrando-com-where.exercise.json") && e.Contains("'escola'"));
+            (await CountRowsAsync()).Should().Be((0, 0, 0));
+            await using var db = CreateDbContext();
+            (await db.Datasets.CountAsync()).Should().Be(0);
+            (await db.Exercises.CountAsync()).Should().Be(0);
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_FonteSemODataset_ValidadorBarraAntesDoBanco()
+    {
+        // Outra IContentSource que não confere arquivos: a regra do ContentValidator é a que segura.
+        await SeedAsync(_repoContent);
+        var before = await SnapshotAsync();
+
+        await using var db = CreateDbContext();
+        var source = new WithoutDatasets(new FileSystemContentSource(_repoContent));
+        var act = () => new ContentSeeder(db, source, NullLogger<ContentSeeder>.Instance).SeedAsync();
+
+        var errors = (await act.Should().ThrowAsync<ContentValidationException>()).Which.Errors;
+        errors.Should().HaveCount(5).And.OnlyContain(e => e.Contains(".exercise.json: o dataset 'livraria' não existe"));
+        (await SnapshotAsync()).Should().Equal(before);
+    }
+
+    [Fact]
+    public async Task SeedAsync_EnunciadoComTituloNivel4_FalhaComONomeDoArquivo()
+    {
+        await WithContentCopy(async copy =>
+        {
+            var file = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.exercise.json");
+            File.WriteAllText(file, File.ReadAllText(file).Replace("\"statement\": \"", "\"statement\": \"#### Fundo\\n\\n"));
+
+            var act = () => SeedAsync(copy);
+
+            (await act.Should().ThrowAsync<ContentValidationException>())
+                .Which.Errors.Should().ContainSingle(e => e.Contains("01-seu-primeiro-select.exercise.json") && e.Contains("nível 4"));
+            (await CountRowsAsync()).Should().Be((0, 0, 0));
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_ExercicioOrfao_SomeDaAulaEDaExecucao_EVoltaNaMesmaLinha()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonId = await LessonIdAsync("primeiros-passos-com-sql", "juntando-tabelas-com-join");
+            Guid exerciseId;
+            await using (var db = CreateDbContext())
+            {
+                exerciseId = (await db.Exercises.SingleAsync(e => e.LessonId == lessonId)).Id;
+            }
+
+            var file = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "04-juntando-tabelas-com-join.exercise.json");
+            var original = File.ReadAllText(file);
+            File.Delete(file);
+
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                var exercise = await db.Exercises.AsNoTracking().SingleAsync(e => e.Id == exerciseId);
+                exercise.IsPublished.Should().BeFalse();
+                (await db.Exercises.CountAsync(e => e.IsPublished)).Should().Be(4);
+                (await new DevPath.Infrastructure.CodeExecution.ExerciseCatalog(db).GetVisibilityAsync(exerciseId))
+                    .Should().NotBeNull().And.Match<DevPath.Application.CodeExecution.ExerciseVisibility>(v => !v.ExercisePublished);
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue("órfão já despublicado: idempotente");
+
+            File.WriteAllText(file, original);
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                var exercise = await db.Exercises.AsNoTracking().SingleAsync(e => e.LessonId == lessonId);
+                exercise.Id.Should().Be(exerciseId, "volta na mesma linha, sem duplicar");
+                exercise.IsPublished.Should().BeTrue();
+            }
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_ComExerciciosEDatasets_SegundaRodadaNaoMudaNada()
+    {
+        await SeedAsync(_repoContent);
+        var before = await SnapshotAsync();
+
+        (await SeedAsync(_repoContent)).NothingChanged.Should().BeTrue();
+
+        (await SnapshotAsync()).Should().Equal(before);
+        before.Should().Contain(r => r.StartsWith("E|")).And.Contain(r => r.StartsWith("D|livraria|"));
+    }
+
+    private sealed class WithoutDatasets(IContentSource inner) : IContentSource
+    {
+        public IReadOnlyList<PathContent> LoadPaths() => inner.LoadPaths();
+
+        public IReadOnlyList<DatasetContent> LoadDatasets() => [];
     }
 
     private static Task<DevPath.Domain.CareerPaths.Lesson> LessonAsync(DevPathDbContext db, string module, string slug) =>
@@ -676,7 +918,14 @@ public sealed class ContentSeederTests : IAsyncLifetime
         var paths = await db.CareerPaths.Select(p => $"P|{p.Id}|{p.Slug}|{p.Title}|{p.Order}|{p.IsActive}").ToListAsync();
         var modules = await db.Modules.Select(m => $"M|{m.Id}|{m.Slug}|{m.Title}|{m.Order}|{m.IsPublished}|{m.EstimatedMinutes}").ToListAsync();
         var lessons = await db.Lessons.Select(l => $"L|{l.Id}|{l.Slug}|{l.Title}|{l.Order}|{l.IsPublished}|{l.Content.Length}").ToListAsync();
-        return paths.Concat(modules).Concat(lessons).Order(StringComparer.Ordinal).ToList();
+        var exerciseRows = await db.Exercises.AsNoTracking().ToListAsync();
+        var exercises = exerciseRows
+            .Select(e => $"E|{e.Id}|{e.LessonId}|{e.Title}|{e.IsPublished}|{e.Points}|{e.Dataset}|{e.TestCases}");
+        var commonErrors = exerciseRows
+            .Select(e => $"C|{e.Id}|{string.Join("|", e.CommonErrors.Select(c => c.Example + "=>" + c.Message))}");
+        var datasets = (await db.Datasets.AsNoTracking().ToListAsync()).Select(d => $"D|{d.Slug}|{d.Id}|{d.ContentHash}|{d.Sql.Length}");
+        return paths.Concat(modules).Concat(lessons).Concat(exercises).Concat(commonErrors).Concat(datasets)
+            .Order(StringComparer.Ordinal).ToList();
     }
 
     private static void CopyDirectory(string source, string target)

@@ -150,10 +150,11 @@ public sealed class Lesson
         string solutionCode = "",
         int? maxAttempts = null,
         string? dataset = null,
-        IEnumerable<string>? hints = null)
+        IEnumerable<string>? hints = null,
+        IEnumerable<CommonError>? commonErrors = null)
     {
         var exercise = Exercise.Create(Id, title, statement, language, testCasesJson, points, starterCode, solutionCode, maxAttempts,
-            dataset, hints);
+            dataset, hints, commonErrors);
         _exercises.Add(exercise);
         return exercise;
     }

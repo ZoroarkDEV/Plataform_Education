@@ -7,14 +7,15 @@ public sealed record ExerciseVisibility(
     bool PathActive,
     bool ModulePublished,
     bool LessonPublished,
-    bool LessonDraft);
+    bool LessonDraft,
+    bool ExercisePublished);
 
 public enum ExerciseAccess
 {
     Allowed,
 
     /// <summary>
-    /// Não existe, está escondido (trilha inativa, módulo/aula não publicados) ou a aula é rascunho.
+    /// Não existe, está escondido (trilha inativa, módulo/aula/exercício não publicados) ou a aula é rascunho.
     /// A Web responde 404 com a mesma mensagem nos três casos, para não revelar qual deles é.
     /// </summary>
     NotFound
@@ -43,7 +44,10 @@ public sealed class LessonAccessPolicy : ILessonAccessPolicy
 {
     public ExerciseAccess Evaluate(Guid userId, ExerciseVisibility? exercise)
     {
-        var visible = exercise is { PathActive: true, ModulePublished: true, LessonPublished: true, LessonDraft: false };
+        var visible = exercise is
+        {
+            PathActive: true, ModulePublished: true, LessonPublished: true, LessonDraft: false, ExercisePublished: true
+        };
         return visible ? ExerciseAccess.Allowed : ExerciseAccess.NotFound;
     }
 }
