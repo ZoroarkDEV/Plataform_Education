@@ -3,18 +3,18 @@
     ViewData["Title"] = "Erro";
 }
 <section class="max-w-3xl">
-    <h1 class="text-3xl font-bold text-red-700">Erro.</h1>
-    <p class="mt-2 text-lg text-red-700">Ocorreu um erro ao processar sua requisição.</p>
+    <h1 class="text-3xl font-bold text-red-700 dark:text-red-300">Erro.</h1>
+    <p class="mt-2 text-lg text-red-700 dark:text-red-300">Ocorreu um erro ao processar sua requisição.</p>
 
     @if (Model.ShowRequestId)
     {
-        <p class="mt-4 text-sm text-slate-600">
-            <strong>Request ID:</strong> <code class="rounded bg-slate-100 px-1 py-0.5 font-mono">@Model.RequestId</code>
+        <p class="mt-4 text-sm text-slate-600 dark:text-slate-300">
+            <strong>Request ID:</strong> <code class="rounded bg-slate-100 px-1 py-0.5 font-mono dark:bg-slate-800">@Model.RequestId</code>
         </p>
     }
 
-    <h2 class="mt-8 text-xl font-semibold text-slate-900">Modo de desenvolvimento</h2>
-    <p class="mt-2 text-slate-600">
+    <h2 class="mt-8 text-xl font-semibold text-slate-900 dark:text-white">Modo de desenvolvimento</h2>
+    <p class="mt-2 text-slate-600 dark:text-slate-300">
         Para ver detalhes do erro localmente, defina a variável <code class="font-mono">ASPNETCORE_ENVIRONMENT</code> como
         <code class="font-mono">Development</code> e reinicie a aplicação. Nunca habilite o ambiente Development em produção:
         ele pode expor informações sensíveis.

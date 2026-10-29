@@ -13,6 +13,10 @@ namespace DevPath.Web.ViewModels.Account;
 /// </remarks>
 public sealed class RegisterViewModel
 {
+    /// <summary>Regra de senha (US-11.1): aparece como dica ao lado do campo e como mensagem de erro.</summary>
+    public const string PasswordRule =
+        "A senha precisa ter pelo menos 8 caracteres, com letra maiúscula, letra minúscula e número.";
+
     [Required(ErrorMessage = "Informe seu nome.")]
     [StringLength(100, MinimumLength = 2, ErrorMessage = "O nome deve ter entre {2} e {1} caracteres.")]
     [Display(Name = "Nome")]
@@ -25,15 +29,15 @@ public sealed class RegisterViewModel
     public string Email { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Informe uma senha.")]
-    [StringLength(100, MinimumLength = 8, ErrorMessage = "A senha deve ter pelo menos {2} caracteres.")]
+    [StringLength(100, MinimumLength = 8, ErrorMessage = PasswordRule)]
     [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$",
-        ErrorMessage = "A senha precisa ter letra minúscula, letra maiúscula e número.")]
+        ErrorMessage = PasswordRule)]
     [DataType(DataType.Password)]
     [Display(Name = "Senha")]
     public string Password { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Confirme a senha.")]
-    [Compare(nameof(Password), ErrorMessage = "As senhas não conferem.")]
+    [Compare(nameof(Password), ErrorMessage = "As duas senhas não são iguais.")]
     [DataType(DataType.Password)]
     [Display(Name = "Confirmar senha")]
     public string ConfirmPassword { get; set; } = string.Empty;

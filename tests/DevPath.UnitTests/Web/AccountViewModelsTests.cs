@@ -33,7 +33,7 @@ public class AccountViewModelsTests
         model.ConfirmPassword = "Outra1234";
 
         Validate(model).Should().ContainSingle()
-            .Which.ErrorMessage.Should().Be("As senhas não conferem.");
+            .Which.ErrorMessage.Should().Be("As duas senhas não são iguais.");
     }
 
     [Fact]

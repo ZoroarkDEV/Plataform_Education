@@ -7,14 +7,18 @@
 *@
 @{
     var mobile = string.Equals(ViewData["Variant"] as string, "mobile", StringComparison.Ordinal);
+    // Link ativo (aria-current="page"), como no menu principal do _Layout.
+    var dashboardActive = string.Equals(ViewContext.RouteData.Values["controller"]?.ToString(), "Dashboard", StringComparison.OrdinalIgnoreCase);
+    const string activeClass = "bg-brand-50 text-brand-700 dark:bg-slate-800 dark:text-brand-100";
     var displayName = User.FindFirst(DevPathClaimTypes.DisplayName)?.Value ?? User.Identity?.Name;
 
     var linkClass = mobile
         ? "block rounded-md px-3 py-2 text-base font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
         : "rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white focus-visible:outline-2 focus-visible:outline-brand-600";
+    // "Criar conta" com borda (secundário): a ação principal de cada tela fica no conteúdo (ex.: "Começar Agora").
     var primaryClass = mobile
-        ? "block rounded-md bg-brand-600 px-3 py-2 text-center text-base font-semibold text-white hover:bg-brand-700"
-        : "rounded-md bg-brand-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600";
+        ? "block rounded-md border border-brand-600 px-3 py-2 text-center text-base font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-300 dark:text-brand-200 dark:hover:bg-slate-800"
+        : "rounded-md border border-brand-600 px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-300 dark:text-brand-200 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600";
     var logoutClass = mobile
         ? "block w-full rounded-md px-3 py-2 text-left text-base font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
         : "rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-brand-600";
@@ -26,7 +30,10 @@
         <li class="@(mobile ? "px-3 py-2 text-sm text-slate-500 dark:text-slate-400" : "hidden px-2 text-sm text-slate-600 dark:text-slate-300 md:block")">
             Olá, <span class="font-semibold text-slate-900 dark:text-white">@displayName</span>
         </li>
-        <li><a asp-controller="Dashboard" asp-action="Index" class="@linkClass">Dashboard</a></li>
+        <li>
+            <a asp-controller="Dashboard" asp-action="Index" aria-current="@(dashboardActive ? "page" : null)"
+               class="@linkClass @(dashboardActive ? activeClass : "")">Dashboard</a>
+        </li>
         <li>
             <form asp-controller="Account" asp-action="Logout" method="post">
                 <button type="submit" class="@logoutClass">Sair</button>

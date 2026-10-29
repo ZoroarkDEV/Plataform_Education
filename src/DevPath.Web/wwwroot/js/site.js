@@ -118,3 +118,15 @@ document.addEventListener("DOMContentLoaded", () => {
   // Conteúdo trazido pelo HTMX também ganha os botões.
   document.addEventListener("htmx:load", (event) => setup(event.target));
 })();
+
+// Tema em todo o app (#11, R7): o botão do header e o da aula (#12) ficam em sincronia.
+// Roda depois do handler de cada botão (o clique sobe até o document).
+document.addEventListener("click", (event) => {
+  if (!event.target.closest?.("[data-theme-toggle]")) return;
+  const dark = document.documentElement.classList.contains("dark");
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(dark));
+    const label = button.querySelector("[data-theme-state]");
+    if (label) label.textContent = dark ? "ligado" : "desligado";
+  });
+});

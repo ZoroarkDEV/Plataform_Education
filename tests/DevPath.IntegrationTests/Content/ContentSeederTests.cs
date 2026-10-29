@@ -148,6 +148,54 @@ public sealed class ContentSeederTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SeedAsync_SlugsComHifen_ChegamAoBancoSemMudanca()
+    {
+        // O slug vem da pasta/arquivo, não do título, e tem hífens: o seed grava exatamente o do /content.
+        var content = new FileSystemContentSource(_repoContent).LoadPaths();
+        var expected = content.SelectMany(p => p.Modules.SelectMany(m => m.Lessons.Select(l => $"{p.Slug}/{m.Slug}/{l.Slug}")))
+            .Order(StringComparer.Ordinal).ToList();
+        expected.Should().Contain("sql-dados/primeiros-passos-com-sql/ordenando-e-limitando-com-order-by-e-limit")
+            .And.Contain("sql-dados/ambiente/pgadmin-e-dbeaver");
+
+        await SeedAsync(_repoContent);
+
+        await using var db = CreateDbContext();
+        var actual = await (
+                from l in db.Lessons
+                join m in db.Modules on l.ModuleId equals m.Id
+                join p in db.CareerPaths on m.CareerPathId equals p.Id
+                select p.Slug + "/" + m.Slug + "/" + l.Slug)
+            .ToListAsync();
+        actual.Order(StringComparer.Ordinal).Should().Equal(expected);
+        (await SeedAsync(_repoContent)).NothingChanged.Should().BeTrue("slug igual ao do /content não gera ChangeSlug");
+    }
+
+    [Fact]
+    public async Task SeedAsync_BancoComOrdemAntiga_PrimeirosPassosComSqlVaiParaAOrdem1()
+    {
+        await WithContentCopy(async copy =>
+        {
+            // Banco semeado antes do #23: "primeiros-passos-com-sql" em 7 e os demais em 1..6.
+            EditPathYaml(copy, "sql-dados", ToOldModuleOrder);
+            await SeedAsync(copy);
+            var ids = await ModuleIdsBySlugAsync("sql-dados");
+            (await ModuleSlugsInOrderAsync("sql-dados")).Should().Equal(
+                "ambiente", "estruturas", "crud", "consultas", "performance-e-confiabilidade", "conectando-csharp",
+                "primeiros-passos-com-sql");
+
+            // Conteúdo atual: todos os 7 módulos mudam de ordem (passa pelo índice único sem conflito).
+            var result = await SeedAsync(_repoContent);
+
+            result.Should().Be(new ContentSeedResult(Inserted: 0, Updated: 7));
+            (await ModuleSlugsInOrderAsync("sql-dados")).Should().Equal(
+                "primeiros-passos-com-sql", "ambiente", "estruturas", "crud", "consultas",
+                "performance-e-confiabilidade", "conectando-csharp");
+            (await ModuleIdsBySlugAsync("sql-dados")).Should().BeEquivalentTo(ids, "o módulo é a mesma linha, só muda a ordem");
+            (await SeedAsync(_repoContent)).NothingChanged.Should().BeTrue();
+        });
+    }
+
+    [Fact]
     public async Task SeedAsync_ModulosTrocamDeOrdem_MantemOsMesmosIds()
     {
         await WithContentCopy(async copy =>
@@ -156,10 +204,10 @@ public sealed class ContentSeederTests : IAsyncLifetime
             var ids = await ModuleIdsBySlugAsync("sql-dados");
 
             EditPathYaml(copy, "sql-dados", yaml => yaml
-                .Replace("description: \"CREATE DATABASE, CREATE TABLE e constraints.\"\n    order: 2",
-                         "description: \"CREATE DATABASE, CREATE TABLE e constraints.\"\n    order: 3")
-                .Replace("description: \"INSERT, SELECT, UPDATE e DELETE.\"\n    order: 3",
-                         "description: \"INSERT, SELECT, UPDATE e DELETE.\"\n    order: 2"));
+                .Replace("description: \"CREATE DATABASE, CREATE TABLE e constraints.\"\n    order: 3",
+                         "description: \"CREATE DATABASE, CREATE TABLE e constraints.\"\n    order: 4")
+                .Replace("description: \"INSERT, SELECT, UPDATE e DELETE.\"\n    order: 4",
+                         "description: \"INSERT, SELECT, UPDATE e DELETE.\"\n    order: 3"));
 
             var result = await SeedAsync(copy);
 
@@ -218,9 +266,9 @@ public sealed class ContentSeederTests : IAsyncLifetime
 
                 var modules = await db.Modules.Where(m => db.CareerPaths.Any(p => p.Id == m.CareerPathId && p.Slug == "sql-dados")).OrderBy(m => m.Order).ToListAsync();
                 modules.Select(m => (m.Slug, m.Order, m.IsPublished)).Should().Equal(
-                    ("ambiente", 1, true), ("estruturas", 2, true), ("consultas", 3, true),
-                    ("performance-e-confiabilidade", 4, true), ("conectando-csharp", 5, true),
-                    ("primeiros-passos-com-sql", 6, true), ("crud", 7, false));
+                    ("primeiros-passos-com-sql", 1, true), ("ambiente", 2, true), ("estruturas", 3, true),
+                    ("consultas", 4, true), ("performance-e-confiabilidade", 5, true),
+                    ("conectando-csharp", 6, true), ("crud", 7, false));
             }
 
             (await LessonSlugsInOrderAsync("consultas")).Should().Equal("joins", "subqueries-e-ctes", "agregacoes-group-by-having");
@@ -235,7 +283,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
             await using var after = CreateDbContext();
             (await after.CareerPaths.CountAsync(p => p.IsActive)).Should().Be(2);
             (await after.Modules.CountAsync(m => !m.IsPublished)).Should().Be(0);
-            (await after.Modules.SingleAsync(m => m.Slug == "crud")).Order.Should().Be(3);
+            (await after.Modules.SingleAsync(m => m.Slug == "crud")).Order.Should().Be(4);
             (await LessonSlugsInOrderAsync("consultas")).Should().Equal("joins", "agregacoes-group-by-having", "subqueries-e-ctes");
             (await after.Lessons.CountAsync(l => !l.IsPublished)).Should().Be(0);
         });
@@ -564,6 +612,24 @@ public sealed class ContentSeederTests : IAsyncLifetime
                 ? Regex.Replace(e, @"order: (\d+)", m =>
                     int.Parse(m.Groups[1].Value) is var o && o > removedOrder ? $"order: {o - 1}" : m.Value)
                 : e));
+    }
+
+    // Volta o path.yaml da SQL & Dados para a ordem de antes do #23 (primeiros-passos-com-sql por último).
+    private static string ToOldModuleOrder(string yaml)
+    {
+        var entries = Regex.Split(yaml, @"(?=\n  (?:#[^\n]*\n  )?- slug: )");
+        var first = entries.Single(e => e.Contains("- slug: primeiros-passos-com-sql\n"));
+        var others = entries.Where(e => e != first).Select(e => e.Contains("- slug: ")
+            ? Regex.Replace(e, @"order: (\d+)", m => $"order: {int.Parse(m.Groups[1].Value) - 1}")
+            : e);
+        return string.Concat(others) + first.Replace("order: 1", "order: 7");
+    }
+
+    private async Task<List<string>> ModuleSlugsInOrderAsync(string path)
+    {
+        await using var db = CreateDbContext();
+        return await db.Modules.Where(m => db.CareerPaths.Any(p => p.Id == m.CareerPathId && p.Slug == path))
+            .OrderBy(m => m.Order).Select(m => m.Slug).ToListAsync();
     }
 
     private async Task<bool> LessonPublishedAsync(string module, string slug)
