@@ -14,6 +14,6 @@ public sealed class ExerciseCatalog(DevPathDbContext db) : IExerciseCatalog
          join path in db.CareerPaths.AsNoTracking() on module.CareerPathId equals path.Id
          where exercise.Id == exerciseId
          select new ExerciseVisibility(exercise.Id, lesson.Id, path.IsActive, module.IsPublished,
-             lesson.IsPublished, lesson.IsDraft))
+             lesson.IsPublished, lesson.IsDraft, exercise.IsPublished))
         .SingleOrDefaultAsync(cancellationToken);
 }

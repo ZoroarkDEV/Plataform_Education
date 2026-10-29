@@ -104,7 +104,7 @@ Fica ao lado da aula, com o mesmo nome (`01-seu-primeiro-select.md` →
 
 | Chave | Obrigatória | O que é |
 |---|---|---|
-| `title`, `statement`, `language` | sim | título (até 200), enunciado em Markdown e linguagem (até 50) |
+| `title`, `statement`, `language` | sim | título (até 200), enunciado em Markdown e linguagem (até 50). No `statement`, títulos só até `###` (veja abaixo) |
 | `dataset` | não | nome de um arquivo em `content/datasets/` (sem `.sql`); o banco onde a consulta roda |
 | `points` | não | pontos do exercício (padrão 10). **Usar dica não reduz os pontos.** |
 | `starter_code` | não | código que já aparece no editor |
@@ -113,10 +113,63 @@ Fica ao lado da aula, com o mesmo nome (`01-seu-primeiro-select.md` →
 | `test_cases` | sim, ao menos 1 | resultado esperado: `columns`, `rows` (cada linha com um valor por coluna: texto, número, `true`/`false` ou `null`), `order_matters` e `check_column_names` (padrão `false`) |
 | `common_errors` | não | erros comuns: `example` (consulta errada) e `message` (explicação amigável) |
 
-O seed grava o exercício no banco junto com a aula (um exercício por aula, sempre na mesma linha:
-editar o arquivo atualiza o exercício sem perder tentativas). Apagar o `.exercise.json` não apaga o
-exercício do banco. Para o aluno só vão título, enunciado, linguagem, dataset, código inicial,
-dicas e pontos; `solution`, `test_cases` e `common_errors` ficam só no servidor.
+**Títulos no `statement`: no máximo 3 níveis (`#`, `##` e `###`).** Na página da aula o enunciado
+aparece dentro da seção do exercício, então o renderizador desloca os títulos para começarem em
+`<h3>` (`#` vira `<h3>`, `##` vira `<h4>`, `###` vira `<h5>`) e o teto do HTML é `<h6>`: com
+`####` ou mais, níveis diferentes acabariam todos iguais. `####` dentro de bloco de código não conta.
+O erro aponta o arquivo, o nível e a linha do enunciado.
+
+#### Como o exercício fica no banco
+
+O seed grava o exercício junto com a aula (um exercício por aula, sempre na mesma linha: editar o
+arquivo atualiza o exercício sem perder tentativas). Para o aluno só vão título, enunciado,
+linguagem, dataset, código inicial, dicas e pontos; `solution`, `test_cases` e `common_errors`
+ficam só no servidor.
+
+| Arquivo | Banco (`Exercises`) |
+|---|---|
+| `test_cases` | coluna `TestCases` (jsonb), no formato que o corretor lê, em **camelCase** (abaixo) |
+| `common_errors` | coluna `CommonErrors` (jsonb): `[{ "example", "message" }]`. Nunca vai para a página nem para a API do aluno |
+| `hints` | coluna `Hints` (jsonb), na ordem do arquivo |
+| `points` | `Points` (padrão 10) |
+| — | `MaxAttempts` fica vazio (sem limite de tentativas) |
+
+Cada caso de teste é gravado assim (todas as chaves sempre presentes):
+
+```json
+[
+  {
+    "name": "Lista com título e preço",
+    "dataset": "livraria",
+    "setup": null,
+    "columns": ["titulo", "preco"],
+    "rows": [["Dom Casmurro", 29.90], ["Livro sem preço", null]],
+    "orderMatters": false,
+    "checkColumnNames": false
+  }
+]
+```
+
+- `order_matters` → `orderMatters` e `check_column_names` → `checkColumnNames`; se faltarem no
+  arquivo, ficam `false`.
+- `dataset` repete o `dataset` do exercício (ou `null` se ele não tiver); `setup` (SQL extra rodado
+  depois do dataset) ainda não existe no arquivo e fica `null`.
+- Os valores são copiados como estão: número continua número (`39.90` não vira texto), `null`
+  continua `null`, `true`/`false` continuam booleanos.
+
+#### Datasets (`content/datasets/<nome>.sql` → tabela `Datasets`)
+
+O seed também grava cada `.sql` de `content/datasets/` na tabela `Datasets`, na mesma transação do
+resto: o nome do arquivo sem `.sql` é o slug (só minúsculas, números e hífens; até 100 caracteres),
+`Sql` é o conteúdo do arquivo e `ContentHash` é o SHA-256 dele. O corretor carrega o dataset do
+banco por esse slug.
+
+- Arquivo novo: linha nova.
+- Arquivo editado: a mesma linha recebe o `Sql` e o hash novos. Arquivo igual (mesmo hash): nada é
+  regravado.
+- Arquivo removido: a linha fica no banco (aviso no log).
+- Exercício com `dataset` que não existe em `content/datasets/`: o seed falha **antes** de gravar
+  qualquer coisa, com o nome do `.exercise.json`.
 
 Como a resposta do aluno é comparada (regras do PO, issue #22):
 
@@ -148,7 +201,9 @@ consultas de verdade (`SELECT colunas FROM tabela;`) começam com a linha
   e slug 200 caracteres.
 - Cada item de `objectives` tem de 1 a 200 caracteres. Aula pronta tem `objectives`; stub tem `draft: true`.
 - Exercício: JSON válido, sem chave desconhecida, com `solution` e ao menos um caso de teste; cada
-  linha de `rows` tem um valor por coluna; o `dataset` existe; não há `.exercise.json` sem a aula.
+  linha de `rows` tem um valor por coluna; o `dataset` existe em `content/datasets/`; não há
+  `.exercise.json` sem a aula; títulos do `statement` só até `###`.
+- Dataset: nome do arquivo é um slug válido (até 100 caracteres) e o script não está vazio.
 
 Erros de YAML apontam arquivo e linha, por exemplo:
 `content/paths/sql-dados/modules/consultas/01-joins.md, linha 4: chave desconhecida 'ordem'. Chaves aceitas: ...`.
@@ -182,6 +237,9 @@ alunos fica preso à linha do banco, então o slug é a "identidade" do conteúd
   - Módulo removido: fica **despublicado** e vai para o fim da ordem da trilha.
   - Aula removida: fica **despublicada** (some da navegação e não abre) e vai para o fim da ordem
     do módulo. O progresso dos alunos continua preso a ela.
+  - Exercício removido (apagou o `.exercise.json`): fica **despublicado**. A aula abre sem ele e
+    enviar resposta para ele dá "não encontrado". Tentativas e pontos ficam guardados; se o arquivo
+    voltar, a mesma linha é republicada.
   - O log mostra um aviso para cada item órfão. Se o item voltar para cá com o mesmo slug, ele é
     reativado/republicado na posição do arquivo.
 

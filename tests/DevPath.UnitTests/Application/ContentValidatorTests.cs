@@ -161,6 +161,85 @@ public class ContentValidatorTests
             .Should().ContainSingle(e => e.Contains("o item 1 de 'objectives' tem 201 caracteres (máximo 200)"));
     }
 
+    // ---- Exercícios: datasets e títulos do enunciado (#24) ----
+
+    private static ExerciseContent Exercise(string statement = "Liste os livros.", string? dataset = "livraria") =>
+        new("content/ambiente/01-aula-1.exercise.json", "Lista", statement, "sql", dataset, 10, "", "SELECT 1;", [],
+            [new ExerciseTestCase("caso", ["a"], [[1m]], false, false)], []);
+
+    private static PathContent[] WithExercise(ExerciseContent exercise) =>
+        [Path("sql-dados", "SQL", 1, Module("ambiente", 1, Lesson("ambiente", 1) with { Exercise = exercise }))];
+
+    private static readonly DatasetContent Livraria = new("content/datasets/livraria.sql", "livraria", "CREATE TABLE livros (id int);");
+
+    [Fact]
+    public void Validate_ExercicioComDatasetExistente_NaoRetornaErros() =>
+        ContentValidator.Validate(WithExercise(Exercise()), [Livraria]).Should().BeEmpty();
+
+    [Fact]
+    public void Validate_ExercicioSemDataset_NaoPrecisaDeArquivo() =>
+        ContentValidator.Validate(WithExercise(Exercise(dataset: null)), []).Should().BeEmpty();
+
+    [Fact]
+    public void Validate_DatasetInexistente_ErroComArquivoDoExercicioEDoDataset()
+    {
+        var errors = ContentValidator.Validate(WithExercise(Exercise(dataset: "escola")), [Livraria]);
+
+        errors.Should().ContainSingle().Which.Should()
+            .StartWith("content/ambiente/01-aula-1.exercise.json: o dataset 'escola' não existe")
+            .And.Contain("content/datasets/escola.sql");
+    }
+
+    [Fact]
+    public void Validate_SemListaDeDatasets_NaoChecaReferencias() =>
+        ContentValidator.Validate(WithExercise(Exercise(dataset: "escola"))).Should().BeEmpty();
+
+    [Theory]
+    [InlineData("Livraria")]
+    [InlineData("livraria_v2")]
+    public void Validate_NomeDeDatasetInvalido_ErroComArquivo(string slug)
+    {
+        var errors = ContentValidator.Validate(WithExercise(Exercise(dataset: null)),
+            [new DatasetContent($"content/datasets/{slug}.sql", slug, "SELECT 1;")]);
+
+        errors.Should().ContainSingle(e => e.StartsWith($"content/datasets/{slug}.sql: nome do arquivo '{slug}' inválido"));
+    }
+
+    [Fact]
+    public void Validate_DatasetVazio_ErroComArquivo() =>
+        ContentValidator.Validate(WithExercise(Exercise()), [Livraria with { Sql = "  \n" }])
+            .Should().ContainSingle(e => e == "content/datasets/livraria.sql: o script do dataset está vazio.");
+
+    [Theory]
+    [InlineData("# Parte 1\n\nTexto.\n\n## Detalhe\n\n### Mais fundo\n")]
+    [InlineData("Texto sem título.")]
+    [InlineData("Exemplo:\n\n```\n#### isto é código\n```\n")]
+    [InlineData("Parte\n====\n\nSub\n---\n")]
+    public void Validate_EnunciadoComAte3NiveisDeTitulo_EhValido(string statement) =>
+        ContentValidator.Validate(WithExercise(Exercise(statement)), [Livraria]).Should().BeEmpty();
+
+    [Theory]
+    [InlineData("#### Fundo demais", 4, 1)]
+    [InlineData("Texto.\n\n- item\n\n  ##### Dentro da lista", 5, 5)]
+    [InlineData("> ###### Citação", 6, 1)]
+    public void Validate_EnunciadoComTituloAbaixoDoNivel3_ErroComArquivoNivelELinha(string statement, int level, int line)
+    {
+        var errors = ContentValidator.Validate(WithExercise(Exercise(statement)), [Livraria]);
+
+        errors.Should().ContainSingle().Which.Should()
+            .StartWith("content/ambiente/01-aula-1.exercise.json: o 'statement' tem um título de nível " + level)
+            .And.Contain($"linha {line} do enunciado")
+            .And.Contain("no máximo 3 níveis");
+    }
+
+    [Fact]
+    public void MaxStatementHeadingLevel_MaisOH3DoRenderer_NaoPassaDoH6()
+    {
+        // O enunciado começa em <h3> (LessonMarkdownRenderer.StatementMinHeadingLevel); 3 níveis = h3..h5, sem bater no teto h6.
+        (DevPath.Web.Lessons.LessonMarkdownRenderer.StatementMinHeadingLevel + ContentValidator.MaxStatementHeadingLevel - 1)
+            .Should().BeLessThanOrEqualTo(6);
+    }
+
     private static PathContent Path(string folder, string title, int order, params ModuleContent[] modules) =>
         new(folder, title, "Descrição", "icon", DifficultyLevel.Beginner, 10, order, modules);
 

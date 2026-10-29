@@ -127,6 +127,12 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CommonErrors")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("Dataset")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -136,6 +142,9 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
                         .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<bool>("IsPublished")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Language")
                         .IsRequired()
@@ -178,6 +187,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Exercises", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Exercises_CommonErrors_IsArray", "jsonb_typeof(\"CommonErrors\") = 'array'");
+
                             t.HasCheckConstraint("CK_Exercises_Hints_IsArray", "jsonb_typeof(\"Hints\") = 'array'");
 
                             t.HasCheckConstraint("CK_Exercises_MaxAttempts_Positive", "\"MaxAttempts\" IS NULL OR \"MaxAttempts\" > 0");

@@ -32,6 +32,18 @@ public sealed class Exercise
     /// <summary>Dicas na ordem do arquivo: da mais geral para a mais direta. Gravadas como jsonb.</summary>
     public IReadOnlyList<string> Hints { get; private set; } = [];
 
+    /// <summary>
+    /// Erros comuns de iniciante e a mensagem amigável de cada um (<c>common_errors</c> do conteúdo), gravados como jsonb.
+    /// Servem para o feedback no servidor: como os exemplos mostram quase a resposta, NUNCA vão para o aluno (não entram em DTO).
+    /// </summary>
+    public IReadOnlyList<CommonError> CommonErrors { get; private set; } = [];
+
+    /// <summary>
+    /// Exercício visível para o aluno. O seed despublica o exercício cujo <c>.exercise.json</c> sumiu de /content
+    /// (mesmo padrão de <see cref="Lesson.IsPublished"/>): nada é apagado, as tentativas continuam presas a ele.
+    /// </summary>
+    public bool IsPublished { get; private set; } = true;
+
     public const int MaxDatasetLength = 100;
 
     private Exercise() { }
@@ -47,17 +59,22 @@ public sealed class Exercise
         string solutionCode = "",
         int? maxAttempts = null,
         string? dataset = null,
-        IEnumerable<string>? hints = null)
+        IEnumerable<string>? hints = null,
+        IEnumerable<CommonError>? commonErrors = null)
     {
         var exercise = new Exercise { Id = Guid.NewGuid(), LessonId = lessonId };
         exercise.Update(title, statement, language, testCasesJson, points, starterCode, solutionCode, maxAttempts,
-            dataset, hints ?? []);
+            dataset, hints ?? [], commonErrors ?? []);
         return exercise;
     }
+
+    public void Publish() => IsPublished = true;
+    public void Unpublish() => IsPublished = false;
 
     /// <summary>Atualiza o exercício (ex.: o seed corrigindo um enunciado), com as mesmas validações do Create.</summary>
     /// <param name="dataset">Novo dataset (<c>null</c> = sem dataset).</param>
     /// <param name="hints">Novas dicas; <c>null</c> mantém as atuais.</param>
+    /// <param name="commonErrors">Novos erros comuns; <c>null</c> mantém os atuais.</param>
     public void Update(
         string title,
         string statement,
@@ -68,7 +85,8 @@ public sealed class Exercise
         string solutionCode,
         int? maxAttempts,
         string? dataset = null,
-        IEnumerable<string>? hints = null)
+        IEnumerable<string>? hints = null,
+        IEnumerable<CommonError>? commonErrors = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         ArgumentException.ThrowIfNullOrWhiteSpace(statement);
@@ -105,6 +123,21 @@ public sealed class Exercise
             }
         }
 
+        List<CommonError>? normalizedErrors = null;
+        if (commonErrors is not null)
+        {
+            normalizedErrors = [];
+            foreach (var error in commonErrors)
+            {
+                if (error is null || string.IsNullOrWhiteSpace(error.Example) || string.IsNullOrWhiteSpace(error.Message))
+                {
+                    throw new ArgumentException("Erro comum precisa de exemplo e mensagem.", nameof(commonErrors));
+                }
+
+                normalizedErrors.Add(new CommonError(error.Example.Trim(), error.Message.Trim()));
+            }
+        }
+
         Title = title.Trim();
         Statement = statement;
         Language = language.Trim().ToLowerInvariant();
@@ -115,5 +148,6 @@ public sealed class Exercise
         MaxAttempts = maxAttempts;
         Dataset = normalizedDataset;
         Hints = normalizedHints ?? Hints;
+        CommonErrors = normalizedErrors ?? CommonErrors;
     }
 }

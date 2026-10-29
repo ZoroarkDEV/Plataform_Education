@@ -293,8 +293,25 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
             Solution: Required(file.Solution, "solution", where, errors),
             Hints: (file.Hints ?? []).Select(h => (h ?? string.Empty).Trim()).Where(h => h.Length > 0).ToList(),
             TestCases: testCases,
-            CommonErrors: commonErrors,
-            TestCasesJson: JsonSerializer.Serialize(file.TestCases ?? [], ExerciseJson));
+            CommonErrors: commonErrors);
+    }
+
+    /// <summary>
+    /// Lê <c>content/datasets/*.sql</c>: slug = nome do arquivo sem <c>.sql</c>, Sql = conteúdo do arquivo como está
+    /// (o seed calcula o SHA-256 dele). As regras (slug válido, script não vazio) ficam no <see cref="ContentValidator"/>.
+    /// </summary>
+    public IReadOnlyList<DatasetContent> LoadDatasets()
+    {
+        var datasetsDir = Path.Combine(ContentRoot, "datasets");
+        if (!Directory.Exists(datasetsDir))
+        {
+            return [];
+        }
+
+        return Directory.GetFiles(datasetsDir, "*.sql")
+            .Order(StringComparer.Ordinal)
+            .Select(file => new DatasetContent(Relative(file), Path.GetFileNameWithoutExtension(file), File.ReadAllText(file)))
+            .ToList();
     }
 
     /// <summary>Caminho do script de um dataset de exercícios (<c>content/datasets/&lt;nome&gt;.sql</c>).</summary>
