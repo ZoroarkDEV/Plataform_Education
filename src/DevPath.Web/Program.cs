@@ -3,8 +3,10 @@ using DevPath.Application.Content;
 using DevPath.Infrastructure;
 using DevPath.Infrastructure.Content;
 using DevPath.Infrastructure.Persistence;
+using DevPath.Web.Api;
 using DevPath.Web.Health;
 using DevPath.Web.Lessons;
+using DevPath.Web.Onboarding;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,6 +38,10 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;                     // renova enquanto o usuário estiver ativo
 });
+
+// API de execução de exercícios (issue #25, ADR-006): antiforgery por header, rate limit por aluno e 401 em /api.
+// A Web NÃO executa código nem fala com o Docker: só enfileira no Redis (o DevPath.Worker executa).
+builder.Services.AddExerciseExecutionApi(builder.Configuration);
 
 // Atrás de um proxy reverso (nginx, Traefik, load balancer) o HTTPS termina no proxy e a app recebe HTTP.
 // Os cabeçalhos X-Forwarded-Proto/For contam o esquema e o IP originais. Só confiamos neles quando
@@ -70,6 +76,10 @@ builder.Services.AddHttpsRedirection(options =>
 // Leitura do conteúdo pedagógico de /content e o seed das trilhas (issue #10).
 builder.Services.AddContentSeeding(builder.Configuration, builder.Environment.ContentRootPath);
 
+// Onboarding e dashboard (#11): adapter da porta da Web para o IStudentJourneyService do Backend
+// (registrado em AddInfrastructure). Mesmo tempo de vida do serviço/DbContext.
+builder.Services.AddScoped<IStudentJourneyGateway, StudentJourneyGateway>();
+
 // GET /health (usado pelo healthcheck do serviço web no docker-compose).
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database");
@@ -102,7 +112,12 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Depois da autenticação: o limite é por aluno, então precisa saber quem ele é.
+app.UseRateLimiter();
+
 app.MapStaticAssets();
+
+app.MapExerciseExecutionApi();
 
 // Liveness/readiness para o healthcheck do Docker: 200 "Healthy" se a app responde e alcança o banco.
 app.MapHealthChecks("/health");

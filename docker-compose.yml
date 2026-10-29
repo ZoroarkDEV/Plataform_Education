@@ -1,4 +1,5 @@
-# Ambiente local do DevPath: aplicação (web), PostgreSQL (dados) e Redis (cache/sessões).
+# Ambiente local do DevPath: aplicação (web), PostgreSQL (dados), Redis (cache/sessões e fila de execução)
+# e o Worker que executa o código dos alunos (ADR-006).
 # Uso: cp .env.example .env && docker compose up --build
 # Só a infraestrutura (para rodar a app com `dotnet run`): docker compose up -d postgres redis
 services:
@@ -48,8 +49,11 @@ services:
       # Development: aplica as migrations e faz o seed de /content no startup (issue #21).
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_HTTP_PORTS: "8080"
-      # Dentro da rede do compose o banco é o serviço "postgres" na porta 5432 (não a porta publicada).
+      # Nomes de serviço (postgres, redis) em vez de localhost: é a rede interna do compose
+      # (e a porta interna, não a publicada no host).
       ConnectionStrings__DevPath: "Host=postgres;Port=5432;Database=${POSTGRES_DB:?defina POSTGRES_DB no .env (veja .env.example)};Username=${POSTGRES_USER:?defina POSTGRES_USER no .env (veja .env.example)};Password=${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env (veja .env.example)}"
+      # Fila de execução de exercícios: a Web enfileira, o Worker executa (#25).
+      ConnectionStrings__Redis: "redis:6379"
       Content__RootPath: /app/content
     ports:
       - "${WEB_PORT:-8080}:8080"
@@ -63,6 +67,37 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # Executa o SQL dos alunos em containers descartáveis (ADR-004/ADR-006). A Web NÃO fala com o Docker:
+  # ela põe o job na fila do Redis e este serviço responde. Precisa das migrations aplicadas: em Development
+  # o serviço web as aplica no startup (#21), por isso o worker espera o web ficar healthy. Fora do Development
+  # aplique antes com `dotnet ef database update`. Precisa também da imagem postgres:16-alpine no host
+  # (o serviço postgres acima já a baixa; o sandbox usa --pull never).
+  worker:
+    build:
+      context: .
+      dockerfile: src/DevPath.Worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    environment:
+      # Nomes de serviço (postgres, redis) em vez de localhost: é a rede interna do compose.
+      ConnectionStrings__DevPath: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__Redis: "redis:6379"
+    volumes:
+      # RISCO: o socket do Docker dá controle TOTAL do host (quem cria containers pode montar o disco
+      # do host como root). Por isso ele é montado SÓ neste serviço, nunca na Web nem em outro container.
+      # Mitigações (ADR-004/ADR-006): o Worker não abre porta nem recebe HTTP, só lê jobs do Redis;
+      # o código do aluno nunca roda aqui, e sim em containers --network none, --read-only, --user 65534,
+      # --cap-drop ALL, com limites de memória/CPU/pids/tempo; só a imagem da allowlist pode ser usada
+      # (postgres:16-alpine, --pull never). Em produção: host dedicado, Docker rootless/gVisor ou um proxy
+      # do socket que só permita create/start/kill/rm.
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   postgres_data:

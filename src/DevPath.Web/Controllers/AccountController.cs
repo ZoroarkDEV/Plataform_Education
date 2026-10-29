@@ -33,7 +33,8 @@ public sealed class AccountController(IAuthService authService) : Controller
             return View(model);
         }
 
-        return RedirectToAction(nameof(DashboardController.Index), "Dashboard");
+        // US-11.1: conta criada e já autenticada, vai direto para "Escolha sua trilha".
+        return RedirectToAction(nameof(OnboardingController.ChoosePath), "Onboarding");
     }
 
     [HttpGet]

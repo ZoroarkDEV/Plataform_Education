@@ -1,4 +1,4 @@
-# Tudo que não precisa ir para o contexto do `docker build` (issue #21).
+# Contexto do `docker build` da Web (Dockerfile, #21) e do Worker (src/DevPath.Worker/Dockerfile, #25).
 # Segredos: nunca entram na imagem.
 .env
 .env.*

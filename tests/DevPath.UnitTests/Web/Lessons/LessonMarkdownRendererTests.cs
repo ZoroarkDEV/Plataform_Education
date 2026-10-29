@@ -1,5 +1,7 @@
 using FluentAssertions;
+using DevPath.Application.Lessons;
 using DevPath.Web.Lessons;
+using DevPath.Web.Models.Lessons;
 
 namespace DevPath.UnitTests.Web.Lessons;
 
@@ -156,6 +158,64 @@ public sealed class LessonMarkdownRendererTests
 
         html.Should().Contain("<strong>título</strong>");
         html.Should().NotContain("<img").And.NotContain("javascript:");
+    }
+
+    [Fact]
+    public void RenderFragment_EnunciadoComTitulos_ComecaEmH3MantendoHierarquia()
+    {
+        var html = _renderer.RenderFragment("# Objetivo\n\nTexto.\n\n## Detalhe\n\n#### Nota\n\n###### Fundo");
+
+        html.Should().NotContain("<h1").And.NotContain("<h2");
+        html.Should().Contain("<h3>Objetivo</h3>");
+        html.Should().Contain("<h4>Detalhe</h4>");
+        html.Should().Contain("<h6>Nota</h6>");
+        html.Should().Contain("<h6>Fundo</h6>", "o teto é h6");
+    }
+
+    [Fact]
+    public void RenderFragment_EnunciadoComH2_TambemDesceParaH3()
+    {
+        var html = _renderer.RenderFragment("## Tarefa\n\n### Dica");
+
+        html.Should().NotContain("<h2");
+        html.Should().Contain("<h3>Tarefa</h3>").And.Contain("<h4>Dica</h4>");
+    }
+
+    [Fact]
+    public void RenderFragment_EnunciadoJaEmH3OuAbaixo_NaoMuda()
+    {
+        var html = _renderer.RenderFragment("### Tarefa\n\n#### Dica");
+
+        html.Should().Contain("<h3>Tarefa</h3>").And.Contain("<h4>Dica</h4>");
+    }
+
+    [Fact]
+    public void RenderFragment_TituloDentroDeCitacao_TambemDesce()
+    {
+        var html = _renderer.RenderFragment("> # Atenção\n>\n> Cuidado.");
+
+        html.Should().NotContain("<h1").And.Contain("<h3>Atenção</h3>");
+    }
+
+    [Fact]
+    public void ExerciseViewModelFrom_EnunciadoComH1_SaiComTitulosAPartirDeH3()
+    {
+        var exercise = new ExerciseDto("Catálogo", "# Objetivo\n\nListe.\n\n## Regras\n\nSó titulo.", "sql", null, null, []);
+
+        var model = LessonExerciseViewModel.From(exercise, _renderer);
+
+        model.StatementHtml.Should().NotContain("<h1").And.NotContain("<h2");
+        model.StatementHtml.Should().Contain("<h3>Objetivo</h3>").And.Contain("<h4>Regras</h4>");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    public void RenderFragment_NivelMinimoForaDe1A6_Lanca(int level)
+    {
+        var act = () => _renderer.RenderFragment("# X", level);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]

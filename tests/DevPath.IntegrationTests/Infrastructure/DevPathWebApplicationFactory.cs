@@ -39,7 +39,7 @@ public class DevPathWebApplicationFactory : WebApplicationFactory<Program>, IAsy
             BaseAddress = new Uri("https://localhost")
         });
 
-    public async Task InitializeAsync()
+    public virtual async Task InitializeAsync()
     {
         await _postgres.StartAsync();
 
