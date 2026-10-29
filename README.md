@@ -204,6 +204,8 @@ docker compose up --build     # app + PostgreSQL + Redis
 
 Abra **http://localhost:8080** (porta `WEB_PORT` do `.env`). O serviço `web` só sobe depois que PostgreSQL e Redis estão saudáveis e, em `Development`, **aplica as migrations e faz o seed de `/content` no startup**. O estado do container fica em `docker compose ps` e em `GET /health` (`Healthy` = app no ar e banco alcançável).
 
+- O serviço `worker` (#25) executa o SQL dos alunos e sobe depois que o `web` fica saudável (é o `web` que aplica as migrations). Ele monta `/var/run/docker.sock` para criar os containers de sandbox; leia o aviso de risco no `docker-compose.yml`.
+- Num banco novo o EF registra um `fail: Microsoft.EntityFrameworkCore.Database.Command[20102]` sobre a tabela `__EFMigrationsHistory` antes de migrar. É normal: ele só confere se a tabela já existe.
 - O conteúdo (`content/`) vai **dentro da imagem**. Mudou uma aula? Rode `docker compose up --build` de novo (o seed é upsert e não duplica).
 - Parar: `docker compose down`. Apagar também o banco: `docker compose down -v`.
 - Fora do `Development` (`ASPNETCORE_ENVIRONMENT` no `.env`) nada é aplicado no startup; as migrations rodam à parte, como em produção.

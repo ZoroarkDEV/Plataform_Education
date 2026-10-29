@@ -1,10 +1,13 @@
 # CI do DevPath: compila a solution e roda os testes em todo PR e em push na main e na dev.
+# O job "smoke" sobe o docker-compose inteiro (web + postgres + redis + worker) e confere /health e a home (#21).
 name: CI
 
 on:
   pull_request:
   push:
     branches: [main, dev]
+  # Execução manual pela aba Actions (ex.: testar uma branch de feature antes do PR/push na dev).
+  workflow_dispatch:
 
 # Só leitura do repositório; o CI não precisa de mais permissões.
 permissions:
@@ -51,3 +54,48 @@ jobs:
 
       - name: Test
         run: dotnet test DevPath.sln --no-build --configuration Release --verbosity normal
+
+  smoke:
+    name: Smoke do docker compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      WEB_URL: http://localhost:8080
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Só os valores de exemplo (change_me) do .env.example: nada de segredo real no CI.
+      - name: Criar .env a partir do .env.example
+        run: cp .env.example .env
+
+      - name: Validar o docker-compose.yml
+        run: docker compose config --quiet
+
+      # --wait espera todos os serviços: healthy os que têm healthcheck (postgres, redis, web), running o worker.
+      - name: Subir app + banco + redis + worker
+        run: docker compose up --build -d --wait --wait-timeout 300
+
+      - name: GET /health deve ser 200
+        run: |
+          status=$(curl -sS -o /tmp/health.txt -w '%{http_code}' --retry 5 --retry-delay 3 --retry-all-errors "$WEB_URL/health")
+          echo "status=$status body=$(cat /tmp/health.txt)"
+          test "$status" = "200"
+
+      - name: GET / (home) deve ser 200
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 3 --retry-all-errors "$WEB_URL/")
+          echo "status=$status"
+          test "$status" = "200"
+
+      - name: Status e logs dos containers (em caso de falha)
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --timestamps
+
+      - name: Derrubar o ambiente
+        if: always()
+        run: docker compose down -v --remove-orphans

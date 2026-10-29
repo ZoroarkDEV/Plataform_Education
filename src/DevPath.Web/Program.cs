@@ -10,6 +10,8 @@ using DevPath.Web.Onboarding;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
+const string HealthPath = "/health";
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -104,7 +106,11 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Home/Error");
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
-    app.UseHttpsRedirection();
+    // O /health fica fora do redirecionamento: o healthcheck do container chama http://127.0.0.1:8080/health
+    // por dentro (sem proxy nem HTTPS) e um 307 faria o container nunca ficar healthy em Production (#21).
+    app.UseWhen(
+        context => !context.Request.Path.StartsWithSegments(HealthPath),
+        branch => branch.UseHttpsRedirection());
 }
 app.UseRouting();
 
@@ -120,7 +126,7 @@ app.MapStaticAssets();
 app.MapExerciseExecutionApi();
 
 // Liveness/readiness para o healthcheck do Docker: 200 "Healthy" se a app responde e alcança o banco.
-app.MapHealthChecks("/health");
+app.MapHealthChecks(HealthPath);
 
 app.MapControllerRoute(
     name: "default",
