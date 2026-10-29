@@ -23,6 +23,7 @@ Seguindo o papel **DevPath Architect** (`DEVPATH-AGENTS-SKILLS.md`), crie um ADR
 | [ADR-004](ADR-004-sandbox-execucao-codigo.md) | Sandbox de execução de código do aluno | Proposed |
 | [ADR-005](ADR-005-enumeracao-de-contas.md) | Enumeração de contas (login e cadastro) | Proposed |
 | [ADR-006](ADR-006-fila-de-execucao-worker.md) | Fila de execução: Web → Redis → Worker | Proposed |
+| [ADR-007](ADR-007-progresso.md) | Progresso do aluno: concluir aula, desbloqueio e "Continuar" | Proposed |
 
 ## Convenções
 
