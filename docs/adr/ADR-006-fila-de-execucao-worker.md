@@ -55,7 +55,8 @@ para gravar a `CodeSubmission`.
    seguidas..." e `Retry-After` = um segmento (60 s / 6 = 10 s); pela concorrência, "Sua execução anterior
    ainda está rodando..." e `Retry-After` = `ConcurrencyRetryAfterSeconds` (2). O limite é **em memória, por instância da Web**: com mais de uma instância, cada uma conta o seu e o
    aluno ganha N vezes o limite. Aceitável no MVP (uma instância só); **um limiter no Redis é obrigatório
-   antes de rodar mais de uma instância da Web** (issue da Fase 2).
+   antes de rodar mais de uma instância da Web**: [#28](https://github.com/ZoroarkDEV/Plataform_Education/issues/28)
+   (Fase 2).
 6. **Contrato para o Frontend** (abaixo) é o mesmo objeto que o Worker grava no Redis
    (`ExecutionOutcome`, JSON camelCase).
 
@@ -151,4 +152,4 @@ Mais difícil / em aberto:
   simultâneos (duas instâncias da Web, vários Workers) não passam do limite: o segundo executa, mas recebe
   `status: "attempts_exhausted"` (200, igual ao da pré-checagem) e nada é gravado. O lock dura só a transação curta da gravação.
 - Rate limit em memória (por instância da Web), como dito acima: um limiter no Redis é pré-requisito para
-  escalar a Web horizontalmente (Fase 2).
+  escalar a Web horizontalmente: [#28](https://github.com/ZoroarkDEV/Plataform_Education/issues/28) (Fase 2).
