@@ -81,9 +81,8 @@ builder.Services.AddContentSeeding(builder.Configuration, builder.Environment.Co
 // Onboarding e dashboard (#11): adapter da porta da Web para o IStudentJourneyService do Backend
 // (registrado em AddInfrastructure). Mesmo tempo de vida do serviço/DbContext.
 builder.Services.AddScoped<IStudentJourneyGateway, StudentJourneyGateway>();
-// Progresso das aulas (#27, ADR-007): até o serviço do Backend chegar à dev, "indisponível" = a aula abre como antes
-// (sem botão de concluir, sem bloqueio, sem "Executar"). Trocar pelo adaptador do ILessonProgressService quando existir.
-builder.Services.AddScoped<DevPath.Web.Progress.ILessonProgressGateway, DevPath.Web.Progress.PendingLessonProgressGateway>();
+// Progresso das aulas (#27, ADR-007): adapter da porta da Web para o ILessonProgressService do Backend.
+builder.Services.AddScoped<DevPath.Web.Progress.ILessonProgressGateway, DevPath.Web.Progress.LessonProgressGateway>();
 
 // GET /health (usado pelo healthcheck do serviço web no docker-compose).
 builder.Services.AddHealthChecks()

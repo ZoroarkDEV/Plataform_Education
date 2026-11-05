@@ -308,7 +308,7 @@ public sealed class LessonsControllerTests
     public async Task Show_ComExercicio_MontaVisaoSeguraComMarkdownECodigoInicial()
     {
         var exercise = new ExerciseDto("Catálogo", "Liste o **título**.", "sql", "livraria",
-            "SELECT\nFROM livros;", ["Geral", "", "Direta"]);
+            "SELECT\nFROM livros;", ["Geral", "", "Direta"]) { DatasetDisplayName = "Livraria" };
 
         var result = await CreateController(exercise: exercise).Show(Path, Module, FullSlug, CancellationToken.None);
 

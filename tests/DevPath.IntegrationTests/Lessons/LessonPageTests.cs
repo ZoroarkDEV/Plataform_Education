@@ -150,7 +150,7 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
             "sql",
             "livraria",
             "SELECT \nFROM livros\n",
-            ["Qual coluna guarda o título?", "Use SELECT titulo FROM livros;"]));
+            ["Qual coluna guarda o título?", "Use SELECT titulo FROM livros;"]) { DatasetDisplayName = "Livraria" });
         var client = await LoggedInClientAsync(app);
 
         var html = await (await client.GetAsync(Url("seu-primeiro-select"))).ReadHtmlAsync();

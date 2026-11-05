@@ -40,7 +40,7 @@ public sealed record LessonExerciseViewModel(
     string StatementHtml,
     string LanguageLabel,
     string? DatasetSlug,
-    string? DatasetDisplayName, // fallback humanizado do slug até ExerciseDto.DatasetDisplayName
+    string? DatasetDisplayName, // ExerciseDto.DatasetDisplayName (o Backend já humaniza o slug)
     int Points,
     string? StarterCodeHtml,
     string? StarterCodePlain,
@@ -57,15 +57,16 @@ public sealed record LessonExerciseViewModel(
         renderer.RenderFragment(exercise.StatementMarkdown, LessonMarkdownRenderer.StatementMinHeadingLevel),
         CodeHighlighter.LabelFor(exercise.Language) ?? "Código",
         string.IsNullOrWhiteSpace(exercise.Dataset) ? null : exercise.Dataset,
-        string.IsNullOrWhiteSpace(exercise.Dataset) ? null : LessonCompletionTexts.DatasetDisplayName(exercise.Dataset),
+        string.IsNullOrWhiteSpace(exercise.DatasetDisplayName) ? null : exercise.DatasetDisplayName,
         exercise.Points,
         string.IsNullOrWhiteSpace(exercise.StarterCode) ? null : LessonMarkdownRenderer.RenderCodeBlock(exercise.StarterCode, exercise.Language),
         string.IsNullOrWhiteSpace(exercise.StarterCode) ? null : exercise.StarterCode,
-        exercise.Hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToList());
+        exercise.Hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToList(),
+        exercise.Id == Guid.Empty ? null : exercise.Id);
 
     public LessonExerciseViewModel WithProgress(LessonExerciseProgressView progress) => this with
     {
-        ExerciseId = progress.ExerciseId,
+        ExerciseId = ExerciseId ?? progress.ExerciseId,
         MaxAttempts = progress.MaxAttempts,
         RemainingAttempts = progress.RemainingAttempts,
         CanSkip = progress.CanSkip,

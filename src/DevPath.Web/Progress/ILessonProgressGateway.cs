@@ -14,9 +14,8 @@ namespace DevPath.Web.Progress;
 /// resultado, sem exceção.
 /// </para>
 /// <para>
-/// Enquanto o serviço não está na <c>dev</c>, o registrado em <c>Program.cs</c> é o <see cref="PendingLessonProgressGateway"/>:
-/// devolve <see cref="LessonAccessStatus.Unavailable"/> (página como antes do #27: sem bloqueio, sem selo, sem botão).
-/// O dublê com estados de exemplo fica só nos testes.
+/// O registrado em <c>Program.cs</c> é o <see cref="LessonProgressGateway"/> (adapter do serviço real).
+/// O dublê com estados de exemplo fica nos testes.
 /// </para>
 /// </remarks>
 public interface ILessonProgressGateway
@@ -48,7 +47,7 @@ public enum LessonAccessStatus
     LessonNotFound,
     /// <summary>Conta apagada com cookie válido: logout e login (como no #11).</summary>
     UserNotFound,
-    /// <summary>Só da Web: progresso ainda não disponível (<see cref="PendingLessonProgressGateway"/>). A página abre como antes do #27.</summary>
+    /// <summary>Só da Web (dublês de teste): sem progresso. A página abre sem bloco de conclusão. O adapter real nunca devolve.</summary>
     Unavailable
 }
 
@@ -148,7 +147,7 @@ public enum LessonCompletionStatus
     /// <summary>Inexistente, escondida ou rascunho.</summary>
     LessonNotFound,
     UserNotFound,
-    /// <summary>Só da Web: progresso ainda não disponível (<see cref="PendingLessonProgressGateway"/>).</summary>
+    /// <summary>Só da Web (dublês de teste): sem progresso. O adapter real nunca devolve.</summary>
     Unavailable
 }
 

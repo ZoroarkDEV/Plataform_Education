@@ -249,20 +249,17 @@ document.addEventListener("click", (event) => {
     if (res.status === 429) return { text: TEXTS.rateLimited };
     if (res.status === 503) return { text: TEXTS.platform };
     if (res.status === 400) {
-      let message = "";
       let code = "";
       try {
         const body = await res.clone().json();
-        message = body.message || "";
         code = body.code || "";
       } catch { /* ignore */ }
       // ADR-007: code_empty | code_too_long | antiforgery_invalid | malformed_body.
       if (code === "code_empty") return { text: TEXTS.emptyCode };
       if (code === "code_too_long") return { text: TEXTS.tooLarge };
       if (code === "antiforgery_invalid") return { text: TEXTS.platform, retryAntiforgery: true };
-      if (/vazio|antes de executar|Escreva uma consulta/i.test(message)) return { text: TEXTS.emptyCode };
-      if (/máximo|grande|caracteres|longo/i.test(message)) return { text: TEXTS.tooLarge };
-      return { text: message || TEXTS.platform };
+      // malformed_body e qualquer code desconhecido: erro genérico (nunca a mensagem crua do servidor).
+      return { text: TEXTS.platform };
     }
     return { text: TEXTS.platform };
   };

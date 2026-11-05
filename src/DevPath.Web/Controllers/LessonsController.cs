@@ -80,8 +80,8 @@ public sealed partial class LessonsController(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Falha ao abrir progresso da aula {Path}/{Module}/{Lesson}.", pathSlug, moduleSlug, lessonSlug);
-            // Sem progresso: a página ainda abre (como Pending), sem botão.
-            access = LessonAccessOutcome.Unavailable;
+            // Sem progresso não dá para saber se a aula está liberada: não abre (página amigável, 503 fora de Dev).
+            return Unavailable(LessonUnavailableReason.Malformed, ex.Message);
         }
 
         var accessGate = await GateAccessAsync(access, ct);

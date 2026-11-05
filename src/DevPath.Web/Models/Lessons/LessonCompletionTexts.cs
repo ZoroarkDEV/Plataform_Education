@@ -75,18 +75,4 @@ public static class LessonCompletionTexts
         "Não encontramos este exercício. Ele pode ter sido despublicado. Volte ao dashboard e escolha outra aula.";
     public const string UnauthorizedFriendly =
         "Sua sessão expirou. Entre de novo para continuar.";
-
-    /// <summary>
-    /// Fallback enquanto <c>ExerciseDto.DatasetDisplayName</c> não vem preenchido (ADR-007 / #24).
-    /// <c>livraria</c> → "Livraria"; <c>loja_online</c> / <c>loja-online</c> → "Loja online".
-    /// </summary>
-    public static string DatasetDisplayName(string? slug)
-    {
-        if (string.IsNullOrWhiteSpace(slug)) return string.Empty;
-        var normalized = slug.Trim().Replace('_', ' ').Replace('-', ' ');
-        while (normalized.Contains("  ", StringComparison.Ordinal))
-            normalized = normalized.Replace("  ", " ", StringComparison.Ordinal);
-        normalized = normalized.ToLowerInvariant();
-        return char.ToUpperInvariant(normalized[0]) + normalized[1..];
-    }
 }

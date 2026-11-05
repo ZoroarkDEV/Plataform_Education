@@ -79,7 +79,7 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
 
     private static ExerciseDto SampleExercise(IReadOnlyList<string>? hints = null) => new(
         "Primeiro SELECT", "Liste os títulos.", "sql", "livraria", "SELECT titulo FROM livros;",
-        hints ?? ["Use SELECT"], 10);
+        hints ?? ["Use SELECT"], 10) { DatasetDisplayName = "Livraria" };
 
     [Fact]
     public async Task Pending_gateway_esconde_botao_e_nao_quebra()

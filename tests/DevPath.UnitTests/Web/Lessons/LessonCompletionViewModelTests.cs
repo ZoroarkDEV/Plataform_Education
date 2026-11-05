@@ -138,11 +138,20 @@ public sealed class LessonCompletionViewModelTests
     }
 
     [Fact]
-    public void Dataset_display_name_humanizes_slug()
+    public void From_uses_backend_DatasetDisplayName_and_Id()
     {
-        LessonCompletionTexts.DatasetDisplayName("livraria").Should().Be("Livraria");
-        LessonCompletionTexts.DatasetDisplayName("loja-online").Should().Be("Loja online");
-        LessonCompletionTexts.DatasetDisplayName("loja_online").Should().Be("Loja online");
+        var id = Guid.NewGuid();
+        var dto = new DevPath.Application.Lessons.ExerciseDto("t", "x", "sql", "loja_online", null, [])
+        {
+            Id = id,
+            DatasetDisplayName = "Loja online",
+        };
+
+        var vm = LessonExerciseViewModel.From(dto, new DevPath.Web.Lessons.LessonMarkdownRenderer());
+
+        vm.DatasetDisplayName.Should().Be("Loja online");
+        vm.DatasetSlug.Should().Be("loja_online");
+        vm.ExerciseId.Should().Be(id);
     }
 
     [Fact]
