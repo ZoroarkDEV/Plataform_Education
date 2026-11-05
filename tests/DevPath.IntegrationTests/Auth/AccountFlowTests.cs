@@ -84,7 +84,9 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await response.ReadHtmlAsync()).Should().Contain("Já existe uma conta com o e-mail");
+        var summary = await ErrorSummaryAsync(response);
+        summary.Should().Contain("Já existe uma conta com este e-mail.");
+        summary.Should().NotContain(email, "a mensagem não repete o e-mail (#33)");
     }
 
     [Fact]
@@ -231,6 +233,14 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
     }
 
     [Fact]
+    public void Describer_RegistradoNoIdentity_EhOPortugues()
+    {
+        using var scope = factory.Services.CreateScope();
+        var describer = scope.ServiceProvider.GetRequiredService<IdentityErrorDescriber>();
+        describer.Should().BeOfType<PortugueseIdentityErrorDescriber>();
+    }
+
+    [Fact]
     public async Task Register_ComEmailJaUsado_MostraOErroUmaVezSo()
     {
         var email = await CreateUserAsync();
@@ -245,7 +255,7 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
         });
 
         var html = await response.ReadHtmlAsync();
-        System.Text.RegularExpressions.Regex.Matches(html, "Já existe uma conta com o e-mail").Should().HaveCount(1);
+        System.Text.RegularExpressions.Regex.Matches(html, "Já existe uma conta com este e-mail").Should().HaveCount(1);
     }
 
     [Fact]
