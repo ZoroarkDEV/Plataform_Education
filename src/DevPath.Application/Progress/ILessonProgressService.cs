@@ -21,8 +21,16 @@ public interface ILessonProgressService
     Task<LessonAccessResult> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default);
 
     /// <summary>
-    /// Conclui a aula pela <see cref="LessonCompletionRule"/> e recalcula a matrícula na mesma transação. Idempotente
-    /// e seguro com cliques simultâneos (uma linha de progresso por aluno e aula).
+    /// Conclui a aula pela regra normal (<see cref="LessonCompletionRule.Evaluate"/>) e recalcula a matrícula na mesma
+    /// transação. Idempotente e seguro com cliques simultâneos. Nunca produz <c>SkippedAfterFailures</c> — use
+    /// <see cref="SkipAsync"/> para o "Seguir sem pontos".
     /// </summary>
     Task<LessonCompletionResult> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default);
+
+    /// <summary>
+    /// "Seguir sem pontos": só conclui com <c>SkippedAfterFailures</c> quando a regra
+    /// <see cref="LessonCompletionRule.EvaluateSkip"/> permite. Um "Concluí" normal continua em
+    /// <see cref="CompleteAsync"/> e devolve <c>RequirementNotMet</c> se o exercício ainda não passou.
+    /// </summary>
+    Task<LessonCompletionResult> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default);
 }

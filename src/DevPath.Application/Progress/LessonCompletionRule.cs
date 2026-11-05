@@ -34,12 +34,12 @@ public sealed record LessonCompletionDecision(
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-/// <item>Aula sem exercício: conclui com o clique (<see cref="LessonCompletionKind.Read"/>, sem pontos).</item>
-/// <item>Todo exercício com <c>pass</c>: <see cref="LessonCompletionKind.ExercisePassed"/>, soma dos pontos.</item>
-/// <item>Exercício sem <c>pass</c> pode ser "dispensado" se: usou todas as tentativas (<c>MaxAttempts</c>) →
-/// <see cref="LessonCompletionKind.AttemptsExhausted"/>; ou errou pelo menos <c>FailuresBeforeSkip</c> vezes (padrão
-/// <see cref="DefaultFailuresBeforeSkip"/>) → "Seguir sem pontos", <see cref="LessonCompletionKind.SkippedAfterFailures"/>.
-/// Pontos = só os dos exercícios que passaram.</item>
+/// <item>Aula sem exercício: conclui com o clique (<see cref="LessonCompletionKind.Read"/>, sem pontos) via <see cref="Evaluate"/>.</item>
+/// <item>Todo exercício com <c>pass</c>: <see cref="LessonCompletionKind.ExercisePassed"/>, soma dos pontos (<see cref="Evaluate"/>).</item>
+/// <item>Exercício sem <c>pass</c> e com <c>MaxAttempts</c> esgotado: <see cref="LessonCompletionKind.AttemptsExhausted"/> via <see cref="Evaluate"/>.</item>
+/// <item>"Seguir sem pontos" (≥ <c>FailuresBeforeSkip</c> falhas, padrão <see cref="DefaultFailuresBeforeSkip"/>):
+/// só via <see cref="EvaluateSkip"/> → <see cref="LessonCompletionKind.SkippedAfterFailures"/>. Um <see cref="Evaluate"/>
+/// normal nessa situação devolve <see cref="LessonCompletionBlocker.ExerciseNotPassed"/> (o "Concluí" não pula sozinho).</item>
 /// <item>Senão: <see cref="LessonCompletionBlocker.ExerciseNotPassed"/>.</item>
 /// </list>
 /// Hoje há um exercício por aula; a regra vale para "cada exercício da aula" para não quebrar se vierem mais.
@@ -58,6 +58,10 @@ public static class LessonCompletionRule
     public static bool CanSkip(ExerciseAttemptsInput e) =>
         !e.Passed && !IsExhausted(e) && e.FailedAttempts >= FailuresBeforeSkipFor(e);
 
+    /// <summary>
+    /// Conclusão normal ("Concluí" / tentativas esgotadas / leitura / pass). Nunca produz
+    /// <see cref="LessonCompletionKind.SkippedAfterFailures"/> — isso é só do <see cref="EvaluateSkip"/>.
+    /// </summary>
     public static LessonCompletionDecision Evaluate(IReadOnlyList<ExerciseAttemptsInput> exercises)
     {
         ArgumentNullException.ThrowIfNull(exercises);
@@ -73,14 +77,35 @@ public static class LessonCompletionRule
         }
 
         var pending = exercises.Where(e => !e.Passed).ToList();
-        if (pending.Any(e => !IsExhausted(e) && !CanSkip(e)))
+        // CanSkip sozinho NÃO libera o Complete: o aluno precisa do SkipAsync explícito.
+        if (pending.Any(e => !IsExhausted(e)))
         {
             return LessonCompletionDecision.Blocked(LessonCompletionBlocker.ExerciseNotPassed);
         }
 
-        // Se algum ainda dá para tentar, o aluno está "seguindo sem pontos"; só esgotado = sem volta.
-        var kind = pending.Any(CanSkip) ? LessonCompletionKind.SkippedAfterFailures : LessonCompletionKind.AttemptsExhausted;
-        return new(true, kind, points, null);
+        return new(true, LessonCompletionKind.AttemptsExhausted, points, null);
+    }
+
+    /// <summary>
+    /// Só o "Seguir sem pontos": exige que todo exercício pendente esteja esgotado ou no limiar de falhas,
+    /// e que pelo menos um esteja no limiar (<see cref="CanSkip"/>). Caso contrário, bloqueia.
+    /// </summary>
+    public static LessonCompletionDecision EvaluateSkip(IReadOnlyList<ExerciseAttemptsInput> exercises)
+    {
+        ArgumentNullException.ThrowIfNull(exercises);
+        if (exercises.Count == 0 || exercises.All(e => e.Passed))
+        {
+            return LessonCompletionDecision.Blocked(LessonCompletionBlocker.ExerciseNotPassed);
+        }
+
+        var pending = exercises.Where(e => !e.Passed).ToList();
+        if (pending.Any(e => !IsExhausted(e) && !CanSkip(e)) || !pending.Any(CanSkip))
+        {
+            return LessonCompletionDecision.Blocked(LessonCompletionBlocker.ExerciseNotPassed);
+        }
+
+        var points = exercises.Where(e => e.Passed).Sum(e => e.Points);
+        return new(true, LessonCompletionKind.SkippedAfterFailures, points, null);
     }
 
     /// <summary>Visão do exercício para a tela (sem nada da solução).</summary>

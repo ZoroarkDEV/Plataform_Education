@@ -42,8 +42,16 @@ public sealed class LessonProgressService(DevPathDbContext db, JourneySnapshotLo
             : access;
     }
 
-    public async Task<LessonCompletionResult> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug,
-        CancellationToken ct = default)
+    public Task<LessonCompletionResult> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug,
+        CancellationToken ct = default) =>
+        FinishAsync(userId, pathSlug, moduleSlug, lessonSlug, skipWithoutPoints: false, ct);
+
+    public Task<LessonCompletionResult> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug,
+        CancellationToken ct = default) =>
+        FinishAsync(userId, pathSlug, moduleSlug, lessonSlug, skipWithoutPoints: true, ct);
+
+    private async Task<LessonCompletionResult> FinishAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug,
+        bool skipWithoutPoints, CancellationToken ct)
     {
         var resolved = await ResolveAsync(userId, pathSlug, moduleSlug, lessonSlug, ct);
         if (resolved.Denied is { } denied)
@@ -80,7 +88,9 @@ public sealed class LessonProgressService(DevPathDbContext db, JourneySnapshotLo
                 return new(LessonCompletionResultKind.AlreadyCompleted, before);
         }
 
-        var decision = LessonCompletionRule.Evaluate(attempts);
+        var decision = skipWithoutPoints
+            ? LessonCompletionRule.EvaluateSkip(attempts)
+            : LessonCompletionRule.Evaluate(attempts);
         if (!decision.CanComplete)
         {
             return new(LessonCompletionResultKind.RequirementNotMet, before);

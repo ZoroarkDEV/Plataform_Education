@@ -71,7 +71,7 @@ public sealed record LessonExerciseProgressDto(
 /// <param name="UnlockRequirement">Só em Locked: a aula que falta concluir (o mesmo do dashboard).</param>
 /// <param name="CompletionKind">Como concluiu; null se não concluída.</param>
 /// <param name="Points">Pontos ganhos; null se não concluída ou aula só de leitura.</param>
-/// <param name="CanComplete">Liberada, não concluída e a regra de conclusão permite agora.</param>
+/// <param name="CanComplete">Liberada, não concluída e <see cref="LessonCompletionRule.Evaluate"/> permite agora (não inclui "Seguir sem pontos"; isso é <c>Exercise.CanSkip</c> + <see cref="ILessonProgressService.SkipAsync"/>).</param>
 /// <param name="Blocker">Por que CanComplete = false numa aula liberada e não concluída.</param>
 /// <param name="Exercise">O exercício da aula (o mesmo que a página mostra); null = aula só de leitura.</param>
 /// <param name="Previous">Aula anterior na ordem da TRILHA (cruza módulos, rascunho incluído); null na primeira.</param>
@@ -96,7 +96,7 @@ public sealed record LessonProgressState(
     public bool IsCompleted => Status == JourneyLessonStatus.Completed;
 }
 
-/// <summary>Resultado de <see cref="ILessonProgressService.CompleteAsync"/>.</summary>
+/// <summary>Resultado de <see cref="ILessonProgressService.CompleteAsync"/> e <see cref="ILessonProgressService.SkipAsync"/>.</summary>
 /// <remarks>Ordem: UserNotFound &gt; LessonNotFound &gt; NotEnrolled &gt; Locked &gt; AlreadyCompleted &gt; RequirementNotMet &gt; Completed.</remarks>
 public enum LessonCompletionResultKind
 {

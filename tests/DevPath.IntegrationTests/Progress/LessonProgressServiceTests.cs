@@ -110,6 +110,9 @@ public sealed class LessonProgressServiceTests(LessonProgressFixture fx) : IClas
     private Task<LessonCompletionResult> CompleteAsync(Guid userId, Lesson lesson) =>
         RunAsync(s => s.CompleteAsync(userId, fx.Path.Slug, ModuleOf(lesson).Slug, lesson.Slug));
 
+    private Task<LessonCompletionResult> SkipAsync(Guid userId, Lesson lesson) =>
+        RunAsync(s => s.SkipAsync(userId, fx.Path.Slug, ModuleOf(lesson).Slug, lesson.Slug));
+
     private Task<LessonAccessResult> OpenAsync(Guid userId, Lesson lesson) =>
         RunAsync(s => s.OpenAsync(userId, fx.Path.Slug, ModuleOf(lesson).Slug, lesson.Slug));
 
@@ -217,15 +220,22 @@ public sealed class LessonProgressServiceTests(LessonProgressFixture fx) : IClas
     }
 
     [Fact]
-    public async Task CincoFalhas_SeguirSemPontos_DepoisPassPromoveParaPontosCheios()
+    public async Task CincoFalhas_CompleteAsync_RequirementNotMet_SkipAsync_SeguirSemPontos()
     {
         var user = await fx.EnrolledUserAsync();
         await CompleteAsync(user, fx.Reading);
         await fx.SubmitAsync(user, fx.Exercise, SubmissionResult.Fail, LessonCompletionRule.DefaultFailuresBeforeSkip);
-        (await StateAsync(user, fx.WithExercise)).State!.Exercise!.CanSkip.Should().BeTrue();
+        var state = (await StateAsync(user, fx.WithExercise)).State!;
+        state.Exercise!.CanSkip.Should().BeTrue();
+        state.CanComplete.Should().BeFalse("Concluí normal não vira skip");
+        state.Blocker.Should().Be(LessonCompletionBlocker.ExerciseNotPassed);
 
-        var skip = await CompleteAsync(user, fx.WithExercise);
+        var complete = await CompleteAsync(user, fx.WithExercise);
+        complete.Kind.Should().Be(LessonCompletionResultKind.RequirementNotMet);
+        complete.State!.Blocker.Should().Be(LessonCompletionBlocker.ExerciseNotPassed);
+        (await RowsAsync(user, fx.WithExercise)).Should().BeEmpty("CompleteAsync não gravou skip");
 
+        var skip = await SkipAsync(user, fx.WithExercise);
         skip.Kind.Should().Be(LessonCompletionResultKind.Completed);
         skip.State!.CompletionKind.Should().Be(LessonCompletionKind.SkippedAfterFailures);
         skip.State.Points.Should().Be(0);
@@ -316,7 +326,7 @@ public sealed class LessonProgressServiceTests(LessonProgressFixture fx) : IClas
             var user = await fx.EnrolledUserAsync();
             await CompleteAsync(user, fx.Reading);
             await fx.SubmitAsync(user, fx.Exercise, SubmissionResult.Fail, 5);
-            await CompleteAsync(user, fx.WithExercise);
+            await SkipAsync(user, fx.WithExercise);
             users.Add(user);
         }
 

@@ -202,13 +202,13 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task AulaComDefeito_Devolve500ComMensagemAmigavelSemDetalheTecnico()
+    public async Task AulaComDefeito_Devolve503ComMensagemAmigavelSemDetalheTecnico()
     {
         await using var app = App();
         var client = await LoggedInClientAsync(app);
         var response = await client.GetAsync(Url("vazia"));
 
-        response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
         var html = await response.ReadHtmlAsync();
         html.Should().Contain("Não conseguimos carregar esta aula agora. Tente de novo ou volte ao dashboard.");
         html.Should().Contain("Voltar ao dashboard");

@@ -17,7 +17,7 @@ namespace DevPath.Web.Controllers;
 /// [Authorize]: sem login, o cookie middleware redireciona para /Account/Login?ReturnUrl=... (decisão de produto).
 /// <para>
 /// Acesso por progresso (#27, ADR-007), o mínimo no servidor: depois do conteúdo, <see cref="ILessonProgressService.OpenAsync"/>
-/// decide e registra a abertura. Ordem: inexistente &gt; rascunho &gt; acesso &gt; defeito. Bloqueada e de outra trilha =
+/// decide e registra a abertura. Ordem: inexistente &gt; rascunho &gt; acesso &gt; defeito (HTTP 503). Bloqueada e de outra trilha =
 /// 403 com a página Unavailable; sem trilha = /escolha-sua-trilha; conta apagada = sai e vai ao login.
 /// O estado vai para <see cref="LessonPageViewModel.Progress"/>: é a costura para o bloco de conclusão e a paginação do UI.
 /// </para>
@@ -154,7 +154,7 @@ public sealed partial class LessonsController(
     {
         Response.StatusCode = reason switch
         {
-            LessonUnavailableReason.Malformed => StatusCodes.Status500InternalServerError,
+            LessonUnavailableReason.Malformed => StatusCodes.Status503ServiceUnavailable,
             LessonUnavailableReason.Locked or LessonUnavailableReason.OtherPath => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status404NotFound,
         };

@@ -46,18 +46,23 @@ public class LessonCompletionRuleTests
     [Theory]
     [InlineData(5)]
     [InlineData(12)]
-    public void CincoErrosOuMais_SeguirSemPontos(int failed)
+    public void CincoErrosOuMais_CompleteBloqueia_SkipLibera(int failed)
     {
-        var d = LessonCompletionRule.Evaluate([Ex(used: failed, failed: failed)]);
+        var complete = LessonCompletionRule.Evaluate([Ex(used: failed, failed: failed)]);
+        complete.CanComplete.Should().BeFalse("Concluí normal não pula sozinho");
+        complete.Blocker.Should().Be(LessonCompletionBlocker.ExerciseNotPassed);
 
-        d.Should().Be(new LessonCompletionDecision(true, LessonCompletionKind.SkippedAfterFailures, 0, null));
+        var skip = LessonCompletionRule.EvaluateSkip([Ex(used: failed, failed: failed)]);
+        skip.Should().Be(new LessonCompletionDecision(true, LessonCompletionKind.SkippedAfterFailures, 0, null));
     }
 
     [Fact]
     public void LimiarPorExercicio_SobrescreveOPadrao()
     {
-        LessonCompletionRule.Evaluate([Ex(used: 2, failed: 2, skipAfter: 2)]).Kind.Should().Be(LessonCompletionKind.SkippedAfterFailures);
+        LessonCompletionRule.EvaluateSkip([Ex(used: 2, failed: 2, skipAfter: 2)]).Kind.Should().Be(LessonCompletionKind.SkippedAfterFailures);
+        LessonCompletionRule.Evaluate([Ex(used: 2, failed: 2, skipAfter: 2)]).CanComplete.Should().BeFalse();
         LessonCompletionRule.Evaluate([Ex(used: 5, failed: 5, skipAfter: 8)]).CanComplete.Should().BeFalse();
+        LessonCompletionRule.EvaluateSkip([Ex(used: 5, failed: 5, skipAfter: 8)]).CanComplete.Should().BeFalse();
     }
 
     [Fact]
@@ -69,11 +74,12 @@ public class LessonCompletionRuleTests
     }
 
     [Fact]
-    public void DoisExercicios_UmPassouOutroDispensado_SomaSoOQuePassou()
+    public void DoisExercicios_UmPassouOutroDispensado_SoSkipSomaOQuePassou()
     {
-        var d = LessonCompletionRule.Evaluate([Ex(used: 1, passed: true, points: 10), Ex(used: 5, failed: 5, points: 20)]);
-
-        d.Should().Be(new LessonCompletionDecision(true, LessonCompletionKind.SkippedAfterFailures, 10, null));
+        var input = new[] { Ex(used: 1, passed: true, points: 10), Ex(used: 5, failed: 5, points: 20) };
+        LessonCompletionRule.Evaluate(input).CanComplete.Should().BeFalse();
+        LessonCompletionRule.EvaluateSkip(input)
+            .Should().Be(new LessonCompletionDecision(true, LessonCompletionKind.SkippedAfterFailures, 10, null));
     }
 
     [Fact]
@@ -114,6 +120,21 @@ public class LessonCompletionRuleTests
         dto.FailuresUntilSkip.Should().Be(0);
         dto.RemainingAttempts.Should().Be(0);
     }
+
+    [Fact]
+    public void EvaluateSkip_SemExercicioOuTudoPassou_Bloqueia()
+    {
+        LessonCompletionRule.EvaluateSkip([]).CanComplete.Should().BeFalse();
+        LessonCompletionRule.EvaluateSkip([Ex(passed: true)]).CanComplete.Should().BeFalse();
+    }
+
+    [Fact]
+    public void EvaluateSkip_SoTentativasEsgotadas_Bloqueia_UseComplete()
+    {
+        var d = LessonCompletionRule.EvaluateSkip([Ex(used: 2, failed: 2, max: 2)]);
+        d.CanComplete.Should().BeFalse("esgotado é CompleteAsync, não SkipAsync");
+        LessonCompletionRule.Evaluate([Ex(used: 2, failed: 2, max: 2)]).Kind.Should().Be(LessonCompletionKind.AttemptsExhausted);
+    }
 }
 
 /// <summary>O que conta como tentativa errada (ADR-007, Decisões).</summary>
@@ -145,8 +166,10 @@ public class AttemptCountingTests
         var counts = AttemptCounting.Count(results);
 
         counts.Should().Be(new AttemptCounts(Used: 5, Failed: 5, Passed: false));
-        LessonCompletionRule.Evaluate([new(Guid.NewGuid(), 10, null, null, counts.Used, counts.Failed, counts.Passed)])
+        LessonCompletionRule.EvaluateSkip([new(Guid.NewGuid(), 10, null, null, counts.Used, counts.Failed, counts.Passed)])
             .Kind.Should().Be(LessonCompletionKind.SkippedAfterFailures);
+        LessonCompletionRule.Evaluate([new(Guid.NewGuid(), 10, null, null, counts.Used, counts.Failed, counts.Passed)])
+            .CanComplete.Should().BeFalse();
     }
 
     [Fact]

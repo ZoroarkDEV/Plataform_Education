@@ -71,6 +71,9 @@ public sealed class LessonsControllerTests
 
         public Task<LessonCompletionResult> CompleteAsync(Guid userId, string p, string m, string l, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<LessonCompletionResult> SkipAsync(Guid userId, string p, string m, string l, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class StubAuth : IAuthService
@@ -241,7 +244,7 @@ public sealed class LessonsControllerTests
         model.Reason.Should().Be(LessonUnavailableReason.Malformed);
         model.Message.Should().Be("Não conseguimos carregar esta aula agora. Tente de novo ou volte ao dashboard.");
         model.TechnicalDetail.Should().BeNull("fora de Development o detalhe técnico não vai para a tela");
-        controller.Response.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        controller.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
         _logger.Entries.Should().Contain(e => e.Level == LogLevel.Error && e.Message.Contains(MalformedDetail));
     }
 

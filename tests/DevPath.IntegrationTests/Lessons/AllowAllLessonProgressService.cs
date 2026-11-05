@@ -16,4 +16,7 @@ public sealed class AllowAllLessonProgressService : ILessonProgressService
 
     public Task<LessonCompletionResult> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default) =>
         throw new NotSupportedException("A tela de leitura não conclui aulas.");
+
+    public Task<LessonCompletionResult> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default) =>
+        throw new NotSupportedException("A tela de leitura não conclui aulas.");
 }

@@ -37,7 +37,7 @@ ser chamada por todos os pontos que decidem acesso, sempre com os mesmos dados (
 |---|---|
 | `IStudentJourneyService.GetDashboardAsync` | status de cada aula, %, "Continuar" (como hoje) |
 | `ILessonProgressService.OpenAsync` / `GetStateAsync` | abrir ou não a página da aula; estado de "Anterior"/"Próxima" |
-| `ILessonProgressService.CompleteAsync` | recusar concluir aula bloqueada |
+| `ILessonProgressService.CompleteAsync` / `SkipAsync` | recusar concluir aula bloqueada; skip só pelo botão explícito |
 | `ILessonAccessPolicy.EvaluateAsync` | `POST /api/exercicios/{id}/executar` |
 
 Na Infrastructure, um único carregador interno (`JourneySnapshotLoader`) faz as duas consultas que o dashboard já
@@ -59,17 +59,17 @@ usá-lo também, para não existir uma segunda cópia da consulta.
 
 ### 2. Regra de conclusão (uma função só)
 
-`LessonCompletionRule.Evaluate(...)`, função pura na Application, testada em unidade. Se o Manager mudar a regra,
-muda só ela. Entrada: se a aula tem exercício e, para cada exercício da aula, `Passed`, `AttemptsUsed`, `MaxAttempts`
-e `Points`.
+`LessonCompletionRule.Evaluate` / `EvaluateSkip`, funções puras na Application, testadas em unidade. Se o Manager
+mudar a regra, muda só elas. Entrada: para cada exercício da aula, `Passed`, `AttemptsUsed`, `FailedAttempts`,
+`MaxAttempts`, `FailuresBeforeSkip` e `Points`. `Evaluate` = conclusão normal; `EvaluateSkip` = só "Seguir sem pontos".
 
 | Situação | Resultado |
 |---|---|
 | Aula sem exercício (só leitura) | pode concluir; `CompletionKind = Read`, `Points = null` |
 | Todo exercício da aula tem uma submissão `Pass` | pode concluir; `ExercisePassed`, `Points = soma dos Points` |
 | Algum exercício sem `Pass` e com `MaxAttempts` atingido | pode concluir; `AttemptsExhausted`, `Points = soma só dos que passaram` |
-| Algum exercício sem `Pass`, sem esgotar `MaxAttempts`, mas com ≥ `FailuresBeforeSkip` falhas (padrão 5) | pode concluir via "Seguir sem pontos"; `SkippedAfterFailures`; o aluno ainda pode tentar |
-| Algum exercício sem `Pass` e abaixo do limiar de falhas | **não** pode; `Blocker = ExerciseNotPassed` |
+| Algum exercício sem `Pass`, sem esgotar `MaxAttempts`, mas com ≥ `FailuresBeforeSkip` falhas (padrão 5) | **só** via `SkipAsync` / `EvaluateSkip` ("Seguir sem pontos") → `SkippedAfterFailures`; `CompleteAsync` / `Evaluate` devolve `RequirementNotMet` / `ExerciseNotPassed`. O aluno ainda pode tentar |
+| Algum exercício sem `Pass` e abaixo do limiar de falhas | **não** pode; `Blocker = ExerciseNotPassed` (nem Complete nem Skip) |
 
 Hoje há um exercício por aula (ADR-003); a regra já trata "cada exercício da aula" para não quebrar se vierem mais.
 
@@ -92,9 +92,10 @@ Reaproveita a linha de `UserProgress` por aula (SPEC §4), sem coluna `StartedAt
   `LastAccessedAt` responde melhor "onde ele parou" do que "a primeira que começou" (Q6).
 
 Migration **`AddLessonProgressTracking`** (data depois de `20261029122848_AddDatasets`):
-1. Remove duplicatas de `UserProgress` por `(UserId, LessonId)` mantendo o status mais avançado
-   (`CASE Status WHEN 'Mastered' THEN 3 WHEN 'Completed' THEN 2 WHEN 'InProgress' THEN 1 ELSE 0 END`, desempate pelo
-   `LastAccessedAt` mais novo). Hoje ninguém grava progresso, então em dev isso não apaga nada.
+1. Remove duplicatas de `UserProgress` por `(UserId, LessonId)`: consolida na vencedora (melhor Status →
+   `Score DESC NULLS LAST` → `LastAccessedAt` mais novo) com `MAX(Score)`, `MIN(CompletedAt)`,
+   `MAX(LastAccessedAt)` e `SUM(TimeSpentSeconds)`, depois apaga as perdedoras. Hoje ninguém grava progresso, então
+   em dev isso não apaga nada.
 2. Troca o índice não único `(UserId, LessonId)` por **único parcial** `IX_UserProgress_UserId_LessonId`
    `WHERE "LessonId" IS NOT NULL`. É ele que deixa o upsert (`INSERT ... ON CONFLICT DO UPDATE`) idempotente e
    seguro com duplo clique / duas abas.
@@ -115,7 +116,7 @@ fonte de verdade das telas é sempre o cálculo na hora (`JourneyCalculator`).
   na coluna `decimal(5,2)`.
 - `CurrentModuleId` = módulo da 1ª aula disponível **não concluída** na ordem da trilha (a "fronteira" do aluno; não
   muda só por abrir uma aula). Tudo concluído → o último módulo com aulas disponíveis.
-- Recalculadas, **na mesma transação**, em: `CompleteAsync`, conclusão automática do Worker e `EnrollAsync` quando
+- Recalculadas, **na mesma transação**, em: `CompleteAsync`, `SkipAsync`, conclusão automática do Worker e `EnrollAsync` quando
   **reativa** uma matrícula antiga (item do #27). Para duas conclusões simultâneas não gravarem um % velho, a
   transação começa com `SELECT ... FOR UPDATE` na linha da matrícula ativa (serializa por aluno).
 - Conhecido: quando o seed publica/despublica aulas, o denominador muda e as colunas só se corrigem na próxima
@@ -140,8 +141,11 @@ public interface ILessonProgressService
     /// Chamado pelo GET da página da aula.
     Task<LessonAccessResult> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default);
 
-    /// Conclui a aula (regra da seção 2) e recalcula a matrícula na mesma transação. Idempotente.
+    /// Conclui a aula pela regra normal (Evaluate): leitura, pass, tentativas esgotadas. Nunca SkippedAfterFailures.
     Task<LessonCompletionResult> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default);
+
+    /// "Seguir sem pontos" (EvaluateSkip). Só este caminho grava SkippedAfterFailures.
+    Task<LessonCompletionResult> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default);
 }
 
 public enum LessonAccessKind
@@ -165,7 +169,7 @@ public sealed record LessonProgressState(
     DateTimeOffset? CompletedAt,
     LessonCompletionKind? CompletionKind,       // null se não concluída
     int? Points,                                // pontos ganhos; null se não concluída ou aula só de leitura
-    bool CanComplete,                           // Status != Locked && não concluída && regra da seção 2 permite
+    bool CanComplete,                           // Status != Locked && não concluída && Evaluate (não EvaluateSkip) permite
     LessonCompletionBlocker? Blocker,           // por que CanComplete = false numa aula liberada e não concluída
     LessonExerciseProgressDto? Exercise,        // null = aula só de leitura
     DashboardLessonDto? Previous,               // vizinhas na ordem da TRILHA (cruza módulos), rascunhos incluídos
@@ -241,7 +245,7 @@ fakes de teste da Web). Sem ele a página não tem como chamar `POST /api/exerci
 
 **Página da aula `GET /trilhas/{path}/{module}/{lesson}`.** O `LessonsController.Show` chama
 `ILessonContentService.GetLessonAsync` (inalterado) e depois `ILessonProgressService.OpenAsync`. Ordem final:
-`NotFound` > `Draft` > **acesso** > `Malformed` (aluno sem acesso não vê um 500 de aula com defeito).
+`NotFound` > `Draft` > **acesso** > `Malformed` (HTTP **503** + view `Unavailable`; fora de Development sem detalhe técnico. Aluno sem acesso não vê defeito de aula bloqueada).
 
 | `LessonAccessKind` | Página |
 |---|---|
@@ -282,9 +286,10 @@ fakes de teste da Web). Sem ele a página não tem como chamar `POST /api/exerci
 
 **O que o bloco `_LessonCompletion` mostra (por estado):**
 - Concluída: "Concluída em {data}" + pontos, ou "Concluída sem pontos — vale revisar a aula" (`AttemptsExhausted`).
-- `CanComplete` e aula de leitura: botão principal "Marcar aula como concluída".
-- `CanComplete` e tentativas esgotadas: botão "Concluir sem pontos e seguir".
-- `Blocker = ExerciseNotPassed`: sem botão; "Faça o exercício passar para concluir a aula." (+ tentativas restantes se houver limite).
+- `CanComplete` e aula de leitura: botão principal "Marcar aula como concluída" → `CompleteAsync`.
+- `CanComplete` e tentativas esgotadas: botão "Concluir sem pontos e seguir" → `CompleteAsync` (`AttemptsExhausted`).
+- `Exercise.CanSkip`: botão **"Seguir sem pontos"** → `SkipAsync` (`SkippedAfterFailures`). O "Concluí" normal (`CompleteAsync`) nesta situação devolve `RequirementNotMet`.
+- `Blocker = ExerciseNotPassed` e `!CanSkip`: sem botão de conclusão; "Faça o exercício passar para concluir a aula." (+ tentativas restantes se houver limite).
 
 ## Diferenças para a proposta do UI (e por quê)
 
@@ -354,7 +359,7 @@ Resolvidas com o Manager (Ibra, provisórias, levadas ao dono) e o UI Operator (
 
 ### Fonte única de desbloqueio
 
-`JourneyCalculator` via um único `JourneySnapshotLoader`: dashboard, página da aula, Previous/Next, `CompleteAsync` e o endpoint de execução. Rascunhos nunca bloqueiam.
+`JourneyCalculator` via um único `JourneySnapshotLoader`: dashboard, página da aula, Previous/Next, `CompleteAsync`/`SkipAsync` e o endpoint de execução. Rascunhos nunca bloqueiam.
 
 ### Pedidos extras da UI (05/11)
 
