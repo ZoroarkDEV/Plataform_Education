@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Markdig;
+using Markdig.Extensions.Tables;
 using Markdig.Renderers;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
@@ -144,6 +145,10 @@ public sealed class LessonMarkdownRenderer
         if (defaultCodeRenderer is not null) renderer.ObjectRenderers.Remove(defaultCodeRenderer);
         renderer.ObjectRenderers.Insert(0, new LessonCodeBlockRenderer());
 
+        var defaultTableRenderer = renderer.ObjectRenderers.FindExact<HtmlTableRenderer>();
+        if (defaultTableRenderer is not null) renderer.ObjectRenderers.Remove(defaultTableRenderer);
+        renderer.ObjectRenderers.Insert(0, new LessonTableRenderer());
+
         renderer.Render(document);
         writer.Flush();
         return writer.ToString();
@@ -218,5 +223,37 @@ internal sealed class LessonCodeBlockRenderer : HtmlObjectRenderer<CodeBlock>
         renderer.Write(CodeHighlighter.ToHtml(code, info));
         renderer.Write("</code></pre></figure>");
         renderer.WriteLine();
+    }
+}
+
+/// <summary>
+/// Tabela do Markdown dentro de um contêiner com rolagem horizontal própria (#34): no celular a
+/// tabela larga rola sozinha e a página não ganha rolagem lateral. O contêiner é uma região
+/// nomeada que recebe foco, para quem usa teclado conseguir rolar com as setas.
+/// </summary>
+internal sealed class LessonTableRenderer : HtmlTableRenderer
+{
+    protected override void Write(HtmlRenderer renderer, Table table)
+    {
+        renderer.EnsureLine();
+        renderer.Write("<div class=\"table-scroll\" role=\"region\" tabindex=\"0\" aria-label=\"")
+            .WriteEscape(Label(table)).Write("\" data-table-scroll>");
+        base.Write(renderer, table);
+        renderer.EnsureLine();
+        renderer.Write("</div>");
+        renderer.WriteLine();
+    }
+
+    private static string Label(Table table)
+    {
+        var header = table.OfType<TableRow>().FirstOrDefault(r => r.IsHeader);
+        if (header is null) return "Tabela";
+
+        var names = header.OfType<TableCell>()
+            .Select(cell => string.Concat(cell.Descendants<LiteralInline>().Select(l => l.Content.ToString())
+                .Concat(cell.Descendants<CodeInline>().Select(c => c.Content))).Trim())
+            .Where(n => n.Length > 0)
+            .ToList();
+        return names.Count == 0 ? "Tabela" : $"Tabela: {string.Join(", ", names)}";
     }
 }

@@ -255,4 +255,23 @@ public sealed class LessonMarkdownRendererTests
 
         html.Should().Contain("<h2").And.Contain("<h3").And.NotContain("<h1").And.NotContain("<h4");
     }
+
+    [Fact]
+    public void Render_Tabela_FicaEmContainerComRolagemHorizontalFocavel()
+    {
+        var html = _renderer.Render("| id | titulo | `preco` |\n|---|---|---|\n| 1 | Dom Casmurro | 39.90 |").ContentHtml;
+
+        html.Should().Contain("<div class=\"table-scroll\" role=\"region\" tabindex=\"0\" aria-label=\"Tabela: id, titulo, preco\" data-table-scroll>");
+        html.IndexOf("data-table-scroll").Should().BeLessThan(html.IndexOf("<table"));
+        html.TrimEnd().Should().EndWith("</div>");
+        html.Should().Contain("<td>Dom Casmurro</td>");
+    }
+
+    [Fact]
+    public void RenderFragment_TabelaNoEnunciado_TambemGanhaContainer()
+    {
+        var html = _renderer.RenderFragment("| a | b |\n|---|---|\n| 1 | 2 |");
+
+        html.Should().Contain("role=\"region\" tabindex=\"0\" aria-label=\"Tabela: a, b\"");
+    }
 }

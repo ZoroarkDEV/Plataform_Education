@@ -113,6 +113,15 @@
   }
   .code-block code { @apply font-mono; white-space: pre; }
 
+  /* Tabelas das aulas (#34): rolagem horizontal no contêiner, nunca na página. */
+  .table-scroll {
+    @apply my-6 max-w-full overflow-x-auto rounded-md
+      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700
+      dark:focus-visible:outline-sky-300;
+  }
+  .table-scroll table { @apply my-0; }
+  .table-scroll th, .table-scroll code { white-space: nowrap; }
+
   .tok-keyword { color: #93c5fd; font-weight: 600; } /* blue-300 */
   .tok-function { color: #67e8f9; }                  /* cyan-300 */
   .tok-string { color: #86efac; }                    /* green-300 */
