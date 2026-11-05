@@ -71,6 +71,8 @@ public sealed class MigrationsTests : IAsyncLifetime
         var module = path.AddModule("M");
         var a = module.AddLesson("A", Domain.CareerPaths.ContentType.Markdown, "# a");
         var b = module.AddLesson("B", Domain.CareerPaths.ContentType.Markdown, "# b");
+        var c = module.AddLesson("C", Domain.CareerPaths.ContentType.Markdown, "# c");
+        var d = module.AddLesson("D", Domain.CareerPaths.ContentType.Markdown, "# d");
         db.CareerPaths.Add(path);
         var userId = Guid.NewGuid();
         db.Users.Add(new ApplicationUser
@@ -80,32 +82,75 @@ public sealed class MigrationsTests : IAsyncLifetime
         });
         await db.SaveChangesAsync();
 
-        Guid keepA = Guid.NewGuid(), keepB = Guid.NewGuid();
+        Guid keepA = Guid.NewGuid(), keepB = Guid.NewGuid(), keepC = Guid.NewGuid(), keepD = Guid.NewGuid();
         var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        async Task InsertAsync(Guid id, Guid lessonId, string status, DateTime lastAccess) =>
+        async Task InsertAsync(
+            Guid id, Guid lessonId, string status, DateTime lastAccess, int? score = null, DateTime? completedAt = null) =>
             await db.Database.ExecuteSqlRawAsync("""
-                INSERT INTO "UserProgress" ("Id", "UserId", "LessonId", "Status", "TimeSpentSeconds", "LastAccessedAt", "CompletedAt")
-                VALUES (@id, @user, @lesson, @status, 0, @last, CASE WHEN @status IN ('Completed','Mastered') THEN @last END)
+                INSERT INTO "UserProgress"
+                    ("Id", "UserId", "LessonId", "Status", "Score", "TimeSpentSeconds", "LastAccessedAt", "CompletedAt")
+                VALUES (@id, @user, @lesson, @status, @score, 0, @last, @completed)
                 """,
                 new NpgsqlParameter("id", id), new NpgsqlParameter("user", userId), new NpgsqlParameter("lesson", lessonId),
-                new NpgsqlParameter("status", status), new NpgsqlParameter("last", lastAccess));
+                new NpgsqlParameter("status", status),
+                new NpgsqlParameter("score", (object?)score ?? DBNull.Value),
+                new NpgsqlParameter("last", lastAccess),
+                new NpgsqlParameter("completed", (object?)completedAt ?? DBNull.Value));
 
-        // A: Completed antigo vence InProgress recente. B: entre dois InProgress, vence o aberto por último.
+        // A (caso simples): Completed antigo vence InProgress recente.
         await InsertAsync(Guid.NewGuid(), a.Id, "InProgress", t0.AddDays(5));
-        await InsertAsync(keepA, a.Id, "Completed", t0);
+        await InsertAsync(keepA, a.Id, "Completed", t0, score: null, completedAt: t0);
         await InsertAsync(Guid.NewGuid(), a.Id, "InProgress", t0.AddDays(1));
+
+        // B (caso simples): entre dois InProgress, vence o aberto por último.
         await InsertAsync(Guid.NewGuid(), b.Id, "InProgress", t0);
         await InsertAsync(keepB, b.Id, "InProgress", t0.AddDays(2));
 
+        // C (QA): Completed Score 10 antigo + Completed Score null mais novo → preserva os 10.
+        await InsertAsync(keepC, c.Id, "Completed", t0, score: 10, completedAt: t0);
+        await InsertAsync(Guid.NewGuid(), c.Id, "Completed", t0.AddDays(3), score: null, completedAt: t0.AddDays(3));
+
+        // D (QA): Completed Score 10 + Mastered Score null → Mastered com Score 10 e CompletedAt do Completed.
+        await InsertAsync(Guid.NewGuid(), d.Id, "Completed", t0, score: 10, completedAt: t0);
+        await InsertAsync(keepD, d.Id, "Mastered", t0.AddDays(4), score: null, completedAt: null);
+
         await db.Database.MigrateAsync();
 
-        var ids = await db.Database.SqlQueryRaw<Guid>("""SELECT "Id" AS "Value" FROM "UserProgress" """).ToListAsync();
-        ids.Should().BeEquivalentTo([keepA, keepB]);
+        var rows = await db.Database.SqlQueryRaw<DedupeRow>("""
+            SELECT "Id", "LessonId", "Status", "Score", "CompletedAt", "LastAccessedAt"
+            FROM "UserProgress"
+            ORDER BY "LessonId"
+            """).ToListAsync();
+
+        rows.Should().HaveCount(4);
+        rows.Select(r => r.Id).Should().BeEquivalentTo([keepA, keepB, keepC, keepD]);
+
+        var rowC = rows.Single(r => r.Id == keepC);
+        rowC.Status.Should().Be("Completed");
+        rowC.Score.Should().Be(10, "Completed(10) antigo não perde pontos para Completed(null) mais novo");
+        rowC.CompletedAt.Should().Be(t0, "fica a conclusão mais antiga");
+        rowC.LastAccessedAt.Should().Be(t0.AddDays(3), "fica o LastAccessedAt mais recente");
+
+        var rowD = rows.Single(r => r.Id == keepD);
+        rowD.Status.Should().Be("Mastered");
+        rowD.Score.Should().Be(10, "Mastered herda o MAX(Score) do Completed");
+        rowD.CompletedAt.Should().Be(t0, "Mastered herda o MIN(CompletedAt) do Completed");
+        rowD.LastAccessedAt.Should().Be(t0.AddDays(4));
 
         db.UserProgress.Add(UserProgress.StartLesson(userId, a.Id));
         var duplicate = () => db.SaveChangesAsync();
         (await duplicate.Should().ThrowAsync<DbUpdateException>())
             .WithInnerException<PostgresException>().Which.ConstraintName.Should().Be("IX_UserProgress_UserId_LessonId");
+    }
+
+    private sealed class DedupeRow
+    {
+        public Guid Id { get; set; }
+        public Guid LessonId { get; set; }
+        public string Status { get; set; } = "";
+        public int? Score { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public DateTime LastAccessedAt { get; set; }
     }
 
     [Fact]

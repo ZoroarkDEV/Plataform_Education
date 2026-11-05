@@ -34,9 +34,61 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 maxLength: 100,
                 nullable: true);
 
-            // Antes do índice único (aluno, aula): se houver linhas repetidas, fica a mais avançada
-            // (Mastered > Completed > InProgress > NotStarted); empate = a aberta por último; depois o Id.
+            // Antes do índice único (aluno, aula): consolida duplicatas em uma linha
+            // (melhor Status; MAX(Score); MIN(CompletedAt); MAX(LastAccessedAt); SUM(tempo);
+            // CompletionKind do vencedor ou de outra linha do grupo se o vencedor não tiver).
+            // Depois apaga as perdedoras. Linhas só de ExerciseId (LessonId null) não entram.
             migrationBuilder.Sql("""
+                WITH ranked AS (
+                    SELECT "Id", "UserId", "LessonId",
+                           ROW_NUMBER() OVER (
+                               PARTITION BY "UserId", "LessonId"
+                               ORDER BY CASE "Status"
+                                            WHEN 'Mastered' THEN 3
+                                            WHEN 'Completed' THEN 2
+                                            WHEN 'InProgress' THEN 1
+                                            ELSE 0
+                                        END DESC,
+                                        "Score" DESC NULLS LAST,
+                                        "LastAccessedAt" DESC,
+                                        "Id") AS rn
+                    FROM "UserProgress"
+                    WHERE "LessonId" IS NOT NULL
+                ),
+                agg AS (
+                    SELECT "UserId", "LessonId",
+                           MAX("Score") AS max_score,
+                           MIN("CompletedAt") AS min_completed_at,
+                           MAX("LastAccessedAt") AS max_last_accessed,
+                           SUM("TimeSpentSeconds")::int AS sum_time,
+                           (ARRAY_AGG("CompletionKind" ORDER BY
+                               CASE WHEN "CompletionKind" IS NULL THEN 1 ELSE 0 END,
+                               CASE "Status"
+                                    WHEN 'Mastered' THEN 3
+                                    WHEN 'Completed' THEN 2
+                                    WHEN 'InProgress' THEN 1
+                                    ELSE 0
+                               END DESC,
+                               "Score" DESC NULLS LAST,
+                               "LastAccessedAt" DESC,
+                               "Id"))[1] AS best_kind
+                    FROM "UserProgress"
+                    WHERE "LessonId" IS NOT NULL
+                    GROUP BY "UserId", "LessonId"
+                    HAVING COUNT(*) > 1
+                )
+                UPDATE "UserProgress" up
+                SET "Score" = agg.max_score,
+                    "CompletedAt" = agg.min_completed_at,
+                    "LastAccessedAt" = agg.max_last_accessed,
+                    "TimeSpentSeconds" = agg.sum_time,
+                    "CompletionKind" = COALESCE(up."CompletionKind", agg.best_kind)
+                FROM ranked, agg
+                WHERE up."Id" = ranked."Id"
+                  AND ranked.rn = 1
+                  AND ranked."UserId" = agg."UserId"
+                  AND ranked."LessonId" = agg."LessonId";
+
                 DELETE FROM "UserProgress" up
                 USING (
                     SELECT "Id", ROW_NUMBER() OVER (
@@ -47,6 +99,7 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                                      WHEN 'InProgress' THEN 1
                                      ELSE 0
                                  END DESC,
+                                 "Score" DESC NULLS LAST,
                                  "LastAccessedAt" DESC,
                                  "Id") AS rn
                     FROM "UserProgress"
