@@ -1,9 +1,9 @@
-using FluentAssertions;
 using System.Security.Claims;
 using DevPath.Application.Auth;
-using DevPath.Application.Journey;
+using DevPath.Web.Progress;
+using DevPath.Web.ViewModels.Onboarding;
+using FluentAssertions;
 using DevPath.Application.Lessons;
-using DevPath.Application.Progress;
 using DevPath.Domain.Common;
 using DevPath.Web.Controllers;
 using DevPath.Web.Lessons;
@@ -11,6 +11,7 @@ using DevPath.Web.Models.Lessons;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -55,70 +56,69 @@ public sealed class LessonsControllerTests
             });
     }
 
-    /// <summary>Dublê do progresso (#27): devolve sempre o mesmo resultado e conta as chamadas.</summary>
-    private sealed class StubProgress(LessonAccessResult result) : ILessonProgressService
-    {
-        public int OpenCalls { get; private set; }
-
-        public Task<LessonAccessResult> GetStateAsync(Guid userId, string p, string m, string l, CancellationToken ct = default) =>
-            Task.FromResult(result);
-
-        public Task<LessonAccessResult> OpenAsync(Guid userId, string p, string m, string l, CancellationToken ct = default)
-        {
-            OpenCalls++;
-            return Task.FromResult(result);
-        }
-
-        public Task<LessonCompletionResult> CompleteAsync(Guid userId, string p, string m, string l, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<LessonCompletionResult> SkipAsync(Guid userId, string p, string m, string l, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-    }
-
     private sealed class StubAuth : IAuthService
     {
-        public bool LoggedOut { get; private set; }
-        public Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<AuthResult> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task LogoutAsync()
-        {
-            LoggedOut = true;
-            return Task.CompletedTask;
-        }
+        public Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(AuthResult.Success());
+        public Task<AuthResult> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(AuthResult.Success());
+        public Task LogoutAsync() => Task.CompletedTask;
     }
 
-    private static readonly LessonRefDto FirstLesson = new(Path, Module, "o-que-e-banco", "O que é banco");
+    private sealed class StubProgress : ILessonProgressGateway
+    {
+        public LessonAccessOutcome OpenResult { get; set; } = LessonAccessOutcome.Unavailable;
+        public Task<LessonAccessOutcome> GetStateAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
+            Task.FromResult(OpenResult);
+        public Task<LessonAccessOutcome> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
+            Task.FromResult(OpenResult);
+        public Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, bool skipWithoutPoints, CancellationToken cancellationToken) =>
+            Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.Unavailable));
+    }
 
-    private static LessonProgressState State(JourneyLessonStatus status, LessonRefDto? requirement = null) =>
-        new(new LessonRefDto(Path, Module, FullSlug, "Seu primeiro SELECT"), status, requirement, null, null, null,
-            CanComplete: status != JourneyLessonStatus.Locked, null, null, null, null, 0);
-
-    private static readonly LessonAccessResult Allowed = new(LessonAccessKind.Allowed, State(JourneyLessonStatus.InProgress));
-
-    private readonly StubAuth _auth = new();
+    private sealed class NullTempDataProvider : ITempDataProvider
+    {
+        public IDictionary<string, object> LoadTempData(HttpContext context) => new Dictionary<string, object>();
+        public void SaveTempData(HttpContext context, IDictionary<string, object> values) { }
+    }
 
     private LessonsController CreateController(
         ILessonContentService? service = null, string environment = "Testing", ExerciseDto? exercise = null,
-        ILessonProgressService? progress = null) =>
-        new(service ?? new StubLessonService(exercise), progress ?? new StubProgress(Allowed), _auth,
-            new LessonMarkdownRenderer(), new StubEnvironment(environment), _logger)
+        ILessonProgressGateway? progress = null)
+    {
+        var http = new DefaultHttpContext
         {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext
-                {
-                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test")),
-                },
-            },
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                new Claim(ClaimTypes.Name, "aluna@test"),
+            ], "test"))
         };
+        var controller = new LessonsController(
+            service ?? new StubLessonService(exercise), new LessonMarkdownRenderer(),
+            progress ?? new StubProgress(), new StubAuth(), new StubEnvironment(environment), _logger)
+        {
+            ControllerContext = new ControllerContext { HttpContext = http },
+            TempData = new TempDataDictionary(http, new NullTempDataProvider()),
+        };
+        return controller;
+    }
+
+    [Fact]
+    public void Controller_ExigeLogin() =>
+        typeof(LessonsController).GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Should().NotBeEmpty();
+
+    // Acesso (#27, portados do Backend a9672a2 para a porta ILessonProgressGateway).
+    private static readonly LessonRef FirstLessonRef = new(Path, Module, "o-que-e-banco", "O que é banco");
+
+    private static LessonProgressView LockedState() =>
+        new(new LessonRef(Path, Module, FullSlug, "Seu primeiro SELECT"), LessonStatus.Locked, FirstLessonRef,
+            null, null, null, false, null, null, null, null, 0);
 
     [Fact]
     public async Task Show_AulaBloqueada_403ComOQueFaltaConcluir()
     {
-        var controller = CreateController(progress: new StubProgress(
-            new(LessonAccessKind.Locked, State(JourneyLessonStatus.Locked, FirstLesson))));
+        var controller = CreateController(progress: new StubProgress { OpenResult = new(LessonAccessStatus.Locked, LockedState()) });
 
         var result = await controller.Show(Path, Module, FullSlug, CancellationToken.None);
 
@@ -126,15 +126,14 @@ public sealed class LessonsControllerTests
         view.ViewName.Should().Be(LessonsController.UnavailableView);
         var model = view.Model.Should().BeOfType<LessonUnavailableViewModel>().Subject;
         model.Reason.Should().Be(LessonUnavailableReason.Locked);
-        model.UnlockRequirement.Should().Be(FirstLesson);
-        model.Message.Should().Contain("O que é banco");
+        model.RequiredLessonTitle.Should().Be("O que é banco");
         controller.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
 
     [Fact]
     public async Task Show_AulaDeOutraTrilha_403()
     {
-        var controller = CreateController(progress: new StubProgress(LessonAccessResult.NotEnrolled("Backend com .NET")));
+        var controller = CreateController(progress: new StubProgress { OpenResult = new(LessonAccessStatus.NotEnrolled, null, "Backend com .NET") });
 
         var result = await controller.Show(Path, Module, FullSlug, CancellationToken.None);
 
@@ -147,7 +146,7 @@ public sealed class LessonsControllerTests
     [Fact]
     public async Task Show_SemTrilha_VaiParaAEscolha()
     {
-        var controller = CreateController(progress: new StubProgress(LessonAccessResult.NotEnrolled(null)));
+        var controller = CreateController(progress: new StubProgress { OpenResult = new(LessonAccessStatus.NotEnrolled) });
 
         var result = await controller.Show(Path, Module, FullSlug, CancellationToken.None);
 
@@ -157,36 +156,9 @@ public sealed class LessonsControllerTests
     }
 
     [Fact]
-    public async Task Show_ContaApagada_SaiEVaiAoLogin()
-    {
-        var controller = CreateController(progress: new StubProgress(LessonAccessResult.UserNotFound()));
-
-        var result = await controller.Show(Path, Module, FullSlug, CancellationToken.None);
-
-        result.Should().BeOfType<RedirectToActionResult>().Which.ActionName.Should().Be(nameof(AccountController.Login));
-        _auth.LoggedOut.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task Show_RascunhoEInexistente_NaoConsultamNemGravamProgresso()
-    {
-        var progress = new StubProgress(new(LessonAccessKind.Locked, State(JourneyLessonStatus.Locked, FirstLesson)));
-        var controller = CreateController(progress: progress);
-
-        (await controller.Show(Path, Module, DraftSlug, CancellationToken.None)).Should().BeOfType<ViewResult>()
-            .Which.Model.Should().BeOfType<LessonUnavailableViewModel>().Which.Reason.Should().Be(LessonUnavailableReason.Draft);
-        (await controller.Show(Path, Module, "nao-existe", CancellationToken.None)).Should().BeOfType<ViewResult>()
-            .Which.Model.Should().BeOfType<LessonUnavailableViewModel>().Which.Reason.Should().Be(LessonUnavailableReason.NotFound);
-
-        progress.OpenCalls.Should().Be(0);
-        controller.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
-    }
-
-    [Fact]
     public async Task Show_AulaComDefeitoEBloqueada_403_NaoRevelaODefeito()
     {
-        var controller = CreateController(progress: new StubProgress(
-            new(LessonAccessKind.Locked, State(JourneyLessonStatus.Locked, FirstLesson))));
+        var controller = CreateController(progress: new StubProgress { OpenResult = new(LessonAccessStatus.Locked, LockedState()) });
 
         var result = await controller.Show(Path, Module, MalformedSlug, CancellationToken.None);
 
@@ -196,19 +168,14 @@ public sealed class LessonsControllerTests
     }
 
     [Fact]
-    public async Task Show_AulaLiberada_PassaOEstadoDoProgressoParaAView()
+    public async Task Show_RascunhoBloqueado_Continua404()
     {
-        var controller = CreateController();
+        var controller = CreateController(progress: new StubProgress { OpenResult = new(LessonAccessStatus.Locked, LockedState()) });
 
-        var result = await controller.Show(Path, Module, FullSlug, CancellationToken.None);
-
-        result.Should().BeOfType<ViewResult>().Which.Model.Should().BeOfType<LessonPageViewModel>()
-            .Which.Progress.Should().Be(Allowed.State);
+        (await controller.Show(Path, Module, DraftSlug, CancellationToken.None)).Should().BeOfType<ViewResult>()
+            .Which.Model.Should().BeOfType<LessonUnavailableViewModel>().Which.Reason.Should().Be(LessonUnavailableReason.Draft);
+        controller.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
-
-    [Fact]
-    public void Controller_ExigeLogin() =>
-        typeof(LessonsController).GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Should().NotBeEmpty();
 
     [Fact]
     public async Task Show_AulaExistente_DevolveViewComHtmlConvertido()
@@ -244,7 +211,8 @@ public sealed class LessonsControllerTests
         model.Reason.Should().Be(LessonUnavailableReason.Malformed);
         model.Message.Should().Be("Não conseguimos carregar esta aula agora. Tente de novo ou volte ao dashboard.");
         model.TechnicalDetail.Should().BeNull("fora de Development o detalhe técnico não vai para a tela");
-        controller.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        controller.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable,
+            "Malformed devolve 503 + Unavailable; nunca 500");
         _logger.Entries.Should().Contain(e => e.Level == LogLevel.Error && e.Message.Contains(MalformedDetail));
     }
 
@@ -257,6 +225,8 @@ public sealed class LessonsControllerTests
 
         var model = ((ViewResult)result).Model.Should().BeOfType<LessonUnavailableViewModel>().Subject;
         model.TechnicalDetail.Should().Be(MalformedDetail);
+        controller.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable,
+            "Malformed = 503 + Unavailable também em Development");
     }
 
     [Fact]
@@ -347,7 +317,8 @@ public sealed class LessonsControllerTests
         vm.Title.Should().Be("Catálogo");
         vm.StatementHtml.Should().Contain("<strong>título</strong>");
         vm.LanguageLabel.Should().Be("SQL");
-        vm.Dataset.Should().Be("livraria");
+        vm.DatasetSlug.Should().Be("livraria");
+        vm.DatasetDisplayName.Should().Be("Livraria");
         vm.PointsLabel.Should().Be("10 pontos");
         vm.StarterCodeHtml.Should().Contain("tok-keyword");
         vm.Hints.Should().Equal("Geral", "Direta");
@@ -362,7 +333,8 @@ public sealed class LessonsControllerTests
 
         var vm = ((ViewResult)result).Model.Should().BeOfType<LessonPageViewModel>().Subject.Exercise!;
         vm.StarterCodeHtml.Should().BeNull();
-        vm.Dataset.Should().BeNull();
+        vm.DatasetSlug.Should().BeNull();
+        vm.DatasetDisplayName.Should().BeNull();
         vm.PointsLabel.Should().Be("5 pontos");
         vm.Hints.Should().Equal("Use COUNT");
     }

@@ -157,7 +157,7 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
 
         html.Should().Contain("Exercício: Catálogo de títulos");
         html.Should().Contain("<strong>título</strong>");
-        html.Should().Contain("Dados usados:").And.Contain("livraria").And.Contain("10 pontos");
+        html.Should().Contain("Dados usados:").And.Contain("Livraria").And.Contain("10 pontos");
         html.Should().Contain("Código para começar").And.Contain("Copiar código SQL");
         html.Should().Contain("Ver dica 1 de 2").And.Contain("Ver dica 2 de 2");
         html.Should().Contain("data-hints");

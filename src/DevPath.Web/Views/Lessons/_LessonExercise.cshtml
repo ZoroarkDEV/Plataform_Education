@@ -1,31 +1,94 @@
 @model LessonExerciseViewModel
 @*
-    Exercício da aula, só leitura (o editor interativo é a #14).
-    Mostra apenas a visão segura: título, enunciado, linguagem, dataset, pontos, código inicial e dicas.
-    Nunca: solução, linhas esperadas dos testes, erros comuns.
-    Dicas: cada uma num <details> (funciona sem JS). Com JS (site.js), a próxima dica só aparece
-    depois que a anterior é aberta, e o aviso vai para o aria-live.
+    Exercício da aula com editor in-page e Executar (#30 B2).
+    Visão segura: sem solução, test_cases nem common_errors.
+    ExerciseId vem do gateway de progresso; sem Id o Executar não aparece (Pending).
 *@
 @{
     const string prose = "prose prose-slate max-w-none text-base dark:prose-invert prose-a:text-brand-700 dark:prose-a:text-brand-100 prose-code:rounded prose-code:bg-slate-200 prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none dark:prose-code:bg-slate-800";
+    var instruction = Model.InstructionText.Replace("**Executar**", "<strong>Executar</strong>");
+    var attemptsId = "exercise-attempts";
+    var execReasonId = "executar-disabled-reason";
+    var exhausted = Model.AttemptsExhausted;
 }
-<section aria-labelledby="sec-exercicio" class="mt-10 rounded-lg border border-slate-300 p-5 dark:border-slate-700" data-exercise>
+<section aria-labelledby="sec-exercicio"
+         class="mt-10 rounded-lg border border-slate-300 p-5 dark:border-slate-700"
+         data-exercise
+         data-exercise-id="@(Model.ExerciseId?.ToString() ?? "")"
+         data-max-attempts="@(Model.MaxAttempts?.ToString() ?? "")"
+         data-remaining-attempts="@(Model.RemainingAttempts?.ToString() ?? "")"
+         data-can-skip="@(Model.CanSkip ? "true" : "false")"
+         data-failed-attempts="@Model.FailedAttempts">
     <h2 id="sec-exercicio" class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Exercício: @Model.Title</h2>
     <dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-700 dark:text-slate-300">
         <div class="flex gap-1"><dt>Linguagem:</dt><dd class="font-semibold">@Model.LanguageLabel</dd></div>
-        @if (Model.Dataset is not null)
+        @if (Model.DatasetDisplayName is not null)
         {
-            <div class="flex gap-1"><dt>Dados usados:</dt><dd class="font-semibold">@Model.Dataset</dd></div>
+            <div class="flex gap-1" data-dataset>
+                <dt>Dados usados:</dt>
+                <dd class="font-semibold" data-dataset-name>@Model.DatasetDisplayName</dd>
+            </div>
         }
         <div class="flex gap-1"><dt>Vale:</dt><dd class="font-semibold">@Model.PointsLabel</dd></div>
     </dl>
 
     <div class="@prose mt-4">@Html.Raw(Model.StatementHtml)</div>
 
-    @if (Model.StarterCodeHtml is not null)
+    @if (Model.ExerciseId is not null)
+    {
+        <h3 class="mt-6 text-base font-semibold text-slate-900 dark:text-white">Editor</h3>
+        <p class="text-sm text-slate-700 dark:text-slate-300">@Html.Raw(instruction)</p>
+
+        <label for="exercise-code" class="sr-only">Sua consulta SQL</label>
+        <textarea id="exercise-code"
+                  name="code"
+                  rows="10"
+                  maxlength="20000"
+                  spellcheck="false"
+                  class="mt-3 w-full rounded-lg border border-slate-300 bg-slate-50 p-3 font-mono text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                  data-exercise-code
+                  @(exhausted ? "readonly" : null)>@Model.StarterCodePlain</textarea>
+
+        <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <button type="button"
+                    class="btn-primary inline-flex min-h-11 w-full items-center justify-center px-6 py-3 text-base sm:w-auto disabled:cursor-not-allowed disabled:opacity-60"
+                    data-execute-button
+                    aria-describedby="@(exhausted ? execReasonId : (Model.MaxAttempts is not null ? attemptsId : null))"
+                    @(exhausted ? "aria-disabled=true disabled" : null)>
+                <span data-execute-idle>@LessonCompletionTexts.ExecuteButton</span>
+                <span data-execute-busy class="hidden">@LessonCompletionTexts.ExecuteLoading</span>
+            </button>
+            @if (Model.MaxAttempts is not null)
+            {
+                <p id="@attemptsId"
+                   class="text-sm text-slate-700 dark:text-slate-300"
+                   data-attempts-counter
+                   aria-live="polite">
+                    @if (Model.RemainingAttempts == 1)
+                    {
+                        @LessonCompletionTexts.LastAttempt
+                    }
+                    else if (Model.RemainingAttempts is { } rem)
+                    {
+                        @LessonCompletionTexts.RemainingAttempts(rem)
+                    }
+                </p>
+            }
+        </div>
+        @if (exhausted)
+        {
+            <p id="@execReasonId" class="mt-2 text-sm text-slate-700 dark:text-slate-300" data-executar-reason>
+                @LessonCompletionTexts.AttemptsExhaustedReason
+            </p>
+        }
+
+        <div id="exercise-feedback" class="mt-4" data-exercise-feedback aria-live="polite"></div>
+        <div id="exercise-results" class="mt-4 hidden" data-exercise-results></div>
+    }
+    else if (Model.StarterCodeHtml is not null)
     {
         <h3 class="mt-6 text-base font-semibold text-slate-900 dark:text-white">Código para começar</h3>
-        <p class="text-sm text-slate-700 dark:text-slate-300">Copie e complete no seu editor. O editor dentro da aula vem em breve.</p>
+        <p class="text-sm text-slate-700 dark:text-slate-300">@Html.Raw(instruction)</p>
         @Html.Raw(Model.StarterCodeHtml)
     }
 

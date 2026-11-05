@@ -1,63 +1,167 @@
-using DevPath.Application.Journey;
 using DevPath.Application.Lessons;
-using DevPath.Application.Progress;
 using DevPath.Domain.Common;
 using DevPath.Web.Lessons;
+using DevPath.Web.Progress;
+using DevPath.Web.ViewModels.Onboarding;
 
 namespace DevPath.Web.Models.Lessons;
 
-/// <summary>Tudo que a tela da aula precisa: dados da aula + HTML já convertido e seguro.</summary>
-/// <param name="Exercise">Exercício da aula, ou null (a seção não aparece).</param>
-/// <param name="Progress">
-/// Estado do aluno nesta aula (#27, ADR-007): status, bloco de conclusão, exercício (tentativas, "Seguir sem pontos")
-/// e as vizinhas na ordem da trilha (Previous/Next, com Locked e UnlockRequirement). null só em testes antigos.
-/// </param>
+/// <summary>Tudo que a tela da aula precisa: dados + HTML + progresso (#27) + exercício (#30).</summary>
 public sealed record LessonPageViewModel(
     LessonDto Lesson,
     RenderedLesson Html,
     LessonExerciseViewModel? Exercise = null,
-    LessonProgressState? Progress = null)
+    LessonProgressView? Progress = null,
+    string? FlashMessage = null)
 {
     public string LevelLabel => LevelLabels.For(Lesson.Level);
 
     public string EstimatedTimeLabel => $"~{Lesson.EstimatedMinutes} min";
 
-    /// <summary>"Aula X de Y" (ou só "Aula" se o serviço não informou a posição).</summary>
     public string PositionLabel => Lesson is { Position: > 0, TotalInModule: > 0 }
         ? $"Aula {Lesson.Position} de {Lesson.TotalInModule}"
         : "Aula";
+
+    /// <summary>Progresso disponível (serviço na dev). Pending = null → UI como antes do #27.</summary>
+    public bool HasProgress => Progress is not null;
+
+    public bool IsCompleted => Progress?.IsCompleted == true;
+
+    public LessonCompletionViewModel? Completion =>
+        Progress is null ? null : LessonCompletionViewModel.From(Progress, Lesson, flash: FlashMessage);
 }
 
 /// <summary>
-/// Exercício pronto para a tela: só o que o aluno pode ver (sem solução, sem linhas esperadas,
-/// sem erros comuns). Enunciado e código inicial já convertidos em HTML seguro.
+/// Exercício pronto para a tela: visão segura + ids/limites vindos do progresso (gateway).
+/// Nunca: solução, test_cases, common_errors.
 /// </summary>
 public sealed record LessonExerciseViewModel(
     string Title,
     string StatementHtml,
     string LanguageLabel,
-    string? Dataset,
+    string? DatasetSlug,
+    string? DatasetDisplayName, // fallback humanizado do slug até ExerciseDto.DatasetDisplayName
     int Points,
     string? StarterCodeHtml,
+    string? StarterCodePlain,
     IReadOnlyList<string> Hints,
-    string? DatasetDisplayName = null,
-    Guid? ExerciseId = null)
+    Guid? ExerciseId = null,
+    int? MaxAttempts = null,
+    int? RemainingAttempts = null,
+    bool CanSkip = false,
+    int FailedAttempts = 0,
+    bool Passed = false)
 {
     public static LessonExerciseViewModel From(ExerciseDto exercise, LessonMarkdownRenderer renderer) => new(
         exercise.Title,
         renderer.RenderFragment(exercise.StatementMarkdown, LessonMarkdownRenderer.StatementMinHeadingLevel),
         CodeHighlighter.LabelFor(exercise.Language) ?? "Código",
         string.IsNullOrWhiteSpace(exercise.Dataset) ? null : exercise.Dataset,
+        string.IsNullOrWhiteSpace(exercise.Dataset) ? null : LessonCompletionTexts.DatasetDisplayName(exercise.Dataset),
         exercise.Points,
         string.IsNullOrWhiteSpace(exercise.StarterCode) ? null : LessonMarkdownRenderer.RenderCodeBlock(exercise.StarterCode, exercise.Language),
-        exercise.Hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToList(),
-        exercise.DatasetDisplayName ?? DatasetDisplayNames.Resolve(exercise.Dataset),
-        exercise.Id == Guid.Empty ? null : exercise.Id);
+        string.IsNullOrWhiteSpace(exercise.StarterCode) ? null : exercise.StarterCode,
+        exercise.Hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToList());
 
-    /// <summary>Nome legível do dataset ("Livraria"); cai no slug se DisplayName vier vazio.</summary>
-    public string? DatasetLabel => DatasetDisplayName ?? Dataset;
+    public LessonExerciseViewModel WithProgress(LessonExerciseProgressView progress) => this with
+    {
+        ExerciseId = progress.ExerciseId,
+        MaxAttempts = progress.MaxAttempts,
+        RemainingAttempts = progress.RemainingAttempts,
+        CanSkip = progress.CanSkip,
+        FailedAttempts = progress.FailedAttempts,
+        Passed = progress.Passed,
+        Points = progress.Points,
+    };
+
 
     public string PointsLabel => Points == 1 ? "1 ponto" : $"{Points} pontos";
+
+    public bool HasHints => Hints.Count > 0;
+
+    public bool AttemptsExhausted =>
+        !Passed && MaxAttempts is not null && RemainingAttempts is 0;
+
+    public string InstructionText
+    {
+        get
+        {
+            if (MaxAttempts is null)
+                return HasHints ? LessonCompletionTexts.InstructionUnlimited : LessonCompletionTexts.InstructionUnlimitedNoHints;
+            return HasHints ? LessonCompletionTexts.InstructionLimited : LessonCompletionTexts.InstructionLimitedNoHints;
+        }
+    }
+}
+
+/// <summary>Bloco de conclusão / selo / "Seguir sem pontos" (partial `_LessonCompletion`).</summary>
+public sealed record LessonCompletionViewModel(
+    LessonProgressView State,
+    string PathSlug,
+    string ModuleSlug,
+    string LessonSlug,
+    string ModuleTitle,
+    string PathTitle,
+    string? FlashMessage = null,
+    bool JustCompleted = false,
+    bool JustSkipped = false)
+{
+    public static LessonCompletionViewModel From(LessonProgressView state, LessonDto lesson, string? flash = null, bool justCompleted = false, bool justSkipped = false) =>
+        new(state, lesson.Breadcrumb.PathSlug, lesson.Breadcrumb.ModuleSlug, lesson.Slug,
+            lesson.Breadcrumb.ModuleTitle, lesson.Breadcrumb.PathTitle, flash, justCompleted, justSkipped);
+
+    public bool ShowButton => !State.IsCompleted && State.CanComplete && State.Exercise is null;
+
+    public bool ShowDisabledExerciseButton =>
+        !State.IsCompleted && !State.CanComplete && State.Blocker == LessonCompletionBlocker.ExerciseNotPassed;
+
+    public bool ShowSkipButton =>
+        !State.IsCompleted && State.Exercise is { CanSkip: true, Passed: false };
+
+    public bool ShowBadge => State.IsCompleted;
+
+    public string? SuccessMessage
+    {
+        get
+        {
+            if (FlashMessage is not null) return FlashMessage;
+            if (!State.IsCompleted) return null;
+
+            if (JustSkipped || State.CompletionKind is LessonCompletionKind.SkippedAfterFailures or LessonCompletionKind.AttemptsExhausted)
+            {
+                if (JustSkipped || JustCompleted)
+                    return LessonCompletionTexts.SkipJustCompleted;
+                var earn = State.Exercise?.Points ?? State.Points;
+                return earn is > 0
+                    ? LessonCompletionTexts.ReopenSkipped(earn.Value)
+                    : LessonCompletionTexts.ReopenReading;
+            }
+
+            if (State.CompletionKind == LessonCompletionKind.ExercisePassed && State.Points is int points && points > 0)
+            {
+                if (JustCompleted)
+                    return LessonCompletionTexts.PassCompletes(points);
+                return LessonCompletionTexts.ReopenPassed(points);
+            }
+
+            if (!JustCompleted && State.IsCompleted)
+                return LessonCompletionTexts.ReopenReading;
+
+            if (State.Next is null)
+                return LessonCompletionTexts.SuccessPath(PathTitle);
+
+            // Última do módulo: próxima é de outro módulo (slug diferente) ou não há próxima no módulo.
+            if (State.Next.Lesson.ModuleSlug != ModuleSlug)
+                return LessonCompletionTexts.SuccessModule(ModuleTitle);
+
+            return LessonCompletionTexts.SuccessGeneric;
+        }
+    }
+
+    public string CompleteUrl =>
+        $"/trilhas/{Uri.EscapeDataString(PathSlug)}/{Uri.EscapeDataString(ModuleSlug)}/{Uri.EscapeDataString(LessonSlug)}/concluir";
+
+    public string ConclusaoUrl =>
+        $"/trilhas/{Uri.EscapeDataString(PathSlug)}/{Uri.EscapeDataString(ModuleSlug)}/{Uri.EscapeDataString(LessonSlug)}/conclusao";
 }
 
 public enum LessonUnavailableReason
@@ -65,26 +169,19 @@ public enum LessonUnavailableReason
     NotFound,
     Malformed,
     Draft,
-
-    /// <summary>Aula da trilha do aluno, ainda bloqueada (R1). HTTP 403.</summary>
     Locked,
-
-    /// <summary>Aula de outra trilha (o aluno está matriculado em outra). HTTP 403.</summary>
     OtherPath,
 }
 
-/// <summary>Página amigável quando a aula não abre (R6: o que aconteceu + o que fazer agora).</summary>
-/// <param name="TechnicalDetail">Só preenchido em Development; aparece recolhido em "Ver detalhe técnico".</param>
-/// <param name="UnlockRequirement">Só em Locked: a aula que falta concluir (o mesmo do dashboard).</param>
-/// <param name="CurrentPathTitle">Só em OtherPath: a trilha atual do aluno.</param>
-/// <remarks>Textos de Locked/OtherPath são provisórios do Backend (#27): o UI Operator refina a página.</remarks>
+/// <summary>Página amigável quando a aula não abre (R6 + Locked/OtherPath do #27).</summary>
 public sealed record LessonUnavailableViewModel(
     LessonUnavailableReason Reason,
     string? TechnicalDetail,
-    LessonRefDto? UnlockRequirement = null,
+    string? RequiredLessonTitle = null,
+    string? RequiredLessonUrl = null,
+    bool RequiredLessonCanOpen = false,
     string? CurrentPathTitle = null)
 {
-    /// <summary>Decisão de produto: rascunho aberto por link direto = 404 com este texto.</summary>
     public const string DraftMessage = "Esta aula está sendo escrita. Volte ao dashboard e siga pelas aulas já disponíveis.";
 
     public const string MalformedMessage = "Não conseguimos carregar esta aula agora. Tente de novo ou volte ao dashboard.";
@@ -93,8 +190,8 @@ public sealed record LessonUnavailableViewModel(
     {
         LessonUnavailableReason.Draft => "Aula em breve",
         LessonUnavailableReason.NotFound => "Aula não encontrada",
-        LessonUnavailableReason.Locked => "Aula bloqueada",
-        LessonUnavailableReason.OtherPath => "Aula de outra trilha",
+        LessonUnavailableReason.Locked => LessonCompletionTexts.LockedTitle,
+        LessonUnavailableReason.OtherPath => LessonCompletionTexts.OtherPathTitle,
         _ => "Aula indisponível",
     };
 
@@ -102,17 +199,12 @@ public sealed record LessonUnavailableViewModel(
     {
         LessonUnavailableReason.Draft => DraftMessage,
         LessonUnavailableReason.NotFound => "Não encontramos esta aula. Confira o endereço ou volte ao dashboard para escolher uma aula.",
-        LessonUnavailableReason.Locked => UnlockRequirement is { } r
-            ? $"Conclua \"{r.Title}\" para liberar esta aula."
-            : "Conclua as aulas anteriores para liberar esta aula.",
-        LessonUnavailableReason.OtherPath => CurrentPathTitle is { Length: > 0 } t
-            ? $"Esta aula não faz parte da sua trilha atual ({t}). Volte ao dashboard para continuar."
-            : "Esta aula não faz parte da sua trilha atual. Volte ao dashboard para continuar.",
+        LessonUnavailableReason.Locked => LessonCompletionTexts.LockedMessage(RequiredLessonTitle ?? "anterior"),
+        LessonUnavailableReason.OtherPath => LessonCompletionTexts.OtherPathMessage(CurrentPathTitle ?? "outra trilha"),
         _ => MalformedMessage,
     };
 }
 
-/// <summary>Nível de dificuldade em português, para o aluno.</summary>
 public static class LevelLabels
 {
     public static string For(DifficultyLevel level) => level switch

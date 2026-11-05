@@ -221,3 +221,34 @@ botões de tema da página.
 | Barra de progresso (preenchimento × trilho) | 4.93 | 5.29 | 3 |
 | Borda do campo de formulário | 4.76 | 3.74 | 3 |
 | Contorno de foco | 6.08 | 9.10 | 3 |
+
+## Conclusão de aula (#27) e Executar in-page (#30 B2)
+
+Progresso do aluno chega à Web pela porta `ILessonProgressGateway` (espelha ADR-007). Enquanto o
+serviço real não está na `dev`, `Program.cs` registra `PendingLessonProgressGateway`
+(`LessonAccessStatus.Unavailable`): a página da aula abre como antes — sem botão "Concluí esta aula",
+sem selo, sem bloqueio e sem editor Executar (o `ExerciseId` só vem pelo gateway).
+
+Quando o progresso está disponível:
+
+| Rota | Função |
+|------|--------|
+| `GET /trilhas/{path}/{module}/{lesson}` | Abre a aula (`OpenAsync`). Locked/OtherPath → 403 + `Unavailable`. Sem matrícula → `/escolha-sua-trilha`. |
+| `POST .../concluir` | Conclui (ou "Seguir sem pontos" com `skipWithoutPoints=true`). HTMX: partial `_LessonCompletion` + pager OOB + `HX-Trigger: lessonCompleted`. Sem JS: 303 PRG + TempData. |
+| `GET .../conclusao` | Partial de refresh após `pass` com `lessonCompleted` (ADR-006/007). |
+
+Partials: `_LessonCompletion`, `_CompletedBadge`, `_LessonPager` (Previous/Next cruzam módulos quando há progresso), `_LessonExercise` (editor + Executar).
+
+**Executar:** `site.js` chama `POST /api/exercicios/{id}/executar` com antiforgery de
+`GET /api/antiforgery/token`. Em 400, escolhe o texto pelo `code` estável do ADR-007
+(`code_empty`, `code_too_long`, `antiforgery_invalid`, `malformed_body`). Em
+`antiforgery_invalid`, busca um token novo e tenta **uma** vez em silêncio; se falhar de novo,
+mostra o erro genérico. O campo opcional `commonErrorMessage` (#32) aparece como "Dica" (estilo
+informativo) abaixo do feedback, na mesma região polite — a UI tolera a ausência. "Dados usados"
+usa `ExerciseDto.DatasetDisplayName` quando existir; senão humaniza o slug (`livraria` → "Livraria",
+`loja_online` → "Loja online").
+
+**Acessibilidade:** região `aria-live="polite"` (`#lesson-completion-live`) existe antes de qualquer
+swap; após clique em concluir/skip o foco vai para `#next-lesson-link` (ou a mensagem de sucesso);
+conclusão vinda do exercício **não** move o foco. Contraste do selo e do motivo do Próxima travado
+≥ 4.5:1 no claro e no escuro (`ViewData["SupportsDarkMode"]`).

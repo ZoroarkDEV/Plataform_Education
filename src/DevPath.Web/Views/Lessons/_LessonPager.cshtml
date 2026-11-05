@@ -1,30 +1,78 @@
 @using DevPath.Application.Lessons
+@using DevPath.Web.ViewModels.Onboarding
 @model LessonPageViewModel
 @*
-    "← Aula anterior" / "Próxima aula →". Rascunho (IsDraft) aparece como "Em breve", sem link
-    (decisão do dono, R4: não abre e não bloqueia a navegação). Sem aula = espaço vazio.
-    ViewData["PagerLabel"] diferencia as duas navegações (topo e fim) para leitores de tela.
+    "← Aula anterior" / "Próxima aula →".
+    Com progresso (#27): Previous/Next cruzam módulos (DashboardLessonDto).
+    Sem progresso (Pending): vizinhos do LessonDto no módulo.
+    Locked = texto + aria-disabled + motivo via aria-describedby. Draft = "Em breve".
 *@
 @{
     var lesson = Model.Lesson;
     var crumbs = lesson.Breadcrumb;
     var label = ViewData["PagerLabel"] as string ?? "Navegação entre aulas";
+    var moveFocus = ViewData["PagerFocus"] as bool? == true;
 
     string UrlFor(LessonLink link) =>
         Url.Action("Show", "Lessons", new { pathSlug = crumbs.PathSlug, moduleSlug = crumbs.ModuleSlug, lessonSlug = link.Slug })!;
 
     const string box = "flex min-h-14 flex-col justify-center rounded-lg border px-4 py-2 text-sm";
 }
-<nav aria-label="@label" class="grid grid-cols-2 gap-3">
+
+<nav aria-label="@label" class="grid grid-cols-2 gap-3" data-lesson-pager>
+@if (Model.Progress is { } progress)
+{
+    @foreach (var (item, isNext) in new[] { (progress.Previous, false), (progress.Next, true) })
+    {
+        var direction = isNext ? LessonCompletionTexts.NextLabel : LessonCompletionTexts.PrevLabel;
+        var align = isNext ? "items-end text-right col-start-2" : "items-start text-left col-start-1";
+        if (item is null) { continue; }
+
+        if (item.Status == LessonStatus.ComingSoon)
+        {
+            <span class="@box @align border-dashed border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                  aria-disabled="true">
+                <span class="text-xs font-semibold">@direction</span>
+                <span class="font-medium">@item.Lesson.Title</span>
+                <span class="mt-1 inline-block rounded-full border border-slate-400 px-2 text-xs font-semibold dark:border-slate-500">@LessonCompletionTexts.ComingSoon</span>
+            </span>
+        }
+        else if (item.Status == LessonStatus.Locked)
+        {
+            var reasonId = isNext ? "next-locked-reason" : "prev-locked-reason";
+            var reason = isNext
+                ? LessonCompletionTexts.NextLockedReason
+                : (item.UnlockRequirement is { } u
+                    ? $"Para liberar, conclua a aula “{u.Title}”."
+                    : LessonCompletionTexts.NextLockedReason);
+            <div class="@box @align border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                 aria-disabled="true"
+                 aria-describedby="@reasonId">
+                <span class="text-xs font-semibold">@direction</span>
+                <span class="font-medium">@item.Lesson.Title</span>
+                <span id="@reasonId" class="mt-1 text-xs text-slate-600 dark:text-slate-400">@reason</span>
+            </div>
+        }
+        else
+        {
+            <a href="@item.Lesson.Url"
+               rel="@(isNext ? "next" : "prev")"
+               id="@(isNext ? "next-lesson-link" : "prev-lesson-link")"
+               class="@box @align border-slate-300 bg-white text-slate-900 hover:border-brand-600 hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-brand-100 dark:hover:bg-slate-800"
+               @(isNext && moveFocus ? "data-focus-after-complete" : null)>
+                <span class="text-xs font-semibold text-brand-700 dark:text-brand-100">@direction</span>
+                <span class="font-medium">@item.Lesson.Title</span>
+            </a>
+        }
+    }
+}
+else
+{
     @foreach (var (link, isNext) in new[] { (lesson.PreviousLesson, false), (lesson.NextLesson, true) })
     {
-        var direction = isNext ? "Próxima aula →" : "← Aula anterior";
+        var direction = isNext ? LessonCompletionTexts.NextLabel : LessonCompletionTexts.PrevLabel;
         var align = isNext ? "items-end text-right col-start-2" : "items-start text-left col-start-1";
-
-        if (link is null)
-        {
-            continue;
-        }
+        if (link is null) { continue; }
 
         if (link.IsDraft)
         {
@@ -32,16 +80,18 @@
                   aria-disabled="true">
                 <span class="text-xs font-semibold">@direction</span>
                 <span class="font-medium">@link.Title</span>
-                <span class="mt-1 inline-block rounded-full border border-slate-400 px-2 text-xs font-semibold dark:border-slate-500">Em breve</span>
+                <span class="mt-1 inline-block rounded-full border border-slate-400 px-2 text-xs font-semibold dark:border-slate-500">@LessonCompletionTexts.ComingSoon</span>
             </span>
         }
         else
         {
             <a href="@UrlFor(link)" rel="@(isNext ? "next" : "prev")"
+               id="@(isNext ? "next-lesson-link" : "prev-lesson-link")"
                class="@box @align border-slate-300 bg-white text-slate-900 hover:border-brand-600 hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-brand-100 dark:hover:bg-slate-800">
                 <span class="text-xs font-semibold text-brand-700 dark:text-brand-100">@direction</span>
                 <span class="font-medium">@link.Title</span>
             </a>
         }
     }
+}
 </nav>

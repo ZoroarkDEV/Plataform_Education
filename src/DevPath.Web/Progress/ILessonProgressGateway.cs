@@ -71,10 +71,10 @@ public enum LessonCompletionKind
     /// "Seguir sem pontos" depois de 5 falhas (decisão do Ibra no #27; nome final no ADR-007). Concluída com 0 ponto;
     /// o exercício continua aberto e um <c>pass</c> depois promove para <see cref="ExercisePassed"/>.
     /// </summary>
-    SkippedWithoutPoints,
+    SkippedAfterFailures,
     /// <summary>
     /// Tentativas esgotadas (<c>MaxAttempts</c>, ADR-007 seção 2). Substituído na UX pelo "Seguir sem pontos":
-    /// a tela trata igual a <see cref="SkippedWithoutPoints"/>.
+    /// a tela trata igual a <see cref="SkippedAfterFailures"/>.
     /// </summary>
     AttemptsExhausted
 }

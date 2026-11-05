@@ -1,9 +1,7 @@
 @model LessonPageViewModel
 @*
-    Tela de leitura da aula (#12). Ordem das seções (US-12.1): título, tempo, nível,
-    "O que você vai aprender", conteúdo, exercício (dados estruturados, não Markdown), resumo.
-    Todo o texto da aula vem do ILessonContentService; o HTML vem do LessonMarkdownRenderer
-    (Markdown sem HTML cru, links filtrados), por isso o Html.Raw abaixo é seguro.
+    Tela de leitura da aula (#12) + conclusão (#27) + Executar (#30).
+    Ordem: título (+selo), tempo, nível, objetivos, conteúdo, exercício, resumo, conclusão, pager.
 *@
 @{
     ViewData["SupportsDarkMode"] = true;
@@ -14,7 +12,7 @@
     const string prose = "prose prose-slate max-w-none text-base dark:prose-invert prose-a:text-brand-700 dark:prose-a:text-brand-100 prose-code:rounded prose-code:bg-slate-200 prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none dark:prose-code:bg-slate-800";
 }
 
-<article class="mx-auto max-w-[70ch]" aria-labelledby="titulo-aula">
+<article class="mx-auto max-w-[70ch]" aria-labelledby="titulo-aula" data-lesson-page>
     <nav aria-label="Você está aqui" class="text-sm">
         <ol class="flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-700 dark:text-slate-300">
             <li><a asp-controller="Dashboard" asp-action="Index" class="link dark:text-brand-100">Dashboard</a></li>
@@ -24,12 +22,18 @@
         </ol>
     </nav>
 
-    <div class="mt-4">
+    <div class="mt-4" id="lesson-pager-top">
         <partial name="_LessonPager" model="Model" view-data='new ViewDataDictionary(ViewData) { ["PagerLabel"] = "Navegação entre aulas (topo)" }' />
     </div>
 
     <header class="mt-8">
-        <h1 id="titulo-aula" class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-4xl">@lesson.Title</h1>
+        <div class="flex flex-wrap items-center gap-3">
+            <h1 id="titulo-aula" class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-4xl">@lesson.Title</h1>
+            @if (Model.IsCompleted)
+            {
+                <partial name="_CompletedBadge" />
+            }
+        </div>
         <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-700 dark:text-slate-300">
             <dl class="flex flex-wrap gap-x-6 gap-y-2">
                 <div class="flex gap-1"><dt>Tempo estimado:</dt><dd class="font-semibold">@Model.EstimatedTimeLabel</dd></div>
@@ -79,10 +83,16 @@
         </section>
     }
 
-    <div class="mt-12">
+    @* Conclusão: depois do Resumo/Exercício e acima do pager. Só com progresso disponível. *@
+    @if (Model.Completion is { } completion)
+    {
+        ViewData["LessonPage"] = Model;
+        <partial name="_LessonCompletion" model="completion" />
+    }
+
+    <div class="mt-12" id="lesson-pager-end">
         <partial name="_LessonPager" model="Model" view-data='new ViewDataDictionary(ViewData) { ["PagerLabel"] = "Navegação entre aulas (fim da página)" }' />
     </div>
 
-    @* Avisos para leitores de tela: botão "Copiar" e dicas do exercício (site.js escreve aqui). *@
     <p id="copy-status" class="sr-only" role="status" aria-live="polite"></p>
 </article>
