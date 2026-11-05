@@ -12,10 +12,14 @@ public sealed class FakeLessonProgressGateway : ILessonProgressGateway
     public Func<Guid, string, string, string, LessonAccessOutcome> GetState { get; set; } =
         (_, _, _, _) => LessonAccessOutcome.Unavailable;
 
-    public Func<Guid, string, string, string, bool, LessonCompletionOutcome> Complete { get; set; } =
-        (_, _, _, _, _) => new LessonCompletionOutcome(LessonCompletionStatus.Unavailable);
+    public Func<Guid, string, string, string, LessonCompletionOutcome> Complete { get; set; } =
+        (_, _, _, _) => new LessonCompletionOutcome(LessonCompletionStatus.Unavailable);
+
+    public Func<Guid, string, string, string, LessonCompletionOutcome> Skip { get; set; } =
+        (_, _, _, _) => new LessonCompletionOutcome(LessonCompletionStatus.Unavailable);
 
     public int CompleteCalls { get; private set; }
+    public int SkipCalls { get; private set; }
 
     public Task<LessonAccessOutcome> GetStateAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
         Task.FromResult(GetState(userId, pathSlug, moduleSlug, lessonSlug));
@@ -23,10 +27,16 @@ public sealed class FakeLessonProgressGateway : ILessonProgressGateway
     public Task<LessonAccessOutcome> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
         Task.FromResult(Open(userId, pathSlug, moduleSlug, lessonSlug));
 
-    public Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, bool skipWithoutPoints, CancellationToken cancellationToken)
+    public Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken)
     {
         CompleteCalls++;
-        return Task.FromResult(Complete(userId, pathSlug, moduleSlug, lessonSlug, skipWithoutPoints));
+        return Task.FromResult(Complete(userId, pathSlug, moduleSlug, lessonSlug));
+    }
+
+    public Task<LessonCompletionOutcome> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken)
+    {
+        SkipCalls++;
+        return Task.FromResult(Skip(userId, pathSlug, moduleSlug, lessonSlug));
     }
 
     public static class Samples

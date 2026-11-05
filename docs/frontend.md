@@ -224,18 +224,15 @@ botões de tema da página.
 
 ## Conclusão de aula (#27) e Executar in-page (#30 B2)
 
-Progresso do aluno chega à Web pela porta `ILessonProgressGateway` (espelha ADR-007). Enquanto o
-serviço real não está na `dev`, `Program.cs` registra `PendingLessonProgressGateway`
-(`LessonAccessStatus.Unavailable`): a página da aula abre como antes — sem botão "Concluí esta aula",
-sem selo, sem bloqueio e sem editor Executar (o `ExerciseId` só vem pelo gateway).
-
-Quando o progresso está disponível:
+Progresso do aluno chega à Web pela porta `ILessonProgressGateway` (espelha ADR-007).
+`Program.cs` registra o adapter `LessonProgressGateway` → `ILessonProgressService`. Em Development,
+`Demo:FakeLessonProgress=true` troca pelo dublê em memória (ver abaixo).
 
 | Rota | Função |
 |------|--------|
-| `GET /trilhas/{path}/{module}/{lesson}` | Abre a aula (`OpenAsync`). Locked/OtherPath → 403 + `Unavailable`. Sem matrícula → `/escolha-sua-trilha`. |
-| `POST .../concluir` | Conclui (ou "Seguir sem pontos" com `skipWithoutPoints=true`). HTMX: partial `_LessonCompletion` + pager OOB + `HX-Trigger: lessonCompleted`. Sem JS: 303 PRG + TempData. |
-| `GET .../conclusao` | Partial de refresh após `pass` com `lessonCompleted` (ADR-006/007). |
+| `GET /trilhas/{path}/{module}/{lesson}` | Abre a aula (`OpenAsync`). Locked/OtherPath → 403 + `Unavailable`. Sem matrícula → `/escolha-sua-trilha`. Malformed → 503 + `Unavailable` (nunca 500). |
+| `POST .../concluir` | Sem `skipWithoutPoints` → `CompleteAsync` ("Concluí"; nunca grava skip). Com `skipWithoutPoints=true` → `SkipAsync` ("Seguir sem pontos"). HTMX: partial `_LessonCompletion` + pager OOB + `HX-Trigger: lessonCompleted`. Sem JS: 303 PRG + TempData. |
+| `GET .../conclusao` | Partial de refresh após `pass` com `lessonCompleted` (ADR-006/007). Só anuncia (`data-announce`); sem `data-just-completed` / foco. |
 
 Partials: `_LessonCompletion`, `_CompletedBadge`, `_LessonPager` (Previous/Next cruzam módulos quando há progresso), `_LessonExercise` (editor + Executar).
 

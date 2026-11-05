@@ -125,7 +125,7 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         {
             f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(current!);
             f.GetState = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(current!);
-            f.Complete = (_, _, _, _, _) =>
+            f.Complete = (_, _, _, _) =>
             {
                 current = FakeLessonProgressGateway.Samples.ReadingCompleted();
                 return new LessonCompletionOutcome(LessonCompletionStatus.Completed, current);
@@ -152,7 +152,7 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         await using var app = App(f =>
         {
             f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(current!);
-            f.Complete = (_, _, _, _, _) =>
+            f.Complete = (_, _, _, _) =>
             {
                 current = FakeLessonProgressGateway.Samples.ReadingCompleted();
                 return new LessonCompletionOutcome(LessonCompletionStatus.Completed, current);
@@ -205,7 +205,7 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         {
             f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(
                 FakeLessonProgressGateway.Samples.ReadingAvailable());
-            f.Complete = (_, _, _, _, _) =>
+            f.Complete = (_, _, _, _) =>
             {
                 calls++;
                 return new LessonCompletionOutcome(
@@ -325,13 +325,14 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
     public async Task Skip_post_conclui_sem_pontos()
     {
         LessonProgressView? current = FakeLessonProgressGateway.Samples.ExerciseNotPassed(5, canSkip: true);
+        FakeLessonProgressGateway? fake = null;
         await using var app = App(
             f =>
             {
+                fake = f;
                 f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(current!);
-                f.Complete = (_, _, _, _, skip) =>
+                f.Skip = (_, _, _, _) =>
                 {
-                    skip.Should().BeTrue();
                     current = FakeLessonProgressGateway.Samples.Skipped();
                     return new LessonCompletionOutcome(LessonCompletionStatus.Completed, current);
                 };
@@ -342,6 +343,8 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         var response = await client.SubmitFormAsync(LessonUrl, CompleteUrl,
             new Dictionary<string, string> { ["skipWithoutPoints"] = "true" });
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        fake!.SkipCalls.Should().Be(1, "Seguir sem pontos vai para SkipAsync");
+        fake.CompleteCalls.Should().Be(0, "CompleteAsync não deve ser chamado no pulo");
 
         var html = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
         html.Should().Contain(LessonCompletionTexts.BadgeVisible);
@@ -353,6 +356,35 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         var html2 = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
         html2.Should().Contain("seguiu sem pontos");
         html2.Should().Contain("+10 pontos");
+    }
+
+    [Fact]
+    public async Task Conclui_com_CanSkip_sem_pass_mostra_bloqueio_nao_pula()
+    {
+        // "Concluí" com CanSkip e sem pass: RequirementNotMet (bloqueio), nunca skip.
+        var state = FakeLessonProgressGateway.Samples.ExerciseNotPassed(5, canSkip: true);
+        FakeLessonProgressGateway? fake = null;
+        await using var app = App(
+            f =>
+            {
+                fake = f;
+                f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(state);
+                f.GetState = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(state);
+                f.Complete = (_, _, _, _) => new LessonCompletionOutcome(LessonCompletionStatus.RequirementNotMet, state);
+                return f;
+            },
+            SampleExercise());
+        var client = await LoggedInAsync(app);
+        var response = await client.SubmitFormAsync(LessonUrl, CompleteUrl, new Dictionary<string, string>());
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        fake!.CompleteCalls.Should().Be(1);
+        fake.SkipCalls.Should().Be(0, "Concluí não chama SkipAsync mesmo com CanSkip");
+
+        var html = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        html.Should().Contain(LessonCompletionTexts.RequirementNotMetFlash);
+        html.Should().Contain(LessonCompletionTexts.ExerciseBlocker);
+        html.Should().Contain(LessonCompletionTexts.SkipButton, "o Seguir sem pontos continua disponível");
+        html.Should().NotContain(LessonCompletionTexts.BadgeVisible);
     }
 
     [Fact]

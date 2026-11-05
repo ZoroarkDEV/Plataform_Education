@@ -27,11 +27,19 @@ public interface ILessonProgressGateway
     Task<LessonAccessOutcome> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Conclui a aula. Idempotente: a 2ª chamada devolve <see cref="LessonCompletionStatus.AlreadyCompleted"/>.
-    /// <paramref name="skipWithoutPoints"/> = o aluno clicou em "Seguir sem pontos" (só vale com
-    /// <see cref="LessonExerciseProgressView.CanSkip"/>; conclui com 0 ponto e o exercício continua aberto).
+    /// Conclui a aula pela regra normal. Idempotente: a 2ª chamada devolve
+    /// <see cref="LessonCompletionStatus.AlreadyCompleted"/>. Nunca produz
+    /// <see cref="LessonCompletionKind.SkippedAfterFailures"/> — use <see cref="SkipAsync"/> para
+    /// "Seguir sem pontos". Sem pass, devolve <see cref="LessonCompletionStatus.RequirementNotMet"/>
+    /// mesmo com <see cref="LessonExerciseProgressView.CanSkip"/>.
     /// </summary>
-    Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, bool skipWithoutPoints, CancellationToken cancellationToken);
+    Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// "Seguir sem pontos": só conclui com <see cref="LessonCompletionKind.SkippedAfterFailures"/>
+    /// quando o exercício já liberou o pulo (<see cref="LessonExerciseProgressView.CanSkip"/>).
+    /// </summary>
+    Task<LessonCompletionOutcome> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken);
 }
 
 /// <summary>ADR-007 <c>LessonAccessKind</c>, mais <see cref="Unavailable"/> (só da Web).</summary>

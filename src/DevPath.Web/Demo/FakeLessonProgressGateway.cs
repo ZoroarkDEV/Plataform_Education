@@ -21,31 +21,49 @@ public sealed class FakeLessonProgressGateway(IConfiguration configuration) : IL
     public Task<LessonAccessOutcome> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
         GetStateAsync(userId, pathSlug, moduleSlug, lessonSlug, cancellationToken);
 
-    public Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, bool skipWithoutPoints, CancellationToken cancellationToken)
+    public Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken)
     {
         var key = Key(pathSlug, moduleSlug, lessonSlug);
         var current = StateFor(pathSlug, moduleSlug, lessonSlug);
         if (current.IsCompleted)
             return Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.AlreadyCompleted, current));
 
-        var skip = current.Exercise is { CanSkip: true };
-        if (!current.CanComplete && !skip)
+        // CompleteAsync nunca pula: CanSkip sozinho não libera o "Concluí".
+        if (!current.CanComplete)
             return Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.RequirementNotMet, current));
 
-        var done = current with
-        {
-            Status = LessonStatus.Completed,
-            CompletedAt = DateTimeOffset.UtcNow,
-            CompletionKind = current.Exercise is null ? LessonCompletionKind.Read : LessonCompletionKind.SkippedAfterFailures,
-            Points = current.Exercise is null ? null : 0,
-            CanComplete = false,
-            Blocker = null,
-            Next = current.Next is { } n ? n with { Status = LessonStatus.Available, UnlockRequirement = null } : null,
-            PathProgressPercentage = 20,
-        };
+        var done = Finish(current, current.Exercise is null ? LessonCompletionKind.Read : LessonCompletionKind.ExercisePassed,
+            points: current.Exercise?.Points);
         _states[key] = done;
         return Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.Completed, done));
     }
+
+    public Task<LessonCompletionOutcome> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken)
+    {
+        var key = Key(pathSlug, moduleSlug, lessonSlug);
+        var current = StateFor(pathSlug, moduleSlug, lessonSlug);
+        if (current.IsCompleted)
+            return Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.AlreadyCompleted, current));
+
+        if (current.Exercise is not { CanSkip: true })
+            return Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.RequirementNotMet, current));
+
+        var done = Finish(current, LessonCompletionKind.SkippedAfterFailures, points: 0);
+        _states[key] = done;
+        return Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.Completed, done));
+    }
+
+    private static LessonProgressView Finish(LessonProgressView current, LessonCompletionKind kind, int? points) => current with
+    {
+        Status = LessonStatus.Completed,
+        CompletedAt = DateTimeOffset.UtcNow,
+        CompletionKind = kind,
+        Points = points,
+        CanComplete = false,
+        Blocker = null,
+        Next = current.Next is { } n ? n with { Status = LessonStatus.Available, UnlockRequirement = null } : null,
+        PathProgressPercentage = 20,
+    };
 
     private static string Key(string p, string m, string l) => $"{p}/{m}/{l}";
 

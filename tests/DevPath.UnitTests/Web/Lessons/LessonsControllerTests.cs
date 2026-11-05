@@ -72,7 +72,9 @@ public sealed class LessonsControllerTests
             Task.FromResult(OpenResult);
         public Task<LessonAccessOutcome> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
             Task.FromResult(OpenResult);
-        public Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, bool skipWithoutPoints, CancellationToken cancellationToken) =>
+        public Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
+            Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.Unavailable));
+        public Task<LessonCompletionOutcome> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
             Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.Unavailable));
     }
 

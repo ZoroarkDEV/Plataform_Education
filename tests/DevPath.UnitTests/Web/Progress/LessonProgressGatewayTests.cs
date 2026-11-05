@@ -3,6 +3,7 @@ using DevPath.Application.Progress;
 using DevPath.Web.Progress;
 using DevPath.Web.ViewModels.Onboarding;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using DomainKind = DevPath.Domain.Progress.LessonCompletionKind;
 using WebKind = DevPath.Web.Progress.LessonCompletionKind;
 
@@ -45,5 +46,49 @@ public sealed class LessonProgressGatewayTests
         view.Exercise.Should().Be(new LessonExerciseProgressView(id, 10, false, 6, null, null, 6, true, 0));
         view.Next!.Lesson.Should().Be(new LessonRef("p", "m2", "b", "B"), "a paginação cruza módulos");
         view.PathProgressPercentage.Should().Be(50);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ChamaServicoComplete_NuncaSkip()
+    {
+        var stub = new RecordingProgress();
+        var gateway = new LessonProgressGateway(stub, NullLogger<LessonProgressGateway>.Instance);
+        await gateway.CompleteAsync(Guid.NewGuid(), "p", "m", "l", CancellationToken.None);
+        stub.CompleteCalls.Should().Be(1);
+        stub.SkipCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SkipAsync_ChamaServicoSkip()
+    {
+        var stub = new RecordingProgress();
+        var gateway = new LessonProgressGateway(stub, NullLogger<LessonProgressGateway>.Instance);
+        await gateway.SkipAsync(Guid.NewGuid(), "p", "m", "l", CancellationToken.None);
+        stub.SkipCalls.Should().Be(1);
+        stub.CompleteCalls.Should().Be(0);
+    }
+
+    private sealed class RecordingProgress : ILessonProgressService
+    {
+        public int CompleteCalls { get; private set; }
+        public int SkipCalls { get; private set; }
+
+        public Task<LessonAccessResult> GetStateAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default) =>
+            Task.FromResult(new LessonAccessResult(LessonAccessKind.Allowed));
+
+        public Task<LessonAccessResult> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default) =>
+            Task.FromResult(new LessonAccessResult(LessonAccessKind.Allowed));
+
+        public Task<LessonCompletionResult> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default)
+        {
+            CompleteCalls++;
+            return Task.FromResult(new LessonCompletionResult(LessonCompletionResultKind.RequirementNotMet));
+        }
+
+        public Task<LessonCompletionResult> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default)
+        {
+            SkipCalls++;
+            return Task.FromResult(new LessonCompletionResult(LessonCompletionResultKind.RequirementNotMet));
+        }
     }
 }

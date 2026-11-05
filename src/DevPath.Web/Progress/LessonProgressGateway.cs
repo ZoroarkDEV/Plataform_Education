@@ -13,8 +13,8 @@ namespace DevPath.Web.Progress;
 /// Só traduz, como o <see cref="StudentJourneyGateway"/>: DTOs campo a campo e enums com <c>switch</c> explícito
 /// (nunca cast), para que um membro novo no Backend quebre os testes em vez de virar o estado errado na tela.
 /// Sem catch: o serviço não lança nos casos esperados; exceção é falha de verdade e sobe para o controller.
-/// O "Seguir sem pontos" não tem parâmetro no serviço: a <c>LessonCompletionRule</c> conclui como
-/// <c>SkippedAfterFailures</c> quando o exercício já liberou o pulo (CanSkip).
+/// "Concluí" → <see cref="ILessonProgressService.CompleteAsync"/>; "Seguir sem pontos" →
+/// <see cref="ILessonProgressService.SkipAsync"/> (CompleteAsync nunca grava skip).
 /// </remarks>
 public sealed class LessonProgressGateway(ILessonProgressService service, ILogger<LessonProgressGateway> logger)
     : ILessonProgressGateway
@@ -25,15 +25,17 @@ public sealed class LessonProgressGateway(ILessonProgressService service, ILogge
     public async Task<LessonAccessOutcome> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
         ToOutcome(await service.OpenAsync(userId, pathSlug, moduleSlug, lessonSlug, cancellationToken));
 
-    public async Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, bool skipWithoutPoints, CancellationToken cancellationToken)
-    {
-        var result = await service.CompleteAsync(userId, pathSlug, moduleSlug, lessonSlug, cancellationToken);
-        if (skipWithoutPoints && result.Kind == LessonCompletionResultKind.Completed
-            && result.State?.CompletionKind is not DomainKind.SkippedAfterFailures)
-        {
-            logger.LogInformation("\"Seguir sem pontos\" de {UserId} concluiu como {Kind}.", userId, result.State?.CompletionKind);
-        }
+    public async Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
+        ToOutcome(await service.CompleteAsync(userId, pathSlug, moduleSlug, lessonSlug, cancellationToken));
 
+    public async Task<LessonCompletionOutcome> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken)
+    {
+        var result = await service.SkipAsync(userId, pathSlug, moduleSlug, lessonSlug, cancellationToken);
+        if (result.Kind == LessonCompletionResultKind.Completed
+            && result.State?.CompletionKind is DomainKind.SkippedAfterFailures)
+        {
+            logger.LogInformation("\"Seguir sem pontos\" de {UserId} concluiu a aula.", userId);
+        }
         return ToOutcome(result);
     }
 

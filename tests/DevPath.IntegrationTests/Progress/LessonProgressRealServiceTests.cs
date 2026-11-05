@@ -8,6 +8,7 @@ using DevPath.Infrastructure;
 using DevPath.Infrastructure.Persistence;
 using DevPath.IntegrationTests.CodeExecution;
 using DevPath.IntegrationTests.Infrastructure;
+using DevPath.Web.Models.Lessons;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -157,6 +158,31 @@ public sealed class LessonProgressRealServiceTests(LessonProgressWebFactory fact
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await response.ReadHtmlAsync()).Should().Contain("Aula bloqueada").And.Contain("Notas");
+    }
+
+    [DockerFact]
+    public async Task CincoFalhas_ConcluiSemSkip_MantemBloqueio_NaoGravaSkip()
+    {
+        var (client, userId) = await StudentAsync();
+        await CompleteReadingAsync(client);
+        var notas = factory.Url("notas");
+        await AddAntiforgeryHeaderAsync(client);
+
+        for (var i = 1; i <= 5; i++)
+            await ExecuteRawAsync(client, Wrong);
+
+        (await (await client.GetAsync(notas)).ReadHtmlAsync()).Should().Contain("data-skip-form", "CanSkip na 5ª falha");
+
+        // "Concluí" sem skipWithoutPoints: não conclui, não grava SkippedAfterFailures.
+        var complete = await client.SubmitFormAsync(notas, notas + "/concluir", new Dictionary<string, string>());
+        complete.StatusCode.Should().BeOneOf(HttpStatusCode.Redirect, HttpStatusCode.SeeOther);
+        var html = await (await client.GetAsync(notas)).ReadHtmlAsync();
+        html.Should().ContainAny(LessonCompletionTexts.RequirementNotMetFlash, LessonCompletionTexts.ExerciseBlocker);
+        html.Should().Contain("data-skip-form");
+        html.Should().NotContain(LessonCompletionTexts.BadgeVisible);
+
+        var row = await ProgressAsync(userId, "notas");
+        (row?.CompletionKind).Should().BeNull("CompleteAsync não grava skip");
     }
 
     [Fact]

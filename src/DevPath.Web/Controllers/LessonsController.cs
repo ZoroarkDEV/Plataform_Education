@@ -120,7 +120,11 @@ public sealed partial class LessonsController(
         return View(new LessonPageViewModel(lesson, html, exercise, access.State, flash));
     }
 
-    /// <summary>POST concluir (HTMX ou PRG). Idempotente. skipWithoutPoints = "Seguir sem pontos".</summary>
+    /// <summary>
+    /// POST concluir (HTMX ou PRG). Idempotente.
+    /// <paramref name="skipWithoutPoints"/> = formulário de "Seguir sem pontos" → <see cref="ILessonProgressGateway.SkipAsync"/>;
+    /// caso contrário → <see cref="ILessonProgressGateway.CompleteAsync"/> (nunca grava skip).
+    /// </summary>
     [HttpPost("/trilhas/{pathSlug}/{moduleSlug}/{lessonSlug}/concluir")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Complete(
@@ -141,7 +145,9 @@ public sealed partial class LessonsController(
         LessonCompletionOutcome outcome;
         try
         {
-            outcome = await progress.CompleteAsync(userId, pathSlug, moduleSlug, lessonSlug, skipWithoutPoints, ct);
+            outcome = skipWithoutPoints
+                ? await progress.SkipAsync(userId, pathSlug, moduleSlug, lessonSlug, ct)
+                : await progress.CompleteAsync(userId, pathSlug, moduleSlug, lessonSlug, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
