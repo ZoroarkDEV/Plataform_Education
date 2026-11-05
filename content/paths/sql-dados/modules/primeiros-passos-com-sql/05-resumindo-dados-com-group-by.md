@@ -21,24 +21,33 @@ objectives:
 
 ## Às vezes você não quer as linhas, e sim um resumo
 
-Perguntas como "quantos livros temos?" ou "quantas unidades há no estoque?" não pedem uma lista:
-pedem **um número**. Você até poderia trazer todas as linhas e contar à mão, mas o banco faz isso
-direto e devolve só o resultado. Com 10 livros tanto faz; com 10 milhões de pedidos, faz toda a
-diferença.
+Algumas perguntas não pedem uma lista. Pedem **um número**. Por exemplo:
 
-Para isso existem as **funções de agregação** (de resumo):
+- "Quantos livros a livraria tem?"
+- "Quantas unidades há no estoque?"
 
-| Função | O que faz |
-|---|---|
-| `COUNT(*)` | conta as linhas |
-| `SUM(coluna)` | soma os valores |
-| `AVG(coluna)` | tira a média |
+Você poderia trazer todas as linhas e contar à mão. Mas o banco faz a conta e devolve só o
+resultado. Com 10 livros, tanto faz. Com 10 milhões de pedidos, faz toda a diferença.
 
-Em `COUNT(*)`, o `*` significa "conte as linhas inteiras", sem olhar uma coluna específica.
+## Funções de resumo
 
-E uma função de apoio:
+Para isso existem as **funções de agregação**. "Agregar" quer dizer juntar muitos valores em um
+só. Pense nelas como **funções de resumo**.
 
-- `ROUND(valor, 2)`: não resume nada, só arredonda um número para 2 casas (útil com médias).
+Uma função tem um nome e parênteses. Dentro dos parênteses vai o que ela deve usar:
+
+| Função | O que faz | Exemplo na livraria |
+|---|---|---|
+| `COUNT(*)` | conta as linhas | quantos livros existem |
+| `SUM(coluna)` | soma os valores da coluna | total de unidades no estoque |
+| `AVG(coluna)` | calcula a média da coluna | preço médio dos livros |
+
+Em `COUNT(*)`, o `*` quer dizer "conte as linhas inteiras". Não importa qual coluna.
+
+Mais uma função útil:
+
+- `ROUND(valor, 2)` arredonda um número para 2 casas depois da vírgula. Ela não resume nada.
+  Serve para deixar médias fáceis de ler.
 
 ## Exemplos: resumo da tabela inteira
 
@@ -56,15 +65,22 @@ SELECT ROUND(AVG(preco), 2) AS preco_medio FROM livros;
 -- → 43.57
 ```
 
-O `AS total_em_estoque` dá um **nome** à coluna do resultado. Sem ele, o banco inventa um nome
-(como `sum`), que não diz muito a quem lê. É o mesmo `AS` que você usou para dar apelido às
-tabelas na aula de JOIN, agora dando nome a uma coluna.
+Lendo a segunda consulta passo a passo:
+
+1. `FROM livros`: use a tabela de livros.
+2. `SUM(estoque)`: some a coluna `estoque` de todas as linhas.
+3. `AS total_em_estoque`: dê o nome `total_em_estoque` à coluna do resultado.
+
+Sem o `AS`, o banco inventa um nome, como `sum`. Esse nome não diz muito a quem lê. É o mesmo
+`AS` da aula de JOIN. Lá ele dava apelido a uma tabela. Aqui ele dá nome a uma coluna.
 
 ## Resumo por grupo: GROUP BY
 
-E se a pergunta for "quantas unidades há em estoque **de cada gênero**?". Agora queremos um
-resumo **por grupo**. O `GROUP BY` separa as linhas em grupos (um por gênero) e calcula o resumo
-dentro de cada um:
+Agora a pergunta muda: "quantas unidades há em estoque **de cada gênero**?". Gênero é o tipo
+do livro, como Romance ou Fantasia.
+
+Não queremos um número só. Queremos **um número para cada gênero**. Para isso serve o
+`GROUP BY`. *Group by* quer dizer "agrupar por".
 
 ```sql
 -- Unidades em estoque por gênero
@@ -73,6 +89,17 @@ FROM livros
 GROUP BY genero
 ORDER BY genero;
 ```
+
+### Lendo a consulta passo a passo
+
+1. `FROM livros`: use a tabela de livros.
+2. `GROUP BY genero`: separe os livros em pilhas, uma pilha para cada gênero. Todos os
+   romances numa pilha, todos os de fantasia em outra, e assim por diante.
+3. `SELECT genero, SUM(estoque)`: para cada pilha, mostre o gênero e some o estoque daquela
+   pilha.
+4. `ORDER BY genero`: coloque as linhas do resultado em ordem alfabética de gênero.
+
+Resultado: uma linha por gênero.
 
 | genero | total_em_estoque |
 |---|---|
@@ -85,19 +112,32 @@ ORDER BY genero;
 
 **Toda coluna do `SELECT` que não é um resumo precisa estar no `GROUP BY`.**
 
-Por quê? Depois de agrupar, cada linha do resultado representa **um gênero inteiro**. Se você
-pedir `titulo`, o banco não tem como saber qual dos títulos daquele gênero mostrar, e por isso
-devolve um erro em vez de escolher um ao acaso.
+Por quê? Depois de agrupar, cada linha do resultado representa **uma pilha inteira**, ou seja,
+um gênero inteiro. A pilha de Romance tem vários títulos. Se você pedir `titulo`, qual deles o
+banco deveria mostrar? Ele não tem como saber. Por isso devolve um erro, em vez de escolher um
+ao acaso.
+
+- Pode: `SELECT genero, COUNT(*) ... GROUP BY genero`. O `genero` está no `GROUP BY`.
+- Não pode: `SELECT titulo, COUNT(*) ... GROUP BY genero`. O `titulo` não é resumo e não está no
+  `GROUP BY`.
 
 ## Agora é sua vez
 
 Quantos títulos a livraria tem **em cada gênero**? No exercício abaixo, mostre o **gênero** e a
-**quantidade de livros**. Dar um nome à coluna da contagem (por exemplo `total_livros`) é
-recomendado, mas não é obrigatório.
+**quantidade de livros**.
+
+Siga os passos:
+
+1. Comece pela tabela `livros`.
+2. Agrupe por gênero.
+3. No `SELECT`, peça o gênero e a função que conta linhas.
+
+Dar um nome à coluna da contagem (por exemplo `total_livros`) é recomendado, mas não é
+obrigatório.
 
 ## Resumo
 
 - `COUNT(*)`, `SUM(coluna)` e `AVG(coluna)` resumem várias linhas em um valor.
-- `GROUP BY coluna` calcula o resumo para cada grupo.
+- `GROUP BY coluna` separa as linhas em grupos e calcula o resumo de cada grupo.
 - Toda coluna do `SELECT` que não é resumo precisa estar no `GROUP BY`.
 - `AS nome` dá um nome claro à coluna do resultado.
