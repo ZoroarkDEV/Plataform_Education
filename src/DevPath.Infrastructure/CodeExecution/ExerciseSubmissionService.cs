@@ -1,7 +1,9 @@
 using System.Text.RegularExpressions;
 using DevPath.Application.CodeExecution;
+using DevPath.Application.Progress;
 using DevPath.Domain.Progress;
 using DevPath.Infrastructure.Persistence;
+using DevPath.Infrastructure.Progress;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -28,6 +30,7 @@ public sealed partial class ExerciseSubmissionService(
     ILogger<ExerciseSubmissionService>? logger = null) : IExerciseSubmissionService
 {
     private readonly ILogger _logger = logger ?? NullLogger<ExerciseSubmissionService>.Instance;
+    private readonly LessonProgressWriter _progress = new(db, new JourneySnapshotLoader(db));
 
     /// <summary>Tamanho máximo do código enviado (o mesmo que a Web confere).</summary>
     public const int MaxCodeLength = ExecutionLimits.MaxCodeLength;
@@ -129,23 +132,14 @@ public sealed partial class ExerciseSubmissionService(
             ? (cases.Count == 1 ? "O caso de teste passou." : $"Todos os {cases.Count} casos de teste passaram.")
             : string.Join("\n", feedback.Where(f => !f.Passed).Select(f => $"Caso \"{f.Name}\": {f.Message}"));
 
-        var submission = CodeSubmission.Create(userId, exerciseId, code,
-            status == ExecutionStatus.Pass ? SubmissionResult.Pass : SubmissionResult.Fail, totalMs, summary);
-        if (exercise.MaxAttempts is { } attemptLimit)
+        var submission = CodeSubmission.Create(userId, exerciseId, code, AttemptCounting.ResultFor(status), totalMs, summary);
+        var saved = await SaveAsync(submission, exercise.MaxAttempts, status == ExecutionStatus.Pass, cancellationToken);
+        if (saved is null)
         {
-            var saved = await SaveWithinLimitAsync(submission, attemptLimit, cancellationToken);
-            if (saved is null)
-            {
-                // Perdeu a corrida: outro envio simultâneo usou a última tentativa. Este não é gravado.
-                return ExecutionOutcome.AttemptsExhausted(attemptLimit);
-            }
-            usedAttempts = saved.Value;
+            // Perdeu a corrida: outro envio simultâneo usou a última tentativa. Este não é gravado.
+            return ExecutionOutcome.AttemptsExhausted(exercise.MaxAttempts!.Value);
         }
-        else
-        {
-            db.CodeSubmissions.Add(submission);
-            await db.SaveChangesAsync(cancellationToken);
-        }
+        usedAttempts = saved.Value.UsedBefore;
 
         // A tabela mostrada é a que o aluno produziu no primeiro caso (os dados "principais" do exercício).
         var table = runs[0].Table;
@@ -157,33 +151,49 @@ public sealed partial class ExerciseSubmissionService(
         return new ExecutionOutcome(status, table?.Columns ?? [], rows, truncated, friendly, technical, totalMs,
             passed, cases.Count, feedback, submission.Id,
             exercise.MaxAttempts is { } limit ? limit - usedAttempts - 1 : null,
-            commonErrorMessage);
+            commonErrorMessage,
+            LessonCompleted: saved.Value.LessonCompleted);
     }
 
     /// <summary>
-    /// Grava a tentativa sem passar do limite, mesmo com dois envios do mesmo aluno ao mesmo tempo (duas abas,
+    /// Grava a tentativa numa transação curta (não a execução no sandbox) e, num <c>pass</c>, conclui a aula NA MESMA
+    /// transação (#27, ADR-007): ou grava as duas coisas, ou nenhuma.
+    /// </summary>
+    /// <remarks>
+    /// Com limite de tentativas, não passa do limite mesmo com dois envios do mesmo aluno ao mesmo tempo (duas abas,
     /// duas instâncias da Web, vários Workers). A contagem do início só evita gastar container à toa; a que vale
     /// é esta: um lock de transação do PostgreSQL por (aluno, exercício) serializa "contar + inserir".
-    /// O lock dura só esta transação curta (não a execução no sandbox) e some sozinho no commit/rollback.
-    /// </summary>
-    /// <returns>Quantas tentativas já existiam antes desta; nulo se o limite já foi atingido (nada gravado).</returns>
-    private async Task<int?> SaveWithinLimitAsync(CodeSubmission submission, int maxAttempts, CancellationToken cancellationToken)
+    /// O lock some sozinho no commit/rollback.
+    /// </remarks>
+    /// <returns>Quantas tentativas já existiam antes desta (0 sem limite) e se a aula foi concluída agora; nulo se o
+    /// limite já foi atingido (nada gravado).</returns>
+    private async Task<(int UsedBefore, bool LessonCompleted)?> SaveAsync(CodeSubmission submission, int? maxAttempts, bool passed,
+        CancellationToken cancellationToken)
     {
-        var lockKey = $"devpath:tentativas:{submission.UserId:N}:{submission.ExerciseId:N}";
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", cancellationToken);
 
-        var used = await db.CodeSubmissions.CountAsync(
-            s => s.UserId == submission.UserId && s.ExerciseId == submission.ExerciseId, cancellationToken);
-        if (used >= maxAttempts)
+        var used = 0;
+        if (maxAttempts is { } limit)
         {
-            return null; // o rollback acontece no Dispose da transação e libera o lock
+            var lockKey = $"devpath:tentativas:{submission.UserId:N}:{submission.ExerciseId:N}";
+            await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", cancellationToken);
+
+            used = await db.CodeSubmissions.CountAsync(
+                s => s.UserId == submission.UserId && s.ExerciseId == submission.ExerciseId, cancellationToken);
+            if (used >= limit)
+            {
+                return null; // o rollback acontece no Dispose da transação e libera o lock
+            }
         }
 
         db.CodeSubmissions.Add(submission);
         await db.SaveChangesAsync(cancellationToken);
+
+        // Q1: o pass conclui a aula (ou promove o "Seguir sem pontos" para os pontos cheios).
+        var completed = passed && await _progress.CompleteOnPassAsync(submission.UserId, submission.ExerciseId, cancellationToken);
+
         await transaction.CommitAsync(cancellationToken);
-        return used;
+        return (used, completed);
     }
 
     /// <summary>Dataset primeiro, depois o setup do caso (que pode, por exemplo, mudar uma linha do dataset).</summary>

@@ -1,6 +1,10 @@
 using System.Text.RegularExpressions;
+using DevPath.Application.Auth;
+using DevPath.Application.Journey;
 using DevPath.Application.Lessons;
+using DevPath.Application.Progress;
 using DevPath.Web.Lessons;
+using DevPath.Web.Onboarding;
 using DevPath.Web.Models.Lessons;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,10 +15,18 @@ namespace DevPath.Web.Controllers;
 /// Tela de leitura da aula (#12). Fino de propósito: busca a aula no <see cref="ILessonContentService"/>,
 /// converte o Markdown e escolhe a view. Nenhum texto de aula mora aqui (ADR-003).
 /// [Authorize]: sem login, o cookie middleware redireciona para /Account/Login?ReturnUrl=... (decisão de produto).
+/// <para>
+/// Acesso por progresso (#27, ADR-007), o mínimo no servidor: depois do conteúdo, <see cref="ILessonProgressService.OpenAsync"/>
+/// decide e registra a abertura. Ordem: inexistente &gt; rascunho &gt; acesso &gt; defeito. Bloqueada e de outra trilha =
+/// 403 com a página Unavailable; sem trilha = /escolha-sua-trilha; conta apagada = sai e vai ao login.
+/// O estado vai para <see cref="LessonPageViewModel.Progress"/>: é a costura para o bloco de conclusão e a paginação do UI.
+/// </para>
 /// </summary>
 [Authorize]
 public sealed partial class LessonsController(
     ILessonContentService lessons,
+    ILessonProgressService progress,
+    IAuthService auth,
     LessonMarkdownRenderer renderer,
     IHostEnvironment environment,
     ILogger<LessonsController> logger) : Controller
@@ -36,6 +48,7 @@ public sealed partial class LessonsController(
         }
 
         LessonLoadResult result;
+        LessonProgressState? progressState = null;
         try
         {
             result = await lessons.GetLessonAsync(pathSlug, moduleSlug, lessonSlug, ct);
@@ -45,6 +58,18 @@ public sealed partial class LessonsController(
             // O contrato diz "sem exceções"; se mesmo assim vier uma, o aluno vê a página amigável.
             logger.LogError(ex, "Falha inesperada ao carregar a aula {Path}/{Module}/{Lesson}.", pathSlug, moduleSlug, lessonSlug);
             return Unavailable(LessonUnavailableReason.Malformed, ex.Message);
+        }
+
+        // Rascunho e inexistente respondem antes do acesso (404); defeito só depois (não revela aula bloqueada).
+        if (result.Error is not { Kind: LessonLoadErrorKind.NotFound or LessonLoadErrorKind.Draft })
+        {
+            var denied = await CheckAccessAsync(pathSlug, moduleSlug, lessonSlug, ct);
+            if (denied.Result is not null)
+            {
+                return denied.Result;
+            }
+
+            progressState = denied.State;
         }
 
         if (result.Error is { } error)
@@ -86,16 +111,56 @@ public sealed partial class LessonsController(
         }
 
         ViewData["Title"] = lesson.Title;
-        return View(new LessonPageViewModel(lesson, html, exercise));
+        return View(new LessonPageViewModel(lesson, html, exercise, progressState));
     }
 
-    private ViewResult Unavailable(LessonUnavailableReason reason, string detail)
+    /// <summary>Result != null = negado (já com a resposta pronta); senão, o estado do aluno na aula.</summary>
+    private async Task<(IActionResult? Result, LessonProgressState? State)> CheckAccessAsync(
+        string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct)
     {
-        Response.StatusCode = reason == LessonUnavailableReason.Malformed
-            ? StatusCodes.Status500InternalServerError
-            : StatusCodes.Status404NotFound;
+        if (!User.TryGetUserId(out var userId))
+        {
+            return (Challenge(), null);
+        }
 
-        var model = new LessonUnavailableViewModel(reason, environment.IsDevelopment() ? detail : null);
+        var access = await progress.OpenAsync(userId, pathSlug, moduleSlug, lessonSlug, ct);
+        switch (access.Kind)
+        {
+            case LessonAccessKind.Allowed:
+                return (null, access.State);
+            case LessonAccessKind.Locked:
+                logger.LogInformation("Aula bloqueada {Path}/{Module}/{Lesson} para {UserId}.", pathSlug, moduleSlug, lessonSlug, userId);
+                return (Unavailable(LessonUnavailableReason.Locked, "Aula bloqueada pelo progresso (R1).",
+                    unlockRequirement: access.State?.UnlockRequirement), null);
+            case LessonAccessKind.NotEnrolled when access.CurrentPathTitle is null:
+                // Sem trilha: primeiro escolhe uma (o mesmo destino do dashboard).
+                return (RedirectToAction(nameof(OnboardingController.ChoosePath), "Onboarding"), null);
+            case LessonAccessKind.NotEnrolled:
+                logger.LogInformation("Aula de outra trilha {Path}/{Module}/{Lesson} para {UserId}.", pathSlug, moduleSlug, lessonSlug, userId);
+                return (Unavailable(LessonUnavailableReason.OtherPath, "Aula fora da trilha atual.",
+                    currentPathTitle: access.CurrentPathTitle), null);
+            case LessonAccessKind.UserNotFound:
+                // O cookie aponta para uma conta que não existe mais: encerra a sessão e pede login de novo.
+                await auth.LogoutAsync();
+                return (RedirectToAction(nameof(AccountController.Login), "Account"), null);
+            default:
+                logger.LogInformation("Aula não encontrada pelo progresso {Path}/{Module}/{Lesson}.", pathSlug, moduleSlug, lessonSlug);
+                return (Unavailable(LessonUnavailableReason.NotFound, "Aula não encontrada pelo serviço de progresso."), null);
+        }
+    }
+
+    private ViewResult Unavailable(LessonUnavailableReason reason, string detail,
+        LessonRefDto? unlockRequirement = null, string? currentPathTitle = null)
+    {
+        Response.StatusCode = reason switch
+        {
+            LessonUnavailableReason.Malformed => StatusCodes.Status500InternalServerError,
+            LessonUnavailableReason.Locked or LessonUnavailableReason.OtherPath => StatusCodes.Status403Forbidden,
+            _ => StatusCodes.Status404NotFound,
+        };
+
+        var model = new LessonUnavailableViewModel(reason, environment.IsDevelopment() ? detail : null,
+            unlockRequirement, currentPathTitle);
         ViewData["Title"] = model.Title;
         return View(UnavailableView, model);
     }

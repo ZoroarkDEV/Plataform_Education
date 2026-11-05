@@ -137,6 +137,9 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int?>("FailuresBeforeSkip")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Hints")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -188,6 +191,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.ToTable("Exercises", null, t =>
                         {
                             t.HasCheckConstraint("CK_Exercises_CommonErrors_IsArray", "jsonb_typeof(\"CommonErrors\") = 'array'");
+
+                            t.HasCheckConstraint("CK_Exercises_FailuresBeforeSkip_Positive", "\"FailuresBeforeSkip\" IS NULL OR \"FailuresBeforeSkip\" > 0");
 
                             t.HasCheckConstraint("CK_Exercises_Hints_IsArray", "jsonb_typeof(\"Hints\") = 'array'");
 
@@ -331,6 +336,10 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         .HasColumnType("character(64)")
                         .IsFixedLength();
 
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -437,6 +446,10 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CompletionKind")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.Property<Guid?>("ExerciseId")
                         .HasColumnType("uuid");
 
@@ -471,10 +484,15 @@ namespace DevPath.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ModuleId");
 
-                    b.HasIndex("UserId", "LessonId");
+                    b.HasIndex("UserId", "LessonId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserProgress_UserId_LessonId")
+                        .HasFilter("\"LessonId\" IS NOT NULL");
 
                     b.ToTable("UserProgress", null, t =>
                         {
+                            t.HasCheckConstraint("CK_UserProgress_CompletionKind", "\"CompletionKind\" IS NULL OR \"Status\" IN ('Completed', 'Mastered')");
+
                             t.HasCheckConstraint("CK_UserProgress_ExactlyOneTarget", "num_nonnulls(\"LessonId\", \"ExerciseId\", \"ModuleId\") = 1");
 
                             t.HasCheckConstraint("CK_UserProgress_Score_NonNegative", "\"Score\" IS NULL OR \"Score\" >= 0");

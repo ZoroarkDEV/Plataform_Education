@@ -2,11 +2,13 @@ using DevPath.Application.Auth;
 using DevPath.Application.CodeExecution;
 using DevPath.Application.Journey;
 using DevPath.Application.Lessons;
+using DevPath.Application.Progress;
 using DevPath.Infrastructure.CodeExecution;
 using DevPath.Infrastructure.Identity;
 using DevPath.Infrastructure.Journey;
 using DevPath.Infrastructure.Lessons;
 using DevPath.Infrastructure.Persistence;
+using DevPath.Infrastructure.Progress;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -48,12 +50,18 @@ public static class DependencyInjection
         // Onboarding + dashboard (#11). A Web adapta para IStudentJourneyGateway.
         services.AddScoped<IStudentJourneyService, StudentJourneyService>();
 
+        // Progresso de aula (#27, ADR-007): mesma foto da trilha para dashboard, aula e execução.
+        services.AddScoped<JourneySnapshotLoader>();
+        services.AddScoped<LessonProgressWriter>();
+        services.AddScoped<ILessonProgressService, LessonProgressService>();
+
         // Execução de código: a Web só ENFILEIRA (Redis) e decide quem pode executar. Quem executa é o Worker.
         services.AddRedis(configuration);
         services.Configure<ExecutionQueueOptions>(configuration.GetSection(ExecutionQueueOptions.SectionName));
         services.AddSingleton<IExecutionQueue, RedisExecutionQueue>();
         services.AddScoped<IExerciseCatalog, ExerciseCatalog>();
-        services.AddSingleton<ILessonAccessPolicy, LessonAccessPolicy>();
+        // Scoped: lê o progresso do aluno no banco (trilha atual + desbloqueio), #27.
+        services.AddScoped<ILessonAccessPolicy, LessonAccessPolicy>();
 
         return services;
     }

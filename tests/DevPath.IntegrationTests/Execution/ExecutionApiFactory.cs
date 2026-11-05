@@ -37,6 +37,17 @@ public sealed class ExecutionApiFactory : WebApplicationFactory<Program>, IAsync
     public Guid UnpublishedModuleExerciseId { get; private set; }
     public Guid InactivePathExerciseId { get; private set; }
 
+    /// <summary>Trilha em que os alunos dos testes se matriculam (#27: só executa quem está na trilha).</summary>
+    public string PathSlug { get; private set; } = "";
+    public Guid SelectLessonId { get; private set; }
+
+    /// <summary>Aula 2 ("WHERE", um exercício só): bloqueada até concluir a aula "SELECT".</summary>
+    public Guid WhereLessonId { get; private set; }
+    public Guid WhereExerciseId { get; private set; }
+
+    /// <summary>Exercício visível de OUTRA trilha ativa.</summary>
+    public Guid OtherPathExerciseId { get; private set; }
+
     public const string Setup = "CREATE TABLE alunos (nome text, nota int); INSERT INTO alunos VALUES ('Bia', 8), ('Ana', 9), ('Caio', NULL);";
 
     /// <summary>Formato do #13 (TestCaseSpec): a tabela vem do setup do caso; o esperado fica só no banco.</summary>
@@ -111,6 +122,9 @@ public sealed class ExecutionApiFactory : WebApplicationFactory<Program>, IAsync
         var hidden = module.AddLesson("Escondida", ContentType.Markdown, "# ...");
         hidden.Unpublish();
         UnpublishedLessonExerciseId = hidden.AddExercise("Escondido", "x", "sql", TestCases).Id;
+        var where = module.AddLesson("WHERE", ContentType.Markdown, "# WHERE");
+        WhereExerciseId = where.AddExercise("Notas de novo", "Liste nome e nota em ordem.", "sql", TestCases).Id;
+        (SelectLessonId, WhereLessonId) = (lesson.Id, where.Id);
         UnpublishedModuleExerciseId = path.AddModule("Módulo rascunho")
             .AddLesson("Aula", ContentType.Markdown, "# ...").AddExercise("Módulo não publicado", "x", "sql", TestCases).Id;
 
@@ -121,8 +135,15 @@ public sealed class ExecutionApiFactory : WebApplicationFactory<Program>, IAsync
         InactivePathExerciseId = inactiveModule.AddLesson("Aula", ContentType.Markdown, "# ...")
             .AddExercise("Trilha inativa", "x", "sql", TestCases).Id;
 
-        db.CareerPaths.AddRange(path, inactive);
+        var other = CareerPath.Create($"Outra trilha {Guid.NewGuid():N}");
+        var otherModule = other.AddModule("SQL");
+        otherModule.Publish();
+        OtherPathExerciseId = otherModule.AddLesson("Aula", ContentType.Markdown, "# ...")
+            .AddExercise("Outra trilha", "x", "sql", TestCases).Id;
+
+        db.CareerPaths.AddRange(path, inactive, other);
         await db.SaveChangesAsync();
+        PathSlug = path.Slug;
     }
 
     async Task IAsyncLifetime.DisposeAsync()

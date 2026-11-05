@@ -3,45 +3,43 @@ using FluentAssertions;
 
 namespace DevPath.UnitTests.CodeExecution;
 
-public class LessonAccessPolicyTests
+/// <summary>A parte "visível" do acesso (o resto, trilha e desbloqueio, é teste de integração: ExecutionAccessTests).</summary>
+public class ExerciseVisibilityTests
 {
-    private static readonly LessonAccessPolicy Policy = new();
-
     private static ExerciseVisibility Visible() =>
         new(Guid.NewGuid(), Guid.NewGuid(), PathActive: true, ModulePublished: true, LessonPublished: true, LessonDraft: false,
             ExercisePublished: true);
 
     [Fact]
-    public void AulaVisivelEPronta_Libera() =>
-        Policy.Evaluate(Guid.NewGuid(), Visible()).Should().Be(ExerciseAccess.Allowed);
+    public void AulaVisivelEPronta_Visivel() => ExerciseVisibility.IsVisible(Visible()).Should().BeTrue();
 
     [Fact]
-    public void ExercicioInexistente_NotFound() =>
-        Policy.Evaluate(Guid.NewGuid(), null).Should().Be(ExerciseAccess.NotFound);
+    public void ExercicioInexistente_NaoVisivel() => ExerciseVisibility.IsVisible(null).Should().BeFalse();
 
     [Fact]
-    public void TrilhaInativa_NotFound() =>
-        Policy.Evaluate(Guid.NewGuid(), Visible() with { PathActive = false }).Should().Be(ExerciseAccess.NotFound);
+    public void TrilhaInativa_NaoVisivel() =>
+        ExerciseVisibility.IsVisible(Visible() with { PathActive = false }).Should().BeFalse();
 
     [Fact]
-    public void ModuloNaoPublicado_NotFound() =>
-        Policy.Evaluate(Guid.NewGuid(), Visible() with { ModulePublished = false }).Should().Be(ExerciseAccess.NotFound);
+    public void ModuloNaoPublicado_NaoVisivel() =>
+        ExerciseVisibility.IsVisible(Visible() with { ModulePublished = false }).Should().BeFalse();
 
     [Fact]
-    public void AulaNaoPublicada_NotFound() =>
-        Policy.Evaluate(Guid.NewGuid(), Visible() with { LessonPublished = false }).Should().Be(ExerciseAccess.NotFound);
+    public void AulaNaoPublicada_NaoVisivel() =>
+        ExerciseVisibility.IsVisible(Visible() with { LessonPublished = false }).Should().BeFalse();
 
     [Fact]
-    public void ExercicioDespublicado_NotFound() =>
-        Policy.Evaluate(Guid.NewGuid(), Visible() with { ExercisePublished = false }).Should().Be(ExerciseAccess.NotFound);
+    public void ExercicioDespublicado_NaoVisivel() =>
+        ExerciseVisibility.IsVisible(Visible() with { ExercisePublished = false }).Should().BeFalse();
 
     [Fact]
-    public void AulaEmRascunho_NotFound_NaoRevelaQueExiste() =>
-        Policy.Evaluate(Guid.NewGuid(), Visible() with { LessonDraft = true }).Should().Be(ExerciseAccess.NotFound);
+    public void AulaEmRascunho_NaoVisivel() =>
+        ExerciseVisibility.IsVisible(Visible() with { LessonDraft = true }).Should().BeFalse();
 
     [Fact]
-    public void SoExistemDoisResultados() =>
-        Enum.GetValues<ExerciseAccess>().Should().Equal(ExerciseAccess.Allowed, ExerciseAccess.NotFound);
+    public void ResultadosDoAcesso_IncluemTrilhaEBloqueio() =>
+        Enum.GetValues<ExerciseAccess>().Should().Equal(
+            ExerciseAccess.Allowed, ExerciseAccess.NotFound, ExerciseAccess.NotEnrolled, ExerciseAccess.Locked);
 }
 
 public class ExecutionLimitsTests

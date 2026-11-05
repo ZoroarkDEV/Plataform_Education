@@ -107,14 +107,33 @@ public sealed class LessonContentService(DevPathDbContext db, ILogger<LessonCont
         ExerciseDto? exercise;
         try
         {
-            exercise = await db.Exercises.AsNoTracking()
-                .Where(e => e.LessonId == current.Id && e.IsPublished) // despublicado = .exercise.json saiu de /content
+            var exerciseRow = await db.Exercises.AsNoTracking()
+                .Where(e => e.LessonId == current.Id && e.IsPublished) // despublicado = .exercise.json saiu de /content (#24)
                 .OrderBy(e => e.Id)
-                .Select(e => new ExerciseDto(
-                    e.Title, e.Statement, e.Language, e.Dataset,
-                    e.StarterCode == "" ? null : e.StarterCode,
-                    e.Hints, e.Points))
+                .Select(e => new
+                {
+                    e.Id,
+                    e.Title,
+                    e.Statement,
+                    e.Language,
+                    e.Dataset,
+                    StarterCode = e.StarterCode == "" ? null : e.StarterCode,
+                    e.Hints,
+                    e.Points,
+                    DatasetName = e.Dataset == null
+                        ? null
+                        : db.Datasets.Where(d => d.Slug == e.Dataset).Select(d => d.Name).FirstOrDefault()
+                })
                 .FirstOrDefaultAsync(ct);
+            exercise = exerciseRow is null
+                ? null
+                : new ExerciseDto(
+                    exerciseRow.Title, exerciseRow.Statement, exerciseRow.Language, exerciseRow.Dataset,
+                    exerciseRow.StarterCode, exerciseRow.Hints, exerciseRow.Points)
+                {
+                    Id = exerciseRow.Id,
+                    DatasetDisplayName = DatasetDisplayNames.Resolve(exerciseRow.Dataset, exerciseRow.DatasetName)
+                };
         }
         catch (JsonException ex)
         {

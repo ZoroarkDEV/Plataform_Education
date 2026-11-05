@@ -1,5 +1,6 @@
 using System.Net;
 using DevPath.Application.Lessons;
+using DevPath.Application.Progress;
 using DevPath.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -12,7 +13,8 @@ namespace DevPath.IntegrationTests.Lessons;
 /// Tela de aula de ponta a ponta: rota, [Authorize], controller e views. O banco de teste é vazio,
 /// então o ILessonContentService real (AddInfrastructure) é TROCADO, só aqui, pelo
 /// <see cref="InMemoryLessonContentService"/> (ConfigureTestServices + Replace), que imita as regras do real.
-/// O exercício vem em LessonDto.Exercise, preenchido pelo dublê.
+/// O exercício vem em LessonDto.Exercise, preenchido pelo dublê. O progresso (#27) também é trocado
+/// (<see cref="AllowAllLessonProgressService"/>): aqui só a tela; o acesso real está em LessonAccessPageTests.
 /// </summary>
 [Collection(WebAppCollection.Name)]
 public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
@@ -64,7 +66,10 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
 
     private WebApplicationFactory<Program> App(ExerciseDto? exercise = null) =>
         factory.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
-            services.Replace(ServiceDescriptor.Scoped<ILessonContentService>(_ => CreateLessons(exercise)))));
+        {
+            services.Replace(ServiceDescriptor.Scoped<ILessonContentService>(_ => CreateLessons(exercise)));
+            services.Replace(ServiceDescriptor.Scoped<ILessonProgressService, AllowAllLessonProgressService>());
+        }));
 
     // HTTPS: o redirecionamento do #9 (UseHttpsRedirection) responderia 307 a http://localhost.
     private static readonly Uri BaseAddress = new("https://localhost");

@@ -199,3 +199,99 @@ public class JourneyCalculatorTests
         Lesson(d, "s1").Status.Should().Be(JourneyLessonStatus.Available);
     }
 }
+
+/// <summary>"Continuar" (Q6) e conclusão no roadmap (Q9) na sobrecarga com <see cref="JourneyProgressInput"/> (ADR-007).</summary>
+public class JourneyCalculatorProgressInputTests
+{
+    private const string Path = "sql-dados";
+    private static readonly DateTime T0 = new(2026, 10, 29, 12, 0, 0, DateTimeKind.Utc);
+
+    private static readonly JourneyLessonInput A1 = new(Guid.NewGuid(), "a1", "A1", false);
+    private static readonly JourneyLessonInput A2 = new(Guid.NewGuid(), "a2", "A2", false);
+    private static readonly JourneyLessonInput A3 = new(Guid.NewGuid(), "a3", "A3", false);
+    private static readonly JourneyLessonInput B1 = new(Guid.NewGuid(), "b1", "B1", false);
+
+    private static readonly JourneyModuleInput[] Roadmap =
+    [
+        new("a", "Módulo a", [A1, A2, A3]),
+        new("b", "Módulo b", [B1]),
+    ];
+
+    private static DashboardDto Build(params (JourneyLessonInput Lesson, JourneyProgressInput Progress)[] items) =>
+        JourneyCalculator.Build(Path, "SQL", Roadmap, items.ToDictionary(i => i.Lesson.Id, i => i.Progress));
+
+    private static DashboardLessonDto Lesson(DashboardDto d, string slug) =>
+        d.Modules.SelectMany(m => m.Lessons).Single(l => l.Lesson.LessonSlug == slug);
+
+    [Fact]
+    public void Continuar_VaiParaAEmAndamentoAbertaPorUltimo()
+    {
+        // a1 concluída, a2 e a3 abertas (R5: em andamento nunca bloqueia); a2 foi aberta depois.
+        var d = Build(
+            (A1, new(ProgressStatus.Completed, T0, LessonCompletionKind.Read)),
+            (A2, new(ProgressStatus.InProgress, T0.AddMinutes(10))),
+            (A3, new(ProgressStatus.InProgress, T0.AddMinutes(5))));
+
+        d.NextLesson!.LessonSlug.Should().Be("a2");
+    }
+
+    [Fact]
+    public void Continuar_PrefereEmAndamentoAUmaLiberadaAntesDela()
+    {
+        // a2 está liberada (a1 concluída) mas o aluno abriu a3 antes (R5): continua de onde parou.
+        var d = Build(
+            (A1, new(ProgressStatus.Completed, T0)),
+            (A3, new(ProgressStatus.InProgress, T0.AddMinutes(1))));
+
+        Lesson(d, "a2").Status.Should().Be(JourneyLessonStatus.Available);
+        d.NextLesson!.LessonSlug.Should().Be("a3");
+    }
+
+    [Fact]
+    public void Continuar_SemEmAndamento_PrimeiraLiberada_TudoConcluido_Null()
+    {
+        Build((A1, new(ProgressStatus.Completed, T0))).NextLesson!.LessonSlug.Should().Be("a2");
+
+        var done = Build(
+            (A1, new(ProgressStatus.Completed, T0)), (A2, new(ProgressStatus.Completed, T0)),
+            (A3, new(ProgressStatus.Completed, T0)), (B1, new(ProgressStatus.Completed, T0)));
+        done.NextLesson.Should().BeNull();
+        done.ProgressPercentage.Should().Be(100);
+    }
+
+    [Fact]
+    public void Continuar_EmpateDeData_FicaComAPrimeiraNaOrdem()
+    {
+        var d = Build(
+            (A1, new(ProgressStatus.InProgress, T0)),
+            (A2, new(ProgressStatus.InProgress, T0)));
+
+        d.NextLesson!.LessonSlug.Should().Be("a1");
+    }
+
+    [Fact]
+    public void Roadmap_TrazComoConcluiuEPontos_SoNasConcluidas()
+    {
+        var d = Build(
+            (A1, new(ProgressStatus.Completed, T0, LessonCompletionKind.ExercisePassed, 10)),
+            (A2, new(ProgressStatus.Completed, T0, LessonCompletionKind.SkippedAfterFailures, 0)),
+            (A3, new(ProgressStatus.InProgress, T0, null, 7)));
+
+        Lesson(d, "a1").Completion.Should().Be(LessonCompletionKind.ExercisePassed);
+        Lesson(d, "a1").Points.Should().Be(10);
+        Lesson(d, "a2").Completion.Should().Be(LessonCompletionKind.SkippedAfterFailures);
+        Lesson(d, "a2").Points.Should().Be(0);
+        Lesson(d, "a3").Completion.Should().BeNull();
+        Lesson(d, "a3").Points.Should().BeNull("só aula concluída mostra pontos");
+    }
+
+    [Fact]
+    public void SobrecargaAntiga_IgualANova()
+    {
+        var oldStyle = JourneyCalculator.Build(Path, "SQL", Roadmap,
+            new Dictionary<Guid, ProgressStatus> { [A1.Id] = ProgressStatus.Completed, [A2.Id] = ProgressStatus.InProgress });
+        var newStyle = Build((A1, new(ProgressStatus.Completed, DateTime.MinValue)), (A2, new(ProgressStatus.InProgress, DateTime.MinValue)));
+
+        oldStyle.Should().BeEquivalentTo(newStyle);
+    }
+}

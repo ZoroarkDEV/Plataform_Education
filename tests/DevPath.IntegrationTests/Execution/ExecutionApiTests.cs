@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using DevPath.Application.CodeExecution;
+using DevPath.Application.Journey;
+using DevPath.Domain.Progress;
 using DevPath.Infrastructure.CodeExecution;
 using DevPath.Infrastructure.Persistence;
 using DevPath.IntegrationTests.CodeExecution;
@@ -9,8 +11,10 @@ using DevPath.IntegrationTests.Infrastructure;
 using DevPath.Web.Api;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
 namespace DevPath.IntegrationTests.Execution;
@@ -58,7 +62,9 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
         var response = await client.PostAsJsonAsync(ExecuteUrl(factory.ExerciseId), new { code = "SELECT 1;" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await MessageAsync(response)).Should().Be(ExerciseExecutionEndpoints.AntiforgeryMessage);
+        var error = await ErrorAsync(response);
+        error.Message.Should().Be(ExerciseExecutionEndpoints.AntiforgeryMessage);
+        error.Code.Should().Be(ExecutionApiErrorCodes.AntiforgeryInvalid);
     }
 
     [Fact]
@@ -80,7 +86,35 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
         var response = await client.PostAsJsonAsync(ExecuteUrl(factory.ExerciseId), new { code = "   " });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await MessageAsync(response)).Should().Be(ExerciseExecutionEndpoints.EmptyCodeMessage);
+        var error = await ErrorAsync(response);
+        error.Message.Should().Be(ExerciseExecutionEndpoints.EmptyCodeMessage);
+        error.Code.Should().Be(ExecutionApiErrorCodes.CodeEmpty);
+    }
+
+    [Fact]
+    public async Task JsonMalformado_Devolve400ComCodeMalformedBody()
+    {
+        var client = await LoggedInClientAsync();
+        using var content = new StringContent("{ code: ", System.Text.Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync(ExecuteUrl(factory.ExerciseId), content);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var error = await ErrorAsync(response);
+        error.Code.Should().Be(ExecutionApiErrorCodes.MalformedBody);
+        error.Message.Should().Be(ExerciseExecutionEndpoints.MalformedBodyMessage);
+    }
+
+    [Fact]
+    public async Task CodigoGrandeDemais_Devolve400ComCodeTooLong()
+    {
+        var client = await LoggedInClientAsync();
+        var code = new string('a', ExecutionLimits.MaxCodeLength + 1);
+
+        var response = await client.PostAsJsonAsync(ExecuteUrl(factory.ExerciseId), new { code });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ErrorAsync(response)).Code.Should().Be(ExecutionApiErrorCodes.CodeTooLong);
     }
 
     [Fact]
@@ -246,7 +280,7 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("status").GetString().Should().Be("fail");
         foreach (var field in new[] { "columns", "rows", "truncated", "friendlyMessage", "technicalDetail", "executionTimeMs",
-                     "passedCases", "totalCases", "testCases", "submissionId", "remainingAttempts", "commonErrorMessage" })
+                     "passedCases", "totalCases", "testCases", "submissionId", "remainingAttempts", "commonErrorMessage", "lessonCompleted" })
         {
             body.TryGetProperty(field, out _).Should().BeTrue($"o campo {field} faz parte do contrato");
         }
@@ -367,6 +401,131 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
         body.GetProperty("submissionId").ValueKind.Should().Be(JsonValueKind.Null, "nada é gravado depois do limite");
     }
 
+    // ---------- Acesso por progresso (#27, ADR-007) ----------
+
+    [Fact]
+    public async Task SemTrilha_OutraTrilhaEBloqueada_Devolvem404IgualAoInexistente()
+    {
+        var (noPath, _) = await StudentAsync(enroll: false);
+        var (enrolled, _) = await StudentAsync();
+
+        var missing = await enrolled.PostAsJsonAsync(ExecuteUrl(Guid.NewGuid()), new { code = "SELECT 1;" });
+        var responses = new[]
+        {
+            await noPath.PostAsJsonAsync(ExecuteUrl(factory.ExerciseId), new { code = "SELECT 1;" }),
+            await enrolled.PostAsJsonAsync(ExecuteUrl(factory.OtherPathExerciseId), new { code = "SELECT 1;" }),
+            await enrolled.PostAsJsonAsync(ExecuteUrl(factory.WhereExerciseId), new { code = "SELECT 1;" }),
+        };
+
+        var missingBody = await missing.Content.ReadAsStringAsync();
+        foreach (var response in responses)
+        {
+            response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await response.Content.ReadAsStringAsync()).Should().Be(missingBody, "não revela se existe, é de outra trilha ou está bloqueado");
+        }
+    }
+
+    [Fact]
+    public async Task AulaLiberadaDepoisDeConcluirAAnterior_DeixaDeSer404()
+    {
+        // Sem Worker: só o portão. Com a aula 1 concluída, a aula 2 passa do 404 (cai no 503 da fila sem Worker).
+        await using var noWorker = factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Execution:QueueKey", $"devpath:teste:sem-worker:{Guid.NewGuid():N}");
+            b.UseSetting("Execution:ResultTimeoutSeconds", "1");
+        });
+        var (client, userId) = await StudentAsync(noWorker);
+        (await client.PostAsJsonAsync(ExecuteUrl(factory.WhereExerciseId), new { code = "SELECT 1;" }))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        await SetProgressAsync(userId, factory.SelectLessonId, LessonCompletionKind.Read, null);
+
+        (await client.PostAsJsonAsync(ExecuteUrl(factory.WhereExerciseId), new { code = "SELECT 1;" }))
+            .StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+    }
+
+    /// <summary>
+    /// Mutação: desliga o portão de Locked. Se este teste falhasse ao "ainda ser 404", a checagem
+    /// de desbloqueio não estaria ligada — e SemTrilha_OutraTrilhaEBloqueada passaria por acidente.
+    /// </summary>
+    [Fact]
+    public async Task Mutation_SemChecarDesbloqueio_ExercicioBloqueadoDeixaDeSer404()
+    {
+        await using var app = factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Execution:QueueKey", $"devpath:teste:mutation-locked:{Guid.NewGuid():N}");
+            b.UseSetting("Execution:ResultTimeoutSeconds", "1");
+            b.ConfigureTestServices(services =>
+                services.Replace(ServiceDescriptor.Scoped<ILessonAccessPolicy, AlwaysAllowLessonAccessPolicy>()));
+        });
+        var (client, _) = await StudentAsync(app);
+
+        var response = await client.PostAsJsonAsync(ExecuteUrl(factory.WhereExerciseId), new { code = "SELECT 1;" });
+
+        response.StatusCode.Should().NotBe(HttpStatusCode.NotFound,
+            "com a política mutante (sempre Allowed), a aula 2 bloqueada deixa de ser 404");
+    }
+
+    /// <summary>Política mutante: libera tudo. Só para provar que o Locked do real importa.</summary>
+    private sealed class AlwaysAllowLessonAccessPolicy : ILessonAccessPolicy
+    {
+        public Task<ExerciseAccess> EvaluateAsync(Guid userId, Guid exerciseId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ExerciseAccess.Allowed);
+    }
+
+    [DockerFact]
+    public async Task Pass_ConcluiAAulaNaMesmaTransacao_ERecalculaAMatricula()
+    {
+        var (client, userId) = await StudentAsync();
+        await SetProgressAsync(userId, factory.SelectLessonId, LessonCompletionKind.Read, null);
+
+        var fail = await ExecuteAsync(client, factory.WhereExerciseId, "SELECT nome FROM alunos;");
+        fail.Status.Should().Be(ExecutionStatus.Fail);
+        fail.LessonCompleted.Should().BeFalse();
+
+        var pass = await ExecuteAsync(client, factory.WhereExerciseId, "SELECT nome, nota FROM alunos ORDER BY nome;");
+        pass.Status.Should().Be(ExecutionStatus.Pass, pass.FriendlyMessage + pass.TechnicalDetail);
+        pass.LessonCompleted.Should().BeTrue();
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DevPathDbContext>();
+        var row = await db.UserProgress.AsNoTracking().SingleAsync(p => p.UserId == userId && p.LessonId == factory.WhereLessonId);
+        row.Status.Should().Be(ProgressStatus.Completed);
+        row.CompletionKind.Should().Be(LessonCompletionKind.ExercisePassed);
+        row.Score.Should().Be(10, "pontos cheios, sem desconto pela tentativa errada");
+        var enrollment = await db.UserPathEnrollments.AsNoTracking().SingleAsync(e => e.UserId == userId && e.IsActive);
+        enrollment.ProgressPercentage.Should().Be(100m, "as 2 aulas disponíveis da trilha estão concluídas");
+
+        var again = await ExecuteAsync(client, factory.WhereExerciseId, "SELECT nome, nota FROM alunos ORDER BY nome;");
+        again.LessonCompleted.Should().BeFalse("já estava concluída com pontos");
+    }
+
+    [DockerFact]
+    public async Task PassDepoisDoSeguirSemPontos_PromoveParaPontosCheios_MantendoAData()
+    {
+        var (client, userId) = await StudentAsync();
+        await SetProgressAsync(userId, factory.SelectLessonId, LessonCompletionKind.Read, null);
+        await SetProgressAsync(userId, factory.WhereLessonId, LessonCompletionKind.SkippedAfterFailures, 0);
+        DateTime? skippedAt;
+        using (var scope = factory.Services.CreateScope())
+        {
+            skippedAt = (await scope.ServiceProvider.GetRequiredService<DevPathDbContext>().UserProgress.AsNoTracking()
+                .SingleAsync(p => p.UserId == userId && p.LessonId == factory.WhereLessonId)).CompletedAt;
+        }
+
+        var pass = await ExecuteAsync(client, factory.WhereExerciseId, "SELECT nome, nota FROM alunos ORDER BY nome;");
+
+        pass.LessonCompleted.Should().BeTrue("promoveu para ExercisePassed");
+        using (var scope = factory.Services.CreateScope())
+        {
+            var row = await scope.ServiceProvider.GetRequiredService<DevPathDbContext>().UserProgress.AsNoTracking()
+                .SingleAsync(p => p.UserId == userId && p.LessonId == factory.WhereLessonId);
+            row.CompletionKind.Should().Be(LessonCompletionKind.ExercisePassed);
+            row.Score.Should().Be(10);
+            row.CompletedAt.Should().BeCloseTo(skippedAt!.Value, TimeSpan.FromMilliseconds(1), "a data da conclusão é a original");
+        }
+    }
+
     // ---------- Ajudantes ----------
 
     private async Task<ExecutionOutcome> ExecuteAsync(HttpClient client, Guid exerciseId, string code)
@@ -379,18 +538,39 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
 
     private Task<HttpClient> LoggedInClientAsync(bool withAntiforgery = true) => LoggedInClientAsync(factory, withAntiforgery);
 
-    /// <summary>Cadastra um aluno novo (já fica logado) e, se pedido, coloca o header antiforgery no cliente.</summary>
-    private static async Task<HttpClient> LoggedInClientAsync(WebApplicationFactory<Program> app, bool withAntiforgery = true)
+    private async Task<HttpClient> LoggedInClientAsync(WebApplicationFactory<Program> app, bool withAntiforgery = true) =>
+        (await StudentAsync(app, withAntiforgery: withAntiforgery)).Client;
+
+    /// <summary>
+    /// Cadastra um aluno novo (já fica logado), matricula na trilha da factory (#27: só executa quem está na trilha)
+    /// e, se pedido, coloca o header antiforgery no cliente.
+    /// </summary>
+    private async Task<(HttpClient Client, Guid UserId)> StudentAsync(
+        WebApplicationFactory<Program>? app = null, bool enroll = true, bool withAntiforgery = true)
     {
+        app ??= factory;
         var client = app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true, BaseAddress = new Uri("https://localhost") });
+        var email = $"{Guid.NewGuid():N}@devpath.test";
         var register = await client.SubmitFormAsync("/Account/Register", "/Account/Register", new Dictionary<string, string>
         {
             ["DisplayName"] = "Aluna Teste",
-            ["Email"] = $"{Guid.NewGuid():N}@devpath.test",
+            ["Email"] = email,
             ["Password"] = "Senha123",
             ["ConfirmPassword"] = "Senha123"
         });
         register.StatusCode.Should().Be(HttpStatusCode.Redirect, "o cadastro deveria logar o aluno");
+
+        Guid userId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DevPathDbContext>();
+            userId = await db.Users.Where(u => u.Email == email).Select(u => u.Id).SingleAsync();
+            if (enroll)
+            {
+                var journey = scope.ServiceProvider.GetRequiredService<IStudentJourneyService>();
+                (await journey.EnrollAsync(userId, factory.PathSlug)).Kind.Should().Be(EnrollmentResultKind.Enrolled);
+            }
+        }
 
         if (withAntiforgery)
         {
@@ -398,9 +578,27 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
             var token = await client.GetFromJsonAsync<JsonElement>("/api/antiforgery/token");
             client.DefaultRequestHeaders.Add(token.GetProperty("headerName").GetString()!, token.GetProperty("token").GetString());
         }
-        return client;
+        return (client, userId);
+    }
+
+    private async Task SetProgressAsync(Guid userId, Guid lessonId, LessonCompletionKind kind, int? score)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DevPathDbContext>();
+        var progress = UserProgress.StartLesson(userId, lessonId);
+        progress.Complete(score, kind);
+        db.UserProgress.Add(progress);
+        await db.SaveChangesAsync();
     }
 
     private static async Task<string?> MessageAsync(HttpResponseMessage response) =>
         (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("message").GetString();
+
+    private static async Task<(string? Message, string? Code)> ErrorAsync(HttpResponseMessage response)
+    {
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var message = json.GetProperty("message").GetString();
+        var code = json.TryGetProperty("code", out var c) && c.ValueKind != JsonValueKind.Null ? c.GetString() : null;
+        return (message, code);
+    }
 }

@@ -1,6 +1,12 @@
 using DevPath.Infrastructure.Persistence;
 using FluentAssertions;
+using DevPath.Domain.Progress;
+using DevPath.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace DevPath.IntegrationTests.Persistence;
@@ -52,6 +58,98 @@ public sealed class MigrationsTests : IAsyncLifetime
         var act = () => db.SaveChangesAsync();
 
         await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task AddLessonProgressTracking_DeduplicaMantendoAMaisAvancada_ECriaOIndiceUnico()
+    {
+        await using var db = CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261029122848_AddDatasets"); // a migration anterior
+
+        var path = Domain.CareerPaths.CareerPath.Create("Trilha dedupe");
+        var module = path.AddModule("M");
+        var a = module.AddLesson("A", Domain.CareerPaths.ContentType.Markdown, "# a");
+        var b = module.AddLesson("B", Domain.CareerPaths.ContentType.Markdown, "# b");
+        db.CareerPaths.Add(path);
+        var userId = Guid.NewGuid();
+        db.Users.Add(new ApplicationUser
+        {
+            Id = userId, UserName = $"{userId:N}@t", NormalizedUserName = $"{userId:N}@T", Email = $"{userId:N}@t",
+            NormalizedEmail = $"{userId:N}@T", DisplayName = "A", SecurityStamp = Guid.NewGuid().ToString()
+        });
+        await db.SaveChangesAsync();
+
+        Guid keepA = Guid.NewGuid(), keepB = Guid.NewGuid();
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        async Task InsertAsync(Guid id, Guid lessonId, string status, DateTime lastAccess) =>
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "UserProgress" ("Id", "UserId", "LessonId", "Status", "TimeSpentSeconds", "LastAccessedAt", "CompletedAt")
+                VALUES (@id, @user, @lesson, @status, 0, @last, CASE WHEN @status IN ('Completed','Mastered') THEN @last END)
+                """,
+                new NpgsqlParameter("id", id), new NpgsqlParameter("user", userId), new NpgsqlParameter("lesson", lessonId),
+                new NpgsqlParameter("status", status), new NpgsqlParameter("last", lastAccess));
+
+        // A: Completed antigo vence InProgress recente. B: entre dois InProgress, vence o aberto por último.
+        await InsertAsync(Guid.NewGuid(), a.Id, "InProgress", t0.AddDays(5));
+        await InsertAsync(keepA, a.Id, "Completed", t0);
+        await InsertAsync(Guid.NewGuid(), a.Id, "InProgress", t0.AddDays(1));
+        await InsertAsync(Guid.NewGuid(), b.Id, "InProgress", t0);
+        await InsertAsync(keepB, b.Id, "InProgress", t0.AddDays(2));
+
+        await db.Database.MigrateAsync();
+
+        var ids = await db.Database.SqlQueryRaw<Guid>("""SELECT "Id" AS "Value" FROM "UserProgress" """).ToListAsync();
+        ids.Should().BeEquivalentTo([keepA, keepB]);
+
+        db.UserProgress.Add(UserProgress.StartLesson(userId, a.Id));
+        var duplicate = () => db.SaveChangesAsync();
+        (await duplicate.Should().ThrowAsync<DbUpdateException>())
+            .WithInnerException<PostgresException>().Which.ConstraintName.Should().Be("IX_UserProgress_UserId_LessonId");
+    }
+
+    [Fact]
+    public async Task CompletionKind_SoEmAulaConcluida()
+    {
+        await using var db = CreateDbContext();
+        await db.Database.MigrateAsync();
+        var path = Domain.CareerPaths.CareerPath.Create("Trilha ck");
+        var lesson = path.AddModule("M").AddLesson("A", Domain.CareerPaths.ContentType.Markdown, "# a");
+        db.CareerPaths.Add(path);
+        var userId = Guid.NewGuid();
+        db.Users.Add(new ApplicationUser
+        {
+            Id = userId, UserName = $"{userId:N}@t", NormalizedUserName = $"{userId:N}@T", Email = $"{userId:N}@t",
+            NormalizedEmail = $"{userId:N}@T", DisplayName = "A", SecurityStamp = Guid.NewGuid().ToString()
+        });
+        await db.SaveChangesAsync();
+
+        var act = () => db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "UserProgress" ("Id", "UserId", "LessonId", "Status", "TimeSpentSeconds", "LastAccessedAt", "CompletionKind")
+            VALUES (gen_random_uuid(), @user, @lesson, 'InProgress', 0, now(), 'Read')
+            """, new NpgsqlParameter("user", userId), new NpgsqlParameter("lesson", lesson.Id));
+
+        (await act.Should().ThrowAsync<PostgresException>()).Which.ConstraintName.Should().Be("CK_UserProgress_CompletionKind");
+    }
+
+
+    [Fact]
+    public void Modelo_NaoTemMudancasPendentes_AlemDasMigrations()
+    {
+        using var db = CreateDbContext();
+        var differ = db.GetService<IMigrationsModelDiffer>();
+        var assembly = db.GetService<IMigrationsAssembly>();
+        var initializer = db.GetService<IModelRuntimeInitializer>();
+        var designTime = db.GetService<IDesignTimeModel>().Model;
+
+        var snapshot = assembly.ModelSnapshot
+            ?? throw new InvalidOperationException("DevPathDbContextModelSnapshot ausente.");
+        var snapshotModel = initializer.Initialize(snapshot.Model, designTime: true, validationLogger: null);
+
+        differ.HasDifferences(
+            snapshotModel.GetRelationalModel(),
+            designTime.GetRelationalModel()).Should().BeFalse(
+            "há mudanças no modelo sem migration: rode 'dotnet ef migrations add …'");
     }
 
     private DevPathDbContext CreateDbContext() =>

@@ -1,6 +1,7 @@
 using DevPath.Application.Journey;
 using DevPath.Domain.Progress;
 using DevPath.Infrastructure.Persistence;
+using DevPath.Infrastructure.Progress;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -9,11 +10,13 @@ namespace DevPath.Infrastructure.Journey;
 /// <inheritdoc />
 /// <remarks>
 /// Leituras com <c>AsNoTracking</c> e número fixo de consultas (sem N+1):
-/// trilhas = 1 consulta (a contagem é subconsulta no SQL); dashboard = 3 (trilha atual, roadmap, progresso).
-/// As regras de status/percentual ficam no <see cref="JourneyCalculator"/> (função pura).
+/// trilhas = 1 consulta (a contagem é subconsulta no SQL); dashboard = 3 (trilha atual, roadmap, progresso), pelo
+/// <see cref="JourneySnapshotLoader"/>. As regras de status/percentual ficam no <see cref="JourneyCalculator"/> (função pura).
 /// </remarks>
-public sealed class StudentJourneyService(DevPathDbContext db) : IStudentJourneyService
+public sealed class StudentJourneyService(DevPathDbContext db, JourneySnapshotLoader? loader = null) : IStudentJourneyService
 {
+    private JourneySnapshotLoader Loader { get; } = loader ?? new JourneySnapshotLoader(db);
+
     public async Task<IReadOnlyList<PathSummaryDto>> GetActivePathsAsync(CancellationToken ct = default) =>
         await db.CareerPaths.AsNoTracking()
             .Where(p => p.IsActive)
@@ -102,6 +105,13 @@ public sealed class StudentJourneyService(DevPathDbContext db) : IStudentJourney
                 db.UserPathEnrollments.Add(enrollment);
                 await db.SaveChangesAsync(ct);
             }
+            else
+            {
+                // Volta para uma trilha que já cursou: o progresso antigo continua valendo (ADR-007). A linha da
+                // matrícula já está travada pelo UPDATE acima, então o recálculo não disputa com uma conclusão.
+                var snapshot = await Loader.LoadAsync(userId, path.Id, slug, path.Title, ct);
+                await new LessonProgressWriter(db, Loader).RecomputeEnrollmentAsync(userId, snapshot, ct);
+            }
 
             await tx.CommitAsync(ct);
             return EnrollmentResult.Enrolled(path.Title);
@@ -142,55 +152,12 @@ public sealed class StudentJourneyService(DevPathDbContext db) : IStudentJourney
     public async Task<DashboardDto?> GetDashboardAsync(Guid userId, CancellationToken ct = default)
     {
         // A trilha atual aparece mesmo se for desativada depois: o progresso do aluno não some (R5).
-        var path = await (
-                from u in db.Users.AsNoTracking()
-                join p in db.CareerPaths.AsNoTracking() on u.CurrentPathId equals (Guid?)p.Id
-                where u.Id == userId
-                select new { p.Id, p.Slug, p.Title })
-            .SingleOrDefaultAsync(ct);
-        if (path is null)
+        var current = await Loader.GetCurrentPathAsync(userId, ct);
+        if (current.PathId is not { } pathId)
         {
             return null;
         }
 
-        var rows = await (
-                from m in db.Modules.AsNoTracking()
-                join l in db.Lessons.AsNoTracking() on m.Id equals l.ModuleId
-                where m.CareerPathId == path.Id && m.IsPublished && l.IsPublished
-                orderby m.Order, m.Slug, l.Order, l.Slug
-                select new
-                {
-                    ModuleId = m.Id,
-                    ModuleSlug = m.Slug,
-                    ModuleTitle = m.Title,
-                    LessonId = l.Id,
-                    LessonSlug = l.Slug,
-                    LessonTitle = l.Title,
-                    l.IsDraft
-                })
-            .ToListAsync(ct);
-
-        // Progresso por aula da trilha. Se houver mais de uma linha para a mesma aula, vale o status mais avançado.
-        var progressRows = await (
-                from up in db.UserProgress.AsNoTracking()
-                join l in db.Lessons.AsNoTracking() on up.LessonId equals (Guid?)l.Id
-                join m in db.Modules.AsNoTracking() on l.ModuleId equals m.Id
-                where up.UserId == userId && m.CareerPathId == path.Id
-                select new { l.Id, up.Status })
-            .ToListAsync(ct);
-
-        var progress = progressRows
-            .GroupBy(r => r.Id)
-            .ToDictionary(g => g.Key, g => g.Max(r => r.Status));
-
-        var modules = rows
-            .GroupBy(r => r.ModuleId)
-            .Select(g => new JourneyModuleInput(
-                g.First().ModuleSlug,
-                g.First().ModuleTitle,
-                g.Select(r => new JourneyLessonInput(r.LessonId, r.LessonSlug, r.LessonTitle, r.IsDraft)).ToList()))
-            .ToList();
-
-        return JourneyCalculator.Build(path.Slug, path.Title, modules, progress);
+        return (await Loader.LoadAsync(userId, pathId, current.PathSlug!, current.PathTitle!, ct)).Dashboard;
     }
 }

@@ -266,8 +266,15 @@ public sealed class LessonContentServiceTests(LessonContentFixture fixture) : IC
             Dataset: "livraria",
             StarterCode: "SELECT ",
             Hints: result.Lesson.Exercise!.Hints,
-            Points: 10));
+            Points: 10) { Id = result.Lesson.Exercise.Id });
         result.Lesson.Exercise.Hints.Should().Equal("Dica geral", "Dica mais direta");
+
+        // ADR-007: o Id é o do exercício no banco (o que a tela manda para /executar).
+        await using (var db = fixture.CreateDbContext())
+        {
+            var exerciseId = await db.Exercises.Where(e => e.Title == "Autores e livros").Select(e => e.Id).SingleAsync();
+            result.Lesson.Exercise.Id.Should().Be(exerciseId);
+        }
 
         // Nada do que é só do servidor pode sair no DTO (nem serializado para a Web).
         var json = System.Text.Json.JsonSerializer.Serialize(result);

@@ -14,6 +14,7 @@ internal sealed class ExerciseConfiguration : IEntityTypeConfiguration<Exercise>
         {
             t.HasCheckConstraint("CK_Exercises_Points_NonNegative", "\"Points\" >= 0");
             t.HasCheckConstraint("CK_Exercises_MaxAttempts_Positive", "\"MaxAttempts\" IS NULL OR \"MaxAttempts\" > 0");
+            t.HasCheckConstraint("CK_Exercises_FailuresBeforeSkip_Positive", "\"FailuresBeforeSkip\" IS NULL OR \"FailuresBeforeSkip\" > 0");
             t.HasCheckConstraint("CK_Exercises_Hints_IsArray", "jsonb_typeof(\"Hints\") = 'array'");
             t.HasCheckConstraint("CK_Exercises_CommonErrors_IsArray", "jsonb_typeof(\"CommonErrors\") = 'array'");
         });

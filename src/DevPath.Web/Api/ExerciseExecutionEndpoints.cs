@@ -74,9 +74,11 @@ public static class ExerciseExecutionEndpoints
         return app;
     }
 
+    public const string MalformedBodyMessage = "O corpo da requisição está inválido. Envie JSON no formato { \"code\": \"...\" }.";
+
     private static async Task<IResult> ExecuteAsync(
         Guid exerciseId,
-        ExecuteExerciseRequest? body,
+        HttpRequest request,
         ClaimsPrincipal user,
         ILessonAccessPolicy accessPolicy,
         ILoggerFactory loggerFactory,
@@ -86,6 +88,17 @@ public static class ExerciseExecutionEndpoints
         if (!Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
             return Results.Unauthorized();
+        }
+
+        ExecuteExerciseRequest? body;
+        try
+        {
+            // Lê o JSON na mão: body malformado vira 400 com code estável (#29 / ADR-007), não um 400 vazio.
+            body = await request.ReadFromJsonAsync<ExecuteExerciseRequest>(cancellationToken: cancellationToken);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return Results.BadRequest(new ApiError(MalformedBodyMessage, ExecutionApiErrorCodes.MalformedBody));
         }
 
         var code = body?.Code;
