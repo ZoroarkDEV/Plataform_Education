@@ -166,6 +166,9 @@ public static class JourneyCalculator
 
         var totalCompleted = result.Sum(m => m.CompletedLessons);
         var totalAvailable = result.Sum(m => m.AvailableLessons);
+        var totalPoints = result.SelectMany(m => m.Lessons)
+            .Where(l => l.Status == JourneyLessonStatus.Completed && l.Points is > 0)
+            .Sum(l => l.Points!.Value);
 
         return new DashboardDto(
             pathSlug,
@@ -175,7 +178,8 @@ public static class JourneyCalculator
             Percentage(totalCompleted, totalAvailable),
             lastStarted?.Lesson ?? firstAvailable,
             IsFirstAccess: !hasAnyProgress,
-            result);
+            result,
+            totalPoints);
     }
 
     /// <summary>R3: inteiro truncado; 0 quando não há aulas disponíveis (nada de divisão por zero).</summary>

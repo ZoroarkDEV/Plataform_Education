@@ -113,6 +113,7 @@ public sealed record DashboardModuleDto(
 /// ordem da trilha. null = nada a fazer: tudo concluído ou trilha sem aulas disponíveis.
 /// </param>
 /// <param name="IsFirstAccess">O aluno não tem nenhum progresso nas aulas desta trilha ("Começar pela aula 1").</param>
+/// <param name="TotalPoints">Soma dos <c>Score</c> das aulas concluídas nesta trilha (UX I6).</param>
 public sealed record DashboardDto(
     string PathSlug,
     string PathTitle,
@@ -121,7 +122,8 @@ public sealed record DashboardDto(
     int ProgressPercentage,
     LessonRefDto? NextLesson,
     bool IsFirstAccess,
-    IReadOnlyList<DashboardModuleDto> Modules)
+    IReadOnlyList<DashboardModuleDto> Modules,
+    int TotalPoints = 0)
 {
     /// <summary>Todas as aulas visíveis da trilha, rascunhos incluídos.</summary>
     public int TotalLessons => Modules.Sum(m => m.TotalLessons);

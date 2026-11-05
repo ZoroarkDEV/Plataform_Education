@@ -269,6 +269,35 @@ public class JourneyCalculatorProgressInputTests
         d.NextLesson!.LessonSlug.Should().Be("a1");
     }
 
+
+    [Fact]
+    public void TotalPoints_SomaOsScoresDasAulasConcluidas()
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var c = Guid.NewGuid();
+        var modules = new[]
+        {
+            new JourneyModuleInput("m", "M",
+            [
+                new(a, "a", "A", false),
+                new(b, "b", "B", false),
+                new(c, "c", "C", false),
+            ])
+        };
+        var progress = new Dictionary<Guid, JourneyProgressInput>
+        {
+            [a] = new(ProgressStatus.Completed, DateTime.UtcNow, LessonCompletionKind.ExercisePassed, 10),
+            [b] = new(ProgressStatus.Completed, DateTime.UtcNow, LessonCompletionKind.Read, null),
+            // c ainda não
+        };
+
+        var dash = JourneyCalculator.Build("p", "P", modules, progress);
+
+        dash.TotalPoints.Should().Be(10);
+        dash.CompletedLessons.Should().Be(2);
+    }
+
     [Fact]
     public void Roadmap_TrazComoConcluiuEPontos_SoNasConcluidas()
     {

@@ -85,5 +85,6 @@ public sealed class StudentJourneyGateway(IStudentJourneyService service, ILogge
         new(dto.PathSlug, dto.PathTitle, dto.CompletedLessons, dto.AvailableLessons, dto.ProgressPercentage,
             dto.NextLesson is null ? null : ToViewModel(dto.NextLesson),
             dto.IsFirstAccess,
-            dto.Modules.Select(ToViewModel).ToList());
+            dto.Modules.Select(ToViewModel).ToList(),
+            dto.TotalPoints);
 }

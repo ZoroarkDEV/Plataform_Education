@@ -338,7 +338,7 @@ Resolvidas com o Manager (Ibra, provisórias, levadas ao dono) e o UI Operator (
 |---|---|
 | **Q1** | O `pass` **conclui a aula sozinho** na mesma transação da submissão. `ExecutionOutcome.lessonCompleted` avisa a UI. |
 | **Q2** | A UI entrega o **"Executar"** junto com o #27 (opção a). Sem flag provisória. |
-| **Q3** | Depois de **N falhas** (padrão **5**, constante `LessonCompletionRule.DefaultFailuresBeforeSkip`; sobrescrevível por exercício na coluna nullable **`Exercise.FailuresBeforeSkip`**, ligada no #24) o aluno ganha **"Seguir sem pontos"** (`CompletionKind = SkippedAfterFailures`, 0 ponto) e **continua podendo tentar**. Um `pass` depois promove para `ExercisePassed` com os pontos cheios. `MaxAttempts` esgotado (quando houver) conclui com `AttemptsExhausted` e não dá mais para executar. |
+| **Q3** | Depois de **N falhas** (padrão **5**, constante `LessonCompletionRule.DefaultFailuresBeforeSkip`; sobrescrevível por exercício na coluna nullable **`Exercise.FailuresBeforeSkip`**, adicionada nesta migration do #27; o seed/conteúdo pode preencher depois) o aluno ganha **"Seguir sem pontos"** (`CompletionKind = SkippedAfterFailures`, 0 ponto) e **continua podendo tentar**. Um `pass` depois promove para `ExercisePassed` com os pontos cheios. `MaxAttempts` esgotado (quando houver) conclui com `AttemptsExhausted` e não dá mais para executar. |
 | **Q4** | Aula **Locked** e **OtherPath**: HTTP **403** com a view `Unavailable` (motivo próprio). Sem matrícula: redirect `/escolha-sua-trilha`. Rascunho/oculto/inexistente: **404**. A API de execução continua 404 único. |
 | **Q5** | Aula só de leitura **não vale pontos** (`Points = null`, `CompletionKind = Read`). |
 | **Q6** | **"Continuar"** = aula `InProgress` com o `LastAccessedAt` mais recente; senão a 1ª `Available`. |
@@ -361,11 +361,16 @@ Resolvidas com o Manager (Ibra, provisórias, levadas ao dono) e o UI Operator (
 1. **Códigos estáveis nos 400 de** `POST /api/exercicios/{id}/executar`: corpo `{ "message": "...", "code": "..." }` com
    `code` ∈ {`code_empty`, `code_too_long`, `antiforgery_invalid`, `malformed_body`}. Constantes em
    `ExecutionApiErrorCodes`. `malformed_body` também cobre o 400 vazio do #29 quando o JSON do body é inválido.
-2. **Nome legível do dataset:** coluna nullable `Datasets.Name` (seed no #24) + `ExerciseDto.DatasetDisplayName`.
-   Se `Name` for null, fallback humanizado do slug (`livraria` → "Livraria", `loja_online` → "Loja online") via
-   `DatasetDisplayNames`.
+2. **Nome legível do dataset:** coluna nullable `Datasets.Name` (nesta migration do #27; #24 não a criou) +
+   `ExerciseDto.DatasetDisplayName`. Se `Name` for null, fallback humanizado do slug (`livraria` → "Livraria",
+   `loja_online` → "Loja online") via `DatasetDisplayNames`.
+3. **Total de pontos (UX I6):** `DashboardDto.TotalPoints` = soma dos `Score` das aulas concluídas na trilha;
+   espelhado em `LessonProgressState.PathTotalPoints` e no `DashboardViewModel`.
 
-### Coluna para o Dev (#24)
+### Colunas do #27 (não vieram do #24)
+
+O seed do #24 trouxe `CommonErrors` / `IsPublished` e datasets por slug, **sem** limiar de skip nem nome legível.
+Esta migration adiciona:
 
 - **`Exercise.FailuresBeforeSkip`** (`int?`, null = padrão 5).
-- **`Datasets.Name`** (`varchar(100)?`, null = humanizar o slug).
+- **`Datasets.Name`** (`varchar(100)?`, null = humanizar o slug; seed de nomes fica para um follow-up de conteúdo).

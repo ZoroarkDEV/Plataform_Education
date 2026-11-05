@@ -77,6 +77,7 @@ public sealed record LessonExerciseProgressDto(
 /// <param name="Previous">Aula anterior na ordem da TRILHA (cruza módulos, rascunho incluído); null na primeira.</param>
 /// <param name="Next">Próxima aula na ordem da TRILHA; null no fim da trilha. Locked traz o UnlockRequirement.</param>
 /// <param name="PathProgressPercentage">% da trilha (o mesmo número do dashboard).</param>
+/// <param name="PathTotalPoints">Pontos totais da trilha (o mesmo do dashboard; UX I6).</param>
 public sealed record LessonProgressState(
     LessonRefDto Lesson,
     JourneyLessonStatus Status,
@@ -89,7 +90,8 @@ public sealed record LessonProgressState(
     LessonExerciseProgressDto? Exercise,
     DashboardLessonDto? Previous,
     DashboardLessonDto? Next,
-    int PathProgressPercentage)
+    int PathProgressPercentage,
+    int PathTotalPoints = 0)
 {
     public bool IsCompleted => Status == JourneyLessonStatus.Completed;
 }

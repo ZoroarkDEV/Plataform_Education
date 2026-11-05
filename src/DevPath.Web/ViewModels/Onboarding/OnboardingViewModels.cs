@@ -105,13 +105,17 @@ public sealed record DashboardViewModel(
     int ProgressPercentage,
     LessonRef? NextLesson,
     bool IsFirstAccess,
-    IReadOnlyList<ModuleProgressViewModel> Modules)
+    IReadOnlyList<ModuleProgressViewModel> Modules,
+    int TotalPoints = 0)
 {
     public DashboardState State => AvailableLessons == 0
         ? DashboardState.Empty
         : NextLesson is not null ? DashboardState.Continue : DashboardState.AllDone;
 
     public string ProgressLabel => Labels.Progress(ProgressPercentage, CompletedLessons, AvailableLessons);
+
+    /// <summary>Soma dos pontos das aulas concluídas nesta trilha (UX I6).</summary>
+    public string TotalPointsLabel => TotalPoints == 1 ? "1 ponto" : $"{TotalPoints} pontos";
 
     /// <summary>No 1º acesso o botão diz "Começar pela aula 1"; depois, "Continuar".</summary>
     public string ContinueLabel => IsFirstAccess ? "Começar pela aula 1" : "Continuar";
