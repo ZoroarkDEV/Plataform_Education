@@ -1,11 +1,11 @@
 # ADR-007 — Progresso do aluno: concluir aula, desbloqueio e "Continuar"
 
-Status: Proposed
+Status: Accepted (implementação em `feat/progresso-aulas`)
 Data: 2026-10-29
 Issues: #27 (escopo principal), #11 (fecha junto), #25 (checagem de matrícula na execução), #30 (B1 e B3 da auditoria de UX)
 
-> Esta é a **proposta de contrato**. Nada aqui está implementado ainda. O ponto de partida é a proposta do
-> UI Operator; cada mudança em relação a ela está na seção "Diferenças para a proposta do UI", com o motivo.
+> Contrato fechado com o UI Operator e o Manager (Ibra). A seção **Decisões** resolve Q1–Q9 e os pedidos
+> extras da UI (código estável nos 400 da execução e nome legível do dataset). A implementação segue nesta ADR.
 
 ## Contexto
 
@@ -67,8 +67,9 @@ e `Points`.
 |---|---|
 | Aula sem exercício (só leitura) | pode concluir; `CompletionKind = Read`, `Points = null` |
 | Todo exercício da aula tem uma submissão `Pass` | pode concluir; `ExercisePassed`, `Points = soma dos Points` |
-| Algum exercício sem `Pass` e com `MaxAttempts` atingido (os demais com `Pass` ou também esgotados) | pode concluir; `AttemptsExhausted`, `Points = soma só dos que passaram` (0 com um exercício só) |
-| Algum exercício sem `Pass` e com tentativas sobrando (ou sem limite) | **não** pode; `Blocker = ExerciseNotPassed` |
+| Algum exercício sem `Pass` e com `MaxAttempts` atingido | pode concluir; `AttemptsExhausted`, `Points = soma só dos que passaram` |
+| Algum exercício sem `Pass`, sem esgotar `MaxAttempts`, mas com ≥ `FailuresBeforeSkip` falhas (padrão 5) | pode concluir via "Seguir sem pontos"; `SkippedAfterFailures`; o aluno ainda pode tentar |
+| Algum exercício sem `Pass` e abaixo do limiar de falhas | **não** pode; `Blocker = ExerciseNotPassed` |
 
 Hoje há um exercício por aula (ADR-003); a regra já trata "cada exercício da aula" para não quebrar se vierem mais.
 
@@ -97,9 +98,10 @@ Migration **`AddLessonProgressTracking`** (data depois de `20261029122848_AddDat
 2. Troca o índice não único `(UserId, LessonId)` por **único parcial** `IX_UserProgress_UserId_LessonId`
    `WHERE "LessonId" IS NOT NULL`. É ele que deixa o upsert (`INSERT ... ON CONFLICT DO UPDATE`) idempotente e
    seguro com duplo clique / duas abas.
-3. Coluna nova `UserProgress.CompletionKind` (`varchar(20)`, nula; `Read | ExercisePassed | AttemptsExhausted`) com
+3. Coluna nova `UserProgress.CompletionKind` (`varchar(30)`, nula; `Read | ExercisePassed | AttemptsExhausted | SkippedAfterFailures`) com
    `CK_UserProgress_CompletionKind` = `"CompletionKind" IS NULL OR "Status" IN ('Completed','Mastered')`.
-   Os pontos ficam em `Score`, que já existe (null em aula de leitura, 0 em tentativas esgotadas).
+   Os pontos ficam em `Score`, que já existe (null em aula de leitura, 0 em tentativas esgotadas / skip).
+4. `Exercises.FailuresBeforeSkip` (`int?`, check > 0) e `Datasets.Name` (`varchar(100)?`).
 
 O `GroupBy(...).Max(Status)` do dashboard pode ficar (inofensivo), mas deixa de ser necessário.
 
@@ -173,14 +175,18 @@ public sealed record LessonProgressState(
     public bool IsCompleted => Status == JourneyLessonStatus.Completed;
 }
 
-public enum LessonCompletionKind { Read, ExercisePassed, AttemptsExhausted }
+public enum LessonCompletionKind { Read, ExercisePassed, AttemptsExhausted, SkippedAfterFailures }
 
 public enum LessonCompletionBlocker { ExerciseNotPassed }
 
 public sealed record LessonExerciseProgressDto(
-    Guid ExerciseId, int Points, bool Passed, int AttemptsUsed, int? MaxAttempts, int? RemainingAttempts)
+    Guid ExerciseId, int Points, bool Passed, int AttemptsUsed, int FailedAttempts,
+    int? MaxAttempts, int FailuresBeforeSkip)
 {
+    public int? RemainingAttempts => MaxAttempts is { } max ? Math.Max(0, max - AttemptsUsed) : null;
     public bool AttemptsExhausted => !Passed && MaxAttempts is { } max && AttemptsUsed >= max;
+    public bool CanSkip => !Passed && !AttemptsExhausted && FailedAttempts >= FailuresBeforeSkip;
+    public int FailuresUntilSkip => Passed || AttemptsExhausted ? 0 : Math.Max(0, FailuresBeforeSkip - FailedAttempts);
 }
 
 public enum LessonCompletionResultKind
@@ -324,20 +330,42 @@ fakes de teste da Web). Sem ele a página não tem como chamar `POST /api/exerci
   aula de outra trilha → 403; execução sem matrícula / bloqueada → 404; duplo POST de concluir → 1 linha;
   conclusões concorrentes → % certo; reativar matrícula recalcula; `pass` conclui sozinho).
 
-## Questões abertas
+## Decisões
 
-- **Q1 (Ibra):** `pass` conclui a aula sozinho (proposta) ou o aluno ainda clica?
-- **Q2 (Ibra, bloqueia a entrega útil):** nenhuma aula com exercício pode ser concluída enquanto a UI não tiver o
-  "Executar" (o endpoint já existe). Opções: (a) a UI entrega o "Executar" junto com o #27; (b) regra provisória:
-  enquanto não houver execução na tela, aula com exercício conclui com o clique (`Read`, sem pontos); (c) aceitar
-  aulas travadas até o #14.
-- **Q3 (Ibra):** exercício sem limite de tentativas nunca "esgota": quem não acerta fica preso. Aceitar (dicas
-  bastam) ou liberar "seguir sem pontos" depois de N falhas?
-- **Q4 (Ibra/UI):** aula bloqueada e de outra trilha com **403 e a view `Unavailable`** (proposta) ou 404 como o
-  rascunho? A API continua 404 em todos os casos.
-- **Q5 (Ibra):** aula só de leitura vale pontos? Proposta: não (`Points = null`).
-- **Q6:** "Continuar" pelo `LastAccessedAt` (última aberta, proposta) ou pela primeira iniciada?
-- **Q7:** o seed deveria recalcular `ProgressPercentage`/`CurrentModuleId` de todas as matrículas quando muda o
-  conteúdo? Proposta: follow-up, porque nenhuma tela lê essas colunas.
-- **Q8 (UI):** paginação cruzando módulos (proposta) ou só dentro do módulo, como hoje?
-- **Q9 (UI):** o roadmap vai usar `DashboardLessonDto.Completion` ("Concluída sem pontos")?
+Resolvidas com o Manager (Ibra, provisórias, levadas ao dono) e o UI Operator (29/10–05/11). Q1–Q9 fechadas.
+
+| # | Decisão |
+|---|---|
+| **Q1** | O `pass` **conclui a aula sozinho** na mesma transação da submissão. `ExecutionOutcome.lessonCompleted` avisa a UI. |
+| **Q2** | A UI entrega o **"Executar"** junto com o #27 (opção a). Sem flag provisória. |
+| **Q3** | Depois de **N falhas** (padrão **5**, constante `LessonCompletionRule.DefaultFailuresBeforeSkip`; sobrescrevível por exercício na coluna nullable **`Exercise.FailuresBeforeSkip`**, ligada no #24) o aluno ganha **"Seguir sem pontos"** (`CompletionKind = SkippedAfterFailures`, 0 ponto) e **continua podendo tentar**. Um `pass` depois promove para `ExercisePassed` com os pontos cheios. `MaxAttempts` esgotado (quando houver) conclui com `AttemptsExhausted` e não dá mais para executar. |
+| **Q4** | Aula **Locked** e **OtherPath**: HTTP **403** com a view `Unavailable` (motivo próprio). Sem matrícula: redirect `/escolha-sua-trilha`. Rascunho/oculto/inexistente: **404**. A API de execução continua 404 único. |
+| **Q5** | Aula só de leitura **não vale pontos** (`Points = null`, `CompletionKind = Read`). |
+| **Q6** | **"Continuar"** = aula `InProgress` com o `LastAccessedAt` mais recente; senão a 1ª `Available`. |
+| **Q7** | Recalcular % de todas as matrículas no seed = **follow-up** ([#31](https://github.com/ZoroarkDEV/Plataform_Education/issues/31)). |
+| **Q8** | Paginação **cruza módulos**. No fim da trilha, `Next` é null. |
+| **Q9** | Roadmap usa `DashboardLessonDto.Completion`. Selo sempre "Concluída ✓"; pontos só quando > 0 ("+0" nunca aparece). |
+
+### Contagem de falha (Q3, detalhe)
+
+- Falha = `CodeSubmission` **gravada** com resultado `fail`, `error` ou `timeout` (os três viram `SubmissionResult.Fail`).
+- Pedidos recusados antes de rodar (400, 429, 503, tentativas esgotadas, erro de preparação do exercício) **não gravam** e **não contam**.
+- Um `pass` vale sempre os pontos cheios, sem desconto por tentativas anteriores.
+
+### Fonte única de desbloqueio
+
+`JourneyCalculator` via um único `JourneySnapshotLoader`: dashboard, página da aula, Previous/Next, `CompleteAsync` e o endpoint de execução. Rascunhos nunca bloqueiam.
+
+### Pedidos extras da UI (05/11)
+
+1. **Códigos estáveis nos 400 de** `POST /api/exercicios/{id}/executar`: corpo `{ "message": "...", "code": "..." }` com
+   `code` ∈ {`code_empty`, `code_too_long`, `antiforgery_invalid`, `malformed_body`}. Constantes em
+   `ExecutionApiErrorCodes`. `malformed_body` também cobre o 400 vazio do #29 quando o JSON do body é inválido.
+2. **Nome legível do dataset:** coluna nullable `Datasets.Name` (seed no #24) + `ExerciseDto.DatasetDisplayName`.
+   Se `Name` for null, fallback humanizado do slug (`livraria` → "Livraria", `loja_online` → "Loja online") via
+   `DatasetDisplayNames`.
+
+### Coluna para o Dev (#24)
+
+- **`Exercise.FailuresBeforeSkip`** (`int?`, null = padrão 5).
+- **`Datasets.Name`** (`varchar(100)?`, null = humanizar o slug).

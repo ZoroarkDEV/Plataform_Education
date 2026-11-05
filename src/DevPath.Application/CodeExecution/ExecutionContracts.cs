@@ -53,6 +53,10 @@ public sealed record TestCaseFeedback(string Name, bool Passed, string? Message)
 /// Dica de um <c>common_errors</c> que casou com a tentativa; nulo quando passou, quando nenhum casou,
 /// ou quando a falha não é do aluno (preparação quebrada, tentativas esgotadas...). Nunca traz o example nem a solução.
 /// </param>
+/// <param name="LessonCompleted">
+/// Este <c>pass</c> concluiu a aula agora (ou promoveu um "Seguir sem pontos" para concluída com pontos) (#27, ADR-007).
+/// O JS da aula usa para atualizar o bloco de conclusão (GET .../conclusao). false em todo o resto.
+/// </param>
 public sealed record ExecutionOutcome(
     ExecutionStatus Status,
     IReadOnlyList<string> Columns,
@@ -66,7 +70,8 @@ public sealed record ExecutionOutcome(
     IReadOnlyList<TestCaseFeedback> TestCases,
     Guid? SubmissionId,
     int? RemainingAttempts,
-    string? CommonErrorMessage = null)
+    string? CommonErrorMessage = null,
+    bool LessonCompleted = false)
 {
     /// <summary>Resultado sem tabela (recusado antes de executar, erro do exercício, executor fora do ar...).</summary>
     public static ExecutionOutcome Failure(ExecutionStatus status, string friendlyMessage, string? technicalDetail = null,

@@ -22,6 +22,9 @@ public sealed class UserProgress
     public DateTime? CompletedAt { get; private set; }
     public DateTime LastAccessedAt { get; private set; }
 
+    /// <summary>Como a aula foi concluída (só em progresso de aula concluído; null nos demais).</summary>
+    public LessonCompletionKind? CompletionKind { get; private set; }
+
     private UserProgress() { }
 
     public static UserProgress StartLesson(Guid userId, Guid lessonId) =>
@@ -42,10 +45,11 @@ public sealed class UserProgress
         LastAccessedAt = DateTime.UtcNow;
     }
 
-    public void Complete(int? score = null)
+    public void Complete(int? score = null, LessonCompletionKind? kind = null)
     {
         Status = ProgressStatus.Completed;
         Score = score;
+        CompletionKind = kind;
         CompletedAt = DateTime.UtcNow;
         LastAccessedAt = CompletedAt.Value;
     }

@@ -5,6 +5,16 @@ namespace DevPath.Application.Journey;
 /// <summary>Aula como vem do banco para o cálculo: só as publicadas, de módulos publicados, já na ordem.</summary>
 public sealed record JourneyLessonInput(Guid Id, string Slug, string Title, bool IsDraft);
 
+/// <summary>Progresso do aluno numa aula, como o cálculo precisa (ADR-007).</summary>
+/// <param name="LastAccessedAt">Última abertura (UTC): decide o "Continuar".</param>
+/// <param name="CompletionKind">Como concluiu (só em concluída).</param>
+/// <param name="Points">Pontos da conclusão (<c>UserProgress.Score</c>); null em leitura ou não concluída.</param>
+public sealed record JourneyProgressInput(
+    ProgressStatus Status,
+    DateTime LastAccessedAt,
+    LessonCompletionKind? CompletionKind = null,
+    int? Points = null);
+
 /// <summary>Módulo publicado com as aulas publicadas dele, já na ordem.</summary>
 public sealed record JourneyModuleInput(string Slug, string Title, IReadOnlyList<JourneyLessonInput> Lessons);
 
@@ -25,18 +35,35 @@ public sealed record JourneyModuleInput(string Slug, string Title, IReadOnlyList
 /// (ex.: aula nova inserida antes dela).</item>
 /// <item><b>R3:</b> % = concluídas × 100 ÷ disponíveis, inteiro truncado (3 de 20 → 15). 0 disponíveis → 0.</item>
 /// </list>
+/// <item><b>"Continuar" (Q6, ADR-007):</b> a aula <see cref="JourneyLessonStatus.InProgress"/> aberta por último
+/// (<see cref="JourneyProgressInput.LastAccessedAt"/>; empate = a primeira na ordem); sem nenhuma, a 1ª
+/// <see cref="JourneyLessonStatus.Available"/>; tudo concluído = null.</item>
+/// </list>
 /// Progresso <see cref="ProgressStatus.Mastered"/> conta como concluído; <see cref="ProgressStatus.NotStarted"/> como sem progresso.
 /// </remarks>
 public static class JourneyCalculator
 {
+    /// <summary>Sobrecarga antiga (só status). Sem data de acesso, o "Continuar" fica com a 1ª aula em andamento.</summary>
     public static DashboardDto Build(
         string pathSlug,
         string pathTitle,
         IReadOnlyList<JourneyModuleInput> modules,
         IReadOnlyDictionary<Guid, ProgressStatus> progress)
     {
-        ArgumentNullException.ThrowIfNull(modules);
         ArgumentNullException.ThrowIfNull(progress);
+        return Build(pathSlug, pathTitle, modules,
+            progress.ToDictionary(p => p.Key, p => new JourneyProgressInput(p.Value, DateTime.MinValue)));
+    }
+
+    public static DashboardDto Build(
+        string pathSlug,
+        string pathTitle,
+        IReadOnlyList<JourneyModuleInput> modules,
+        IReadOnlyDictionary<Guid, JourneyProgressInput> progressInput)
+    {
+        ArgumentNullException.ThrowIfNull(modules);
+        ArgumentNullException.ThrowIfNull(progressInput);
+        var progress = progressInput.ToDictionary(p => p.Key, p => p.Value.Status);
 
         bool IsCompleted(JourneyLessonInput l) =>
             progress.TryGetValue(l.Id, out var s) && s is ProgressStatus.Completed or ProgressStatus.Mastered;
@@ -47,7 +74,8 @@ public static class JourneyCalculator
         LessonRefDto Ref(JourneyModuleInput m, JourneyLessonInput l) => new(pathSlug, m.Slug, l.Slug, l.Title);
 
         var result = new List<DashboardModuleDto>(modules.Count);
-        LessonRefDto? next = null;
+        LessonRefDto? firstAvailable = null;
+        (LessonRefDto Lesson, DateTime At)? lastStarted = null;
         var hasAnyProgress = false;
 
         // Aulas disponíveis do último módulo que tinha alguma (o "módulo anterior" do R1).
@@ -108,12 +136,21 @@ public static class JourneyCalculator
                     status = requirement is null ? JourneyLessonStatus.Available : JourneyLessonStatus.Locked;
                 }
 
-                if (next is null && status is JourneyLessonStatus.InProgress or JourneyLessonStatus.Available)
+                if (status == JourneyLessonStatus.InProgress)
                 {
-                    next = Ref(module, lesson);
+                    var at = progressInput[lesson.Id].LastAccessedAt;
+                    if (lastStarted is null || at > lastStarted.Value.At)
+                    {
+                        lastStarted = (Ref(module, lesson), at);
+                    }
+                }
+                else if (firstAvailable is null && status == JourneyLessonStatus.Available)
+                {
+                    firstAvailable = Ref(module, lesson);
                 }
 
-                items.Add(new DashboardLessonDto(Ref(module, lesson), status, requirement));
+                var done = status == JourneyLessonStatus.Completed ? progressInput[lesson.Id] : null;
+                items.Add(new DashboardLessonDto(Ref(module, lesson), status, requirement, done?.CompletionKind, done?.Points));
                 available.Add(lesson);
                 previousInModule = lesson;
             }
@@ -136,7 +173,7 @@ public static class JourneyCalculator
             totalCompleted,
             totalAvailable,
             Percentage(totalCompleted, totalAvailable),
-            next,
+            lastStarted?.Lesson ?? firstAvailable,
             IsFirstAccess: !hasAnyProgress,
             result);
     }

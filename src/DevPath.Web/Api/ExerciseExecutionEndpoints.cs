@@ -9,8 +9,12 @@ namespace DevPath.Web.Api;
 /// <summary>Corpo de <c>POST /api/exercicios/{exerciseId}/executar</c>.</summary>
 public sealed record ExecuteExerciseRequest(string? Code);
 
-/// <summary>Erro da API: sempre <c>{ "message": "..." }</c> em português.</summary>
-public sealed record ApiError(string Message);
+/// <summary>
+/// Erro da API: <c>{ "message": "...", "code": "..." }</c>.
+/// <see cref="Message"/> é em português para o aluno; <see cref="Code"/> é estável para a UI (#27, ADR-007).
+/// Em 404/503 o <c>code</c> pode ser null (só os 400 da execução usam código hoje).
+/// </summary>
+public sealed record ApiError(string Message, string? Code = null);
 
 /// <summary>
 /// API de execução de exercícios (issue #25). O contrato para o Frontend está no ADR-006.
@@ -74,8 +78,8 @@ public static class ExerciseExecutionEndpoints
         Guid exerciseId,
         ExecuteExerciseRequest? body,
         ClaimsPrincipal user,
-        IExerciseCatalog catalog,
         ILessonAccessPolicy accessPolicy,
+        ILoggerFactory loggerFactory,
         IExecutionQueue queue,
         CancellationToken cancellationToken)
     {
@@ -87,17 +91,22 @@ public static class ExerciseExecutionEndpoints
         var code = body?.Code;
         if (string.IsNullOrWhiteSpace(code))
         {
-            return Results.BadRequest(new ApiError(EmptyCodeMessage));
+            return Results.BadRequest(new ApiError(EmptyCodeMessage, ExecutionApiErrorCodes.CodeEmpty));
         }
         if (code.Length > ExecutionLimits.MaxCodeLength)
         {
-            return Results.BadRequest(new ApiError($"O código pode ter no máximo {ExecutionLimits.MaxCodeLength} caracteres."));
+            return Results.BadRequest(new ApiError(
+                $"O código pode ter no máximo {ExecutionLimits.MaxCodeLength} caracteres.",
+                ExecutionApiErrorCodes.CodeTooLong));
         }
 
-        // Inexistente, escondido ou rascunho: o mesmo 404 e a mesma mensagem (não revela qual é o caso).
-        var visibility = await catalog.GetVisibilityAsync(exerciseId, cancellationToken);
-        if (accessPolicy.Evaluate(userId, visibility) != ExerciseAccess.Allowed)
+        // Inexistente, escondido, rascunho, de outra trilha ou bloqueado (#27): o mesmo 404 e a mesma mensagem
+        // (não revela qual é o caso). O motivo real vai só para o log.
+        var access = await accessPolicy.EvaluateAsync(userId, exerciseId, cancellationToken);
+        if (access != ExerciseAccess.Allowed)
         {
+            loggerFactory.CreateLogger("DevPath.Web.Api.ExerciseExecution").LogInformation(
+                "Execução negada ({Reason}) do exercício {ExerciseId} para {UserId}.", access, exerciseId, userId);
             return Results.NotFound(new ApiError(NotFoundMessage));
         }
 
@@ -134,7 +143,7 @@ public static class ExerciseExecutionEndpoints
             }
             catch (AntiforgeryValidationException)
             {
-                return Results.BadRequest(new ApiError(AntiforgeryMessage));
+                return Results.BadRequest(new ApiError(AntiforgeryMessage, ExecutionApiErrorCodes.AntiforgeryInvalid));
             }
             return await next(context);
         }

@@ -19,6 +19,14 @@ public sealed class Dataset
     /// <summary>Identificador único e estável, igual ao nome do arquivo (ex.: "livraria").</summary>
     public string Slug { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Nome legível para a tela (ex.: "Livraria"). Null = a UI usa o slug humanizado
+    /// (<c>DatasetDisplayNames</c> na Application). Seeded later (ex.: seed de conteúdo); null = humanizar o slug na Application.
+    /// </summary>
+    public string? Name { get; private set; }
+
+    public const int MaxNameLength = 100;
+
     /// <summary>Script SQL confiável (escrito pela equipe), executado como superusuário dentro do sandbox.</summary>
     public string Sql { get; private set; } = string.Empty;
 
@@ -49,6 +57,24 @@ public sealed class Dataset
         Sql = sql;
         ContentHash = hash;
         return true;
+    }
+
+    /// <summary>Define o nome legível. <c>null</c> ou vazio limpa (volta ao fallback do slug).</summary>
+    public void SetName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Name = null;
+            return;
+        }
+
+        var trimmed = name.Trim();
+        if (trimmed.Length > MaxNameLength)
+        {
+            throw new ArgumentException($"Nome deve ter no máximo {MaxNameLength} caracteres.", nameof(name));
+        }
+
+        Name = trimmed;
     }
 
     /// <summary>SHA-256 do texto em UTF-8, em hexadecimal minúsculo. Público para o seed comparar com o arquivo.</summary>

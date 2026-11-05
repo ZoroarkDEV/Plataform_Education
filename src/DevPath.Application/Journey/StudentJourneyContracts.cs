@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using DevPath.Domain.Common;
+using DevPath.Domain.Progress;
 
 namespace DevPath.Application.Journey;
 
@@ -84,7 +85,14 @@ public enum JourneyLessonStatus
 }
 
 /// <param name="UnlockRequirement">Só em <see cref="JourneyLessonStatus.Locked"/>: a aula que falta concluir (US-11.4).</param>
-public sealed record DashboardLessonDto(LessonRefDto Lesson, JourneyLessonStatus Status, LessonRefDto? UnlockRequirement = null);
+/// <param name="Completion">Como concluiu (só em Completed): Read, ExercisePassed, AttemptsExhausted ou SkippedAfterFailures.</param>
+/// <param name="Points">Pontos ganhos (só em Completed; null em leitura). O roadmap mostra só quando &gt; 0 (Q9).</param>
+public sealed record DashboardLessonDto(
+    LessonRefDto Lesson,
+    JourneyLessonStatus Status,
+    LessonRefDto? UnlockRequirement = null,
+    LessonCompletionKind? Completion = null,
+    int? Points = null);
 
 /// <param name="AvailableLessons">Aulas do módulo que não são rascunho (base do %).</param>
 /// <param name="TotalLessons">Todas as aulas visíveis do módulo, rascunhos incluídos (para "Aula X de Y").</param>
@@ -101,8 +109,8 @@ public sealed record DashboardModuleDto(
 
 /// <summary>Dashboard do aluno (US-11.3).</summary>
 /// <param name="NextLesson">
-/// Destino do "Continuar": a 1ª aula, na ordem da trilha, que está liberada e não concluída
-/// (Em andamento ou Liberada). null = nada a fazer: tudo concluído ou trilha sem aulas disponíveis.
+/// Destino do "Continuar" (Q6, ADR-007): a aula Em andamento aberta por último; sem nenhuma, a 1ª Liberada na
+/// ordem da trilha. null = nada a fazer: tudo concluído ou trilha sem aulas disponíveis.
 /// </param>
 /// <param name="IsFirstAccess">O aluno não tem nenhum progresso nas aulas desta trilha ("Começar pela aula 1").</param>
 public sealed record DashboardDto(

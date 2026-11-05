@@ -32,7 +32,7 @@ public sealed record LessonDto(
 /// nem os <c>common_errors</c>: isso fica só no servidor (ADR-003, "solução protegida").
 /// </summary>
 /// <param name="StatementMarkdown">Enunciado em Markdown.</param>
-/// <param name="Dataset">Base usada no exercício (ex.: "livraria"), ou <c>null</c>.</param>
+/// <param name="Dataset">Slug da base usada no exercício (ex.: "livraria"), ou <c>null</c>.</param>
 /// <param name="StarterCode">Código que já aparece no editor, ou <c>null</c> se não houver.</param>
 /// <param name="Hints">Dicas na ordem em que devem ser reveladas: da mais geral para a mais direta.</param>
 /// <param name="Points">Pontos do exercício (provisório: 10 por exercício).</param>
@@ -43,7 +43,17 @@ public sealed record ExerciseDto(
     string? Dataset,
     string? StarterCode,
     IReadOnlyList<string> Hints,
-    int Points = 10);
+    int Points = 10)
+{
+    /// <summary>Id do exercício: o que a tela manda para <c>POST /api/exercicios/{id}/executar</c> (#27, ADR-007).</summary>
+    public Guid Id { get; init; }
+
+    /// <summary>
+    /// Nome legível do dataset para a tela (ex.: "Livraria"). Null quando a aula não tem dataset.
+    /// Vem de <c>Datasets.Name</c> quando preenchido (#24); senão, do slug humanizado (<c>loja_online</c> → "Loja online").
+    /// </summary>
+    public string? DatasetDisplayName { get; init; }
+}
 
 /// <summary>Trilha › Módulo: os links do "você está aqui" no topo da aula.</summary>
 public sealed record LessonBreadcrumb(string PathSlug, string PathTitle, string ModuleSlug, string ModuleTitle);

@@ -26,6 +26,12 @@ public sealed class Exercise
 
     public int Points { get; private set; }
 
+    /// <summary>
+    /// Quantas tentativas erradas liberam o "Seguir sem pontos" (#27, ADR-007). <c>null</c> = o padrão do código
+    /// (<c>LessonCompletionRule.DefaultFailuresBeforeSkip</c>). Null = padrão 5 (LessonCompletionRule.DefaultFailuresBeforeSkip). O seed/conteúdo pode sobrescrever depois.
+    /// </summary>
+    public int? FailuresBeforeSkip { get; private set; }
+
     /// <summary>Base de dados do exercício (<c>content/datasets/&lt;nome&gt;.sql</c>), ex.: "livraria". Opcional.</summary>
     public string? Dataset { get; private set; }
 
@@ -149,5 +155,16 @@ public sealed class Exercise
         Dataset = normalizedDataset;
         Hints = normalizedHints ?? Hints;
         CommonErrors = normalizedErrors ?? CommonErrors;
+    }
+
+    /// <summary>Muda o limiar do "Seguir sem pontos" deste exercício. <c>null</c> volta ao padrão.</summary>
+    public void SetFailuresBeforeSkip(int? failures)
+    {
+        if (failures is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(failures.Value);
+        }
+
+        FailuresBeforeSkip = failures;
     }
 }
