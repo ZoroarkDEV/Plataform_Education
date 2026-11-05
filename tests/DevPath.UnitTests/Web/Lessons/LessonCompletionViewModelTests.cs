@@ -166,4 +166,49 @@ public sealed class LessonCompletionViewModelTests
         limited.InstructionText.Should().Contain("Cada execução conta como tentativa");
         (limited with { RemainingAttempts = 0 }).AttemptsExhausted.Should().BeTrue();
     }
+
+    private static LessonProgressView Exhausted() => new(
+        Select, LessonStatus.Completed, null, DateTimeOffset.UtcNow,
+        LessonCompletionKind.AttemptsExhausted, 0, CanComplete: false, Blocker: null,
+        Exercise: new LessonExerciseProgressView(ExerciseId, 10, false, 3, 3, 0, 3, false, 2),
+        Previous: null, Next: Available(Where), PathProgressPercentage: 20);
+
+    [Fact]
+    public void Pass_after_skip_says_ganhou_pontos_and_only_announces()
+    {
+        var vm = LessonCompletionViewModel.AfterPass(ExercisePassed(10), Reading, LessonCompletionKind.SkippedAfterFailures);
+        vm.SuccessMessage.Should().Be(LessonCompletionTexts.PassAfterSkip(10));
+        vm.SuccessMessage.Should().Be("Boa! Você acertou o exercício e ganhou +10 pontos.");
+        vm.MovesFocus.Should().BeFalse();
+        vm.Announces.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Pass_without_previous_skip_uses_pass_message_without_focus()
+    {
+        var vm = LessonCompletionViewModel.AfterPass(ExercisePassed(7), Reading, null);
+        vm.SuccessMessage.Should().Be(LessonCompletionTexts.PassCompletes(7));
+        vm.MovesFocus.Should().BeFalse();
+        LessonCompletionViewModel.AfterPass(ExercisePassed(7), Reading, LessonCompletionKind.ExercisePassed)
+            .PassedAfterSkip.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Attempts_exhausted_has_own_messages_not_skip()
+    {
+        Vm(Exhausted(), justCompleted: true).SuccessMessage.Should().Be(
+            "Você usou todas as tentativas deste exercício, então a aula foi concluída sem pontos. A próxima aula já está liberada.");
+        Vm(Exhausted()).SuccessMessage.Should().Be(
+            "Você usou todas as tentativas deste exercício, então a aula foi concluída sem pontos. Pode revisar a aula quando quiser.");
+        Vm(Exhausted()).SuccessMessage.Should().NotBe(Vm(Skipped()).SuccessMessage);
+    }
+
+    [Fact]
+    public void Only_click_moves_focus()
+    {
+        Vm(ReadingCompleted(), justCompleted: true).MovesFocus.Should().BeTrue();
+        Vm(Skipped(), justSkipped: true).MovesFocus.Should().BeTrue();
+        Vm(ReadingCompleted()).MovesFocus.Should().BeFalse();
+        Vm(ReadingCompleted()).Announces.Should().BeFalse();
+    }
 }

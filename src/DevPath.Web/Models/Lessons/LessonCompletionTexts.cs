@@ -34,6 +34,11 @@ public static class LessonCompletionTexts
         $"Boa! Você acertou o exercício e concluiu a aula: +{points} pontos. A próxima aula já está liberada.";
     public static string PassAfterSkip(int points) => $"Boa! Você acertou o exercício e ganhou +{points} pontos.";
 
+    public const string AttemptsExhaustedJustCompleted =
+        "Você usou todas as tentativas deste exercício, então a aula foi concluída sem pontos. A próxima aula já está liberada.";
+    public const string AttemptsExhaustedReopen =
+        "Você usou todas as tentativas deste exercício, então a aula foi concluída sem pontos. Pode revisar a aula quando quiser.";
+
     public const string SaveError =
         "Não conseguimos salvar seu progresso. Confira sua conexão e tente de novo.";
 

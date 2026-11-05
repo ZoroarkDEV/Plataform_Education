@@ -111,7 +111,7 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         html.Should().Contain(LessonCompletionTexts.CompleteButton);
         html.Should().Contain(LessonCompletionTexts.NextLockedReason);
         html.Should().Contain("aria-disabled");
-        html.Should().Contain("id=\"lesson-completion-live\"");
+        html.Should().Contain("id=\"lesson-live\"");
         html.Should().Contain("aria-live=\"polite\"");
         html.Should().NotContain("faltam");
         html.Should().NotContain("tentativas esgotadas");
@@ -371,6 +371,27 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         html.Should().Contain(LessonCompletionTexts.BadgeVisible);
         html.Should().Contain("+10 pontos");
         html.Should().Contain("hx-swap-oob");
+    }
+
+    [Fact]
+    public async Task Get_conclusao_depois_do_pass_so_anuncia_sem_mover_foco()
+    {
+        await using var app = App(f =>
+        {
+            f.GetState = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(
+                FakeLessonProgressGateway.Samples.ExercisePassedCompleted());
+            return f;
+        }, SampleExercise());
+        var client = await LoggedInAsync(app);
+        var html = await (await client.GetAsync($"{ConclusaoUrl}?antes=SkippedAfterFailures")).ReadHtmlAsync();
+        html.Should().NotContain("data-just-completed");
+        html.Should().NotContain("data-focus-after-complete");
+        html.Should().Contain("data-announce=\"true\"");
+        html.Should().Contain("Boa! Você acertou o exercício e ganhou +10 pontos.");
+
+        var plain = await (await client.GetAsync($"{ConclusaoUrl}?antes=xyz")).ReadHtmlAsync();
+        plain.Should().Contain(LessonCompletionTexts.PassCompletes(10));
+        plain.Should().NotContain("data-just-completed");
     }
 
     [Fact]

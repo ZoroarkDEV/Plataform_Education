@@ -252,3 +252,16 @@ usa `ExerciseDto.DatasetDisplayName` quando existir; senão humaniza o slug (`li
 swap; após clique em concluir/skip o foco vai para `#next-lesson-link` (ou a mensagem de sucesso);
 conclusão vinda do exercício **não** move o foco. Contraste do selo e do motivo do Próxima travado
 ≥ 4.5:1 no claro e no escuro (`ViewData["SupportsDarkMode"]`).
+
+### Modo demo da conclusão (#27)
+
+Para revisar as telas de conclusão sem Backend/Worker de progresso, só em **Development**:
+
+```bash
+Demo__FakeLessonProgress=true Demo__LessonScenario=reading dotnet run --project src/DevPath.Web
+```
+
+Registra `DevPath.Web/Demo/FakeLessonProgressGateway` (em memória, por processo) no lugar do adapter real.
+`Demo__LessonScenario`: `reading` (padrão), `exercise`, `skip` (5 falhas, "Seguir sem pontos"), `exhausted`
+(tentativas esgotadas) ou `skipped`. Fora de Development a flag é ignorada. O Executar continua real.
+

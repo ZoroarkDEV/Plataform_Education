@@ -104,11 +104,32 @@ public sealed record LessonCompletionViewModel(
     string PathTitle,
     string? FlashMessage = null,
     bool JustCompleted = false,
-    bool JustSkipped = false)
+    bool JustSkipped = false,
+    bool JustPassed = false,
+    bool PassedAfterSkip = false)
 {
     public static LessonCompletionViewModel From(LessonProgressView state, LessonDto lesson, string? flash = null, bool justCompleted = false, bool justSkipped = false) =>
         new(state, lesson.Breadcrumb.PathSlug, lesson.Breadcrumb.ModuleSlug, lesson.Slug,
             lesson.Breadcrumb.ModuleTitle, lesson.Breadcrumb.PathTitle, flash, justCompleted, justSkipped);
+
+    /// <summary>
+    /// GET .../conclusao depois de um <c>pass</c> no Executar: só anuncia (região polite), NUNCA move o foco
+    /// (<see cref="MovesFocus"/> = false). <paramref name="previousKind"/> = como a aula estava antes do pass
+    /// (o JS manda); <c>SkippedAfterFailures</c> + agora ExercisePassed = "ganhou +{N} pontos".
+    /// </summary>
+    public static LessonCompletionViewModel AfterPass(LessonProgressView state, LessonDto lesson, LessonCompletionKind? previousKind) =>
+        From(state, lesson) with
+        {
+            JustPassed = true,
+            PassedAfterSkip = previousKind == LessonCompletionKind.SkippedAfterFailures
+                && state.CompletionKind == LessonCompletionKind.ExercisePassed,
+        };
+
+    /// <summary>Só o clique em "Concluí esta aula" ou "Seguir sem pontos" leva o foco para a "Próxima".</summary>
+    public bool MovesFocus => JustCompleted || JustSkipped;
+
+    /// <summary>Mensagem que a região polite estável da página (<c>#lesson-live</c>) deve anunciar depois da troca.</summary>
+    public bool Announces => MovesFocus || JustPassed;
 
     public bool ShowButton => !State.IsCompleted && State.CanComplete && State.Exercise is null;
 
@@ -127,7 +148,21 @@ public sealed record LessonCompletionViewModel(
             if (FlashMessage is not null) return FlashMessage;
             if (!State.IsCompleted) return null;
 
-            if (JustSkipped || State.CompletionKind is LessonCompletionKind.SkippedAfterFailures or LessonCompletionKind.AttemptsExhausted)
+            if (JustPassed && State.CompletionKind == LessonCompletionKind.ExercisePassed && State.Points is int passPoints && passPoints > 0)
+            {
+                return PassedAfterSkip
+                    ? LessonCompletionTexts.PassAfterSkip(passPoints)
+                    : LessonCompletionTexts.PassCompletes(passPoints);
+            }
+
+            if (!JustSkipped && State.CompletionKind == LessonCompletionKind.AttemptsExhausted)
+            {
+                return JustCompleted
+                    ? LessonCompletionTexts.AttemptsExhaustedJustCompleted
+                    : LessonCompletionTexts.AttemptsExhaustedReopen;
+            }
+
+            if (JustSkipped || State.CompletionKind is LessonCompletionKind.SkippedAfterFailures)
             {
                 if (JustSkipped || JustCompleted)
                     return LessonCompletionTexts.SkipJustCompleted;

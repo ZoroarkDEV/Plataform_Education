@@ -151,7 +151,8 @@ document.addEventListener("click", (event) => {
   const MAX_CODE = 20000;
 
   const announce = (message) => {
-    const region = document.getElementById("lesson-completion-live")
+    // #lesson-live é irmã estável do #lesson-completion (que é trocado por outerHTML).
+    const region = document.getElementById("lesson-live")
       || document.getElementById("copy-status");
     if (!region) return;
     region.textContent = "";
@@ -171,20 +172,33 @@ document.addEventListener("click", (event) => {
     }
   };
 
-  // Após HTMX trocar o bloco de conclusão (clique no botão / skip), move o foco.
+  // Após HTMX trocar o bloco de conclusão: anuncia na região estável; só move o foco quando o
+  // servidor marcou data-just-completed (clique em "Concluí esta aula" / "Seguir sem pontos").
+  // Depois de um pass no Executar vem só data-announce: anuncia, foco fica onde está.
   document.body.addEventListener("htmx:afterSwap", (event) => {
-    const target = event.detail?.target;
-    if (!target || target.id !== "lesson-completion") return;
-    if (target.dataset.justCompleted === "true") {
-      focusAfterComplete(document);
+    const target = document.getElementById("lesson-completion");
+    if (!target || event.detail?.target?.id !== "lesson-completion") return;
+    if (target.dataset.announce === "true" || target.dataset.justCompleted === "true") {
       const msg = target.querySelector("[data-completion-message]");
       if (msg) announce(msg.textContent.trim());
     }
+    if (target.dataset.justCompleted === "true") {
+      focusAfterComplete(document);
+    }
   });
 
-  document.body.addEventListener("htmx:responseError", (event) => {
+  // Qualquer erro (HTTP ou rede): volta o botão de "Salvando…" para o rótulo normal.
+  const resetCompletionButtons = () => {
+    document.querySelectorAll("#lesson-completion [data-complete-button], #lesson-completion [data-skip-button]").forEach((btn) => {
+      btn.querySelector("[data-label-idle]")?.classList.remove("hidden");
+      btn.querySelector("[data-label-busy]")?.classList.add("hidden");
+    });
+  };
+
+  const showCompletionError = (event) => {
     const target = event.detail?.target;
     if (!target || target.id !== "lesson-completion") return;
+    resetCompletionButtons();
     let alert = target.querySelector("[data-completion-error]");
     if (!alert) {
       alert = document.createElement("p");
@@ -194,7 +208,10 @@ document.addEventListener("click", (event) => {
       target.appendChild(alert);
     }
     alert.textContent = TEXTS.saveError;
-  });
+  };
+
+  document.body.addEventListener("htmx:responseError", showCompletionError);
+  document.body.addEventListener("htmx:sendError", showCompletionError);
 
   const getAntiforgery = async () => {
     const res = await fetch("/api/antiforgery/token", { credentials: "same-origin" });
@@ -217,7 +234,8 @@ document.addEventListener("click", (event) => {
     const body = (outcome.rows || []).map((row) =>
       `<tr>${row.map((cell) => `<td class="border border-slate-300 px-2 py-1 font-mono text-sm dark:border-slate-600">${cell == null ? "<em>null</em>" : escapeHtml(String(cell))}</td>`).join("")}</tr>`
     ).join("");
-    container.innerHTML = `<div class="overflow-x-auto"><table class="min-w-full border-collapse text-sm" data-result-table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>${trunc}`;
+    const regionLabel = `Resultado: ${outcome.columns.map((c) => escapeHtml(c)).join(", ")}`;
+    container.innerHTML = `<div class="table-scroll" role="region" tabindex="0" aria-label="${regionLabel}"><table class="min-w-full border-collapse text-sm" data-result-table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>${trunc}`;
   };
 
   const renderFeedback = (container, outcome, extras = "") => {
@@ -279,7 +297,8 @@ document.addEventListener("click", (event) => {
       if (!button || !textarea || !feedback) return;
 
       const setBusy = (busy) => {
-        button.disabled = busy || button.getAttribute("aria-disabled") === "true";
+        // Esgotado = só aria-disabled (continua focável e lendo o motivo); o clique é barrado no handler.
+        button.disabled = busy;
         button.querySelector("[data-execute-idle]")?.classList.toggle("hidden", busy);
         button.querySelector("[data-execute-busy]")?.classList.toggle("hidden", !busy);
       };
@@ -295,12 +314,18 @@ document.addEventListener("click", (event) => {
         const block = document.getElementById("lesson-completion");
         const url = block?.dataset.conclusaoUrl;
         if (!url || !window.htmx) return;
-        // Não move o foco: conclusão veio do exercício.
-        window.htmx.ajax("GET", url, { target: "#lesson-completion", swap: "outerHTML" });
+        // Só anuncia (servidor não marca data-just-completed); "antes" = estado anterior, p/ "ganhou +N pontos".
+        const before = block.dataset.completionKind;
+        const full = before ? `${url}?antes=${encodeURIComponent(before)}` : url;
+        window.htmx.ajax("GET", full, { target: "#lesson-completion", swap: "outerHTML" });
       };
 
-      button.addEventListener("click", async () => {
-        if (button.getAttribute("aria-disabled") === "true") return;
+      button.addEventListener("click", async (event) => {
+        if (button.getAttribute("aria-disabled") === "true") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          return;
+        }
         const code = textarea.value;
         if (!code || !code.trim()) {
           feedback.innerHTML = `<p role="alert" class="text-sm font-medium text-red-800 dark:text-red-200">${TEXTS.emptyCode}</p>`;
@@ -350,7 +375,6 @@ document.addEventListener("click", (event) => {
 
           if (outcome.status === "attempts_exhausted") {
             button.setAttribute("aria-disabled", "true");
-            button.disabled = true;
             let reason = section.querySelector("[data-executar-reason]");
             if (!reason) {
               reason = document.createElement("p");

@@ -220,7 +220,8 @@ public sealed partial class LessonsController(
 
     /// <summary>GET partial de conclusão + pager OOB (depois de um pass com lessonCompleted).</summary>
     [HttpGet("/trilhas/{pathSlug}/{moduleSlug}/{lessonSlug}/conclusao")]
-    public async Task<IActionResult> Conclusao(string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct)
+    public async Task<IActionResult> Conclusao(string pathSlug, string moduleSlug, string lessonSlug,
+        [FromQuery(Name = "antes")] string? previousKind = null, CancellationToken ct = default)
     {
         pathSlug = pathSlug.ToLowerInvariant();
         moduleSlug = moduleSlug.ToLowerInvariant();
@@ -240,8 +241,12 @@ public sealed partial class LessonsController(
         if (load.Lesson is null)
             return NotFound();
 
-        var completion = LessonCompletionViewModel.From(access.State, load.Lesson, justCompleted: access.State.IsCompleted);
-        ViewData["PagerLabel"] = "Navegação entre aulas (fim da página)";
+        // Depois de um pass: só anuncia, sem data-just-completed (não move o foco; aula já concluída não parece nova).
+        LessonCompletionKind? before = Enum.TryParse<LessonCompletionKind>(previousKind, ignoreCase: false, out var k)
+            && Enum.IsDefined(k) ? k : null;
+        var completion = access.State.IsCompleted
+            ? LessonCompletionViewModel.AfterPass(access.State, load.Lesson, before)
+            : LessonCompletionViewModel.From(access.State, load.Lesson);
         ViewData["PagerOob"] = true;
         // Page model for OOB pager (rendered inside completion partial footer).
         ViewData["LessonPage"] = new LessonPageViewModel(load.Lesson, renderer.Render(load.Lesson.MarkdownBody), Progress: access.State);

@@ -24,23 +24,23 @@
         {
             @if (Model.RequiredLessonCanOpen && Model.RequiredLessonUrl is not null)
             {
-                <a href="@Model.RequiredLessonUrl" class="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+                <a href="@Model.RequiredLessonUrl" class="inline-flex min-h-11 w-full items-center justify-center sm:w-auto rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:focus-visible:outline-brand-300">
                     @LessonCompletionTexts.GoToRequired(Model.RequiredLessonTitle)
                 </a>
             }
             else
             {
-                <span class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:text-slate-200" aria-disabled="true">
+                <span class="inline-flex min-h-11 w-full items-center justify-center sm:w-auto rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:text-slate-200" aria-disabled="true">
                     @LessonCompletionTexts.GoToRequired(Model.RequiredLessonTitle)
                 </span>
             }
-            <a asp-controller="Dashboard" asp-action="Index" class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800">
+            <a asp-controller="Dashboard" asp-action="Index" class="inline-flex min-h-11 w-full items-center justify-center sm:w-auto rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:focus-visible:outline-brand-300 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800">
                 @LessonCompletionTexts.BackToPath
             </a>
         }
         else if (isOtherPath)
         {
-            <a asp-controller="Dashboard" asp-action="Index" class="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+            <a asp-controller="Dashboard" asp-action="Index" class="inline-flex min-h-11 w-full items-center justify-center sm:w-auto rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:focus-visible:outline-brand-300">
                 @LessonCompletionTexts.BackToPath
             </a>
         }
@@ -48,16 +48,16 @@
         {
             @if (isMalformed)
             {
-                <a href="@(Context.Request.Path)" class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800">Tentar de novo</a>
+                <a href="@(Context.Request.Path)" class="inline-flex min-h-11 w-full items-center justify-center sm:w-auto rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:focus-visible:outline-brand-300 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800">Tentar de novo</a>
             }
-            <a asp-controller="Dashboard" asp-action="Index" class="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">Voltar ao dashboard</a>
+            <a asp-controller="Dashboard" asp-action="Index" class="inline-flex min-h-11 w-full items-center justify-center sm:w-auto rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:focus-visible:outline-brand-300">Voltar ao dashboard</a>
         }
     </div>
 
     @if (!string.IsNullOrEmpty(Model.TechnicalDetail))
     {
         <details class="mt-6 text-sm text-slate-700 dark:text-slate-300">
-            <summary class="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-brand-600">Ver detalhe técnico</summary>
+            <summary class="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-brand-600 dark:focus-visible:outline-brand-300">Ver detalhe técnico</summary>
             <p class="mt-2 break-words font-mono">@Model.TechnicalDetail</p>
         </details>
     }

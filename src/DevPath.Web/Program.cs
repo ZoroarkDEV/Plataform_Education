@@ -82,7 +82,12 @@ builder.Services.AddContentSeeding(builder.Configuration, builder.Environment.Co
 // (registrado em AddInfrastructure). Mesmo tempo de vida do serviço/DbContext.
 builder.Services.AddScoped<IStudentJourneyGateway, StudentJourneyGateway>();
 // Progresso das aulas (#27, ADR-007): adapter da porta da Web para o ILessonProgressService do Backend.
-builder.Services.AddScoped<DevPath.Web.Progress.ILessonProgressGateway, DevPath.Web.Progress.LessonProgressGateway>();
+// Modo demo (#27): progresso de aula em memória, SÓ em Development e com Demo:FakeLessonProgress=true.
+// (O registro é antes do Build: builder.Environment == app.Environment.)
+if (builder.Environment.IsDevelopment() && builder.Configuration["Demo:FakeLessonProgress"] == "true")
+    builder.Services.AddSingleton<DevPath.Web.Progress.ILessonProgressGateway, DevPath.Web.Demo.FakeLessonProgressGateway>();
+else
+    builder.Services.AddScoped<DevPath.Web.Progress.ILessonProgressGateway, DevPath.Web.Progress.LessonProgressGateway>();
 
 // GET /health (usado pelo healthcheck do serviço web no docker-compose).
 builder.Services.AddHealthChecks()

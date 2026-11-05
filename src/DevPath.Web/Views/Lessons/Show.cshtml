@@ -40,7 +40,7 @@
                 <div class="flex gap-1"><dt>Nível:</dt><dd class="font-semibold">@Model.LevelLabel</dd></div>
             </dl>
             <button type="button" data-theme-toggle hidden aria-pressed="false"
-                    class="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800 sm:ml-auto">
+                    class="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:focus-visible:outline-brand-300 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800 sm:ml-auto">
                 Tema escuro: <span data-theme-state>desligado</span>
             </button>
         </div>
@@ -82,6 +82,12 @@
             <div class="@prose mt-3">@Html.Raw(Model.Html.SummaryHtml)</div>
         </section>
     }
+
+    @*
+        Região polite ESTÁVEL (fora de qualquer alvo de swap): o JS escreve aqui as mensagens de conclusão
+        e do Executar; no PRG (sem JS) o servidor já põe o flash aqui.
+    *@
+    <div id="lesson-live" class="sr-only" aria-live="polite" aria-atomic="true" data-lesson-live>@Model.FlashMessage</div>
 
     @* Conclusão: depois do Resumo/Exercício e acima do pager. Só com progresso disponível. *@
     @if (Model.Completion is { } completion)

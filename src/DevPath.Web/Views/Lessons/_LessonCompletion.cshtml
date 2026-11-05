@@ -7,17 +7,17 @@
 @{
     var state = Model.State;
     var successId = "lesson-completion-success";
-    var liveId = "lesson-completion-live";
     var blockerId = "lesson-completion-blocker";
     var skipDescId = "lesson-skip-desc";
 }
 <div id="lesson-completion"
      class="mt-10 border-t border-slate-200 pt-6 dark:border-slate-800"
      data-conclusao-url="@Model.ConclusaoUrl"
-     data-just-completed="@(Model.JustCompleted || Model.JustSkipped ? "true" : null)">
-
-    @* Região polite existente ANTES de qualquer troca (a11y). *@
-    <div id="@liveId" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+     @* data-* com valor null ainda sai como data-x="" no Razor: por isso o atributo inteiro é condicional. *@
+     @(state.CompletionKind is { } kind ? Html.Raw($"data-completion-kind=\"{kind}\"") : null)
+     @(Model.MovesFocus ? Html.Raw("data-just-completed=\"true\"") : null)
+     @(Model.Announces ? Html.Raw("data-announce=\"true\"") : null)>
+    @* A região polite NÃO fica aqui (este bloco é trocado por outerHTML): é a #lesson-live estável do Show.cshtml. *@
 
     @if (Model.ShowBadge)
     {
@@ -27,11 +27,10 @@
 
         @if (Model.SuccessMessage is { } msg)
         {
-            var isInfo = state.CompletionKind is LessonCompletionKind.SkippedAfterFailures or LessonCompletionKind.AttemptsExhausted;
+            var isInfo = !Model.JustPassed && state.CompletionKind is LessonCompletionKind.SkippedAfterFailures or LessonCompletionKind.AttemptsExhausted;
             <p id="@successId"
                tabindex="-1"
-               role="status"
-               class="mt-3 text-base @(isInfo
+               class="mt-3 min-w-0 break-words text-base @(isInfo
                    ? "text-slate-800 dark:text-slate-200"
                    : "font-medium text-emerald-800 dark:text-emerald-200")"
                data-completion-message>
@@ -86,7 +85,7 @@
             @Html.AntiForgeryToken()
             <input type="hidden" name="skipWithoutPoints" value="true" />
             <button type="submit"
-                    class="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-6 py-3 text-base font-semibold text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 sm:w-auto"
+                    class="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-6 py-3 text-base font-semibold text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:focus-visible:outline-brand-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 sm:w-auto"
                     aria-describedby="@skipDescId"
                     data-skip-button>
                 @LessonCompletionTexts.SkipButton
@@ -109,6 +108,6 @@
 @if (ViewData["PagerOob"] as bool? == true && ViewData["LessonPage"] is LessonPageViewModel page)
 {
     <div id="lesson-pager-end" hx-swap-oob="true">
-        <partial name="_LessonPager" model="page" view-data='new ViewDataDictionary(ViewData) { ["PagerLabel"] = "Navegação entre aulas (fim da página)", ["PagerFocus"] = Model.JustCompleted || Model.JustSkipped }' />
+        <partial name="_LessonPager" model="page" view-data='new ViewDataDictionary(ViewData) { ["PagerLabel"] = "Navegação entre aulas (fim da página)", ["PagerFocus"] = Model.MovesFocus }' />
     </div>
 }
