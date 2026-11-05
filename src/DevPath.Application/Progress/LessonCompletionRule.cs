@@ -46,7 +46,7 @@ public sealed record LessonCompletionDecision(
 /// </remarks>
 public static class LessonCompletionRule
 {
-    /// <summary>Q3 (Ibra, 29/10): depois de 5 tentativas erradas aparece o "Seguir sem pontos". Por exercício: <c>Exercise.FailuresBeforeSkip</c> (#24).</summary>
+    /// <summary>Q3 (Ibra, 29/10): depois de 5 tentativas erradas aparece o "Seguir sem pontos". Por exercício: <c>Exercise.FailuresBeforeSkip</c> (coluna do #27).</summary>
     public const int DefaultFailuresBeforeSkip = 5;
 
     public static int FailuresBeforeSkipFor(ExerciseAttemptsInput exercise) =>
