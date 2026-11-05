@@ -14,6 +14,26 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 name: "IX_UserProgress_UserId_LessonId",
                 table: "UserProgress");
 
+            migrationBuilder.AddColumn<string>(
+                name: "CompletionKind",
+                table: "UserProgress",
+                type: "character varying(30)",
+                maxLength: 30,
+                nullable: true);
+
+            migrationBuilder.AddColumn<int>(
+                name: "FailuresBeforeSkip",
+                table: "Exercises",
+                type: "integer",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "Name",
+                table: "Datasets",
+                type: "character varying(100)",
+                maxLength: 100,
+                nullable: true);
+
             // Antes do índice único (aluno, aula): se houver linhas repetidas, fica a mais avançada
             // (Mastered > Completed > InProgress > NotStarted); empate = a aberta por último; depois o Id.
             migrationBuilder.Sql("""
@@ -34,26 +54,6 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                 ) ranked
                 WHERE up."Id" = ranked."Id" AND ranked.rn > 1;
                 """);
-
-            migrationBuilder.AddColumn<string>(
-                name: "CompletionKind",
-                table: "UserProgress",
-                type: "character varying(30)",
-                maxLength: 30,
-                nullable: true);
-
-            migrationBuilder.AddColumn<int>(
-                name: "FailuresBeforeSkip",
-                table: "Exercises",
-                type: "integer",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "Name",
-                table: "Datasets",
-                type: "character varying(100)",
-                maxLength: 100,
-                nullable: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserProgress_UserId_LessonId",

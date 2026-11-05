@@ -149,6 +149,7 @@ public sealed class LessonProgressService(DevPathDbContext db, JourneySnapshotLo
             attempts.Count > 0 ? LessonCompletionRule.Describe(attempts[0]) : null,
             snapshot.Previous(lessonId),
             snapshot.Next(lessonId),
-            snapshot.Dashboard.ProgressPercentage);
+            snapshot.Dashboard.ProgressPercentage,
+            snapshot.Dashboard.TotalPoints);
     }
 }

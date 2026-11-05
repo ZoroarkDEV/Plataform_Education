@@ -266,7 +266,11 @@ public sealed class LessonContentServiceTests(LessonContentFixture fixture) : IC
             Dataset: "livraria",
             StarterCode: "SELECT ",
             Hints: result.Lesson.Exercise!.Hints,
-            Points: 10) { Id = result.Lesson.Exercise.Id });
+            Points: 10)
+        {
+            Id = result.Lesson.Exercise.Id,
+            DatasetDisplayName = "Livraria", // Name null no seed → humaniza o slug
+        });
         result.Lesson.Exercise.Hints.Should().Equal("Dica geral", "Dica mais direta");
 
         // ADR-007: o Id é o do exercício no banco (o que a tela manda para /executar).

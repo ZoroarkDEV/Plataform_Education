@@ -65,7 +65,7 @@ public sealed class MigrationsTests : IAsyncLifetime
     {
         await using var db = CreateDbContext();
         var migrator = db.GetService<IMigrator>();
-        await migrator.MigrateAsync("20261029122848_AddDatasets"); // a migration anterior
+        await migrator.MigrateAsync("20261029125122_AddExerciseCommonErrorsAndIsPublished"); // a migration anterior
 
         var path = Domain.CareerPaths.CareerPath.Create("Trilha dedupe");
         var module = path.AddModule("M");
@@ -132,6 +132,50 @@ public sealed class MigrationsTests : IAsyncLifetime
         (await act.Should().ThrowAsync<PostgresException>()).Which.ConstraintName.Should().Be("CK_UserProgress_CompletionKind");
     }
 
+
+
+    [Fact]
+    public async Task AddLessonProgressTracking_Down_RemoveColunasERestauraIndiceNaoUnico()
+    {
+        await using var db = CreateDbContext();
+        await db.Database.MigrateAsync();
+        var migrator = db.GetService<IMigrator>();
+
+        await migrator.MigrateAsync("20261029125122_AddExerciseCommonErrorsAndIsPublished");
+
+        (await db.Database.GetAppliedMigrationsAsync())
+            .Should().NotContain(m => m.EndsWith("_AddLessonProgressTracking"));
+
+        var completionKindCols = await db.Database.SqlQueryRaw<string>("""
+            SELECT column_name AS "Value" FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'UserProgress' AND column_name = 'CompletionKind'
+            """).ToListAsync();
+        completionKindCols.Should().BeEmpty("Down remove CompletionKind");
+
+        var path = Domain.CareerPaths.CareerPath.Create("Trilha down");
+        var lesson = path.AddModule("M").AddLesson("A", Domain.CareerPaths.ContentType.Markdown, "# a");
+        db.CareerPaths.Add(path);
+        var userId = Guid.NewGuid();
+        db.Users.Add(new ApplicationUser
+        {
+            Id = userId, UserName = $"{userId:N}@t", NormalizedUserName = $"{userId:N}@T", Email = $"{userId:N}@t",
+            NormalizedEmail = $"{userId:N}@T", DisplayName = "A", SecurityStamp = Guid.NewGuid().ToString()
+        });
+        await db.SaveChangesAsync();
+
+        // Índice não-único: duas linhas (aluno, aula) passam.
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "UserProgress" ("Id", "UserId", "LessonId", "Status", "TimeSpentSeconds", "LastAccessedAt")
+            VALUES (gen_random_uuid(), @user, @lesson, 'InProgress', 0, now()),
+                   (gen_random_uuid(), @user, @lesson, 'InProgress', 0, now())
+            """, new NpgsqlParameter("user", userId), new NpgsqlParameter("lesson", lesson.Id));
+
+        var count = await db.Database.SqlQueryRaw<int>("""
+            SELECT count(*)::int AS "Value" FROM "UserProgress"
+            WHERE "UserId" = @user AND "LessonId" = @lesson
+            """, new NpgsqlParameter("user", userId), new NpgsqlParameter("lesson", lesson.Id)).SingleAsync();
+        count.Should().Be(2, "Down restaurou o índice não-único");
+    }
 
     [Fact]
     public void Modelo_NaoTemMudancasPendentes_AlemDasMigrations()

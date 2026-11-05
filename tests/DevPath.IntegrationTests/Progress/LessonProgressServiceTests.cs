@@ -353,4 +353,67 @@ public sealed class LessonProgressServiceTests(LessonProgressFixture fx) : IClas
 
         (await EnrollmentAsync(user)).ProgressPercentage.Should().Be(25m);
     }
+
+    [Fact]
+    public async Task ProgressoDeUmAluno_NaoAfetaOOutro()
+    {
+        var a = await fx.EnrolledUserAsync();
+        var b = await fx.EnrolledUserAsync();
+
+        await CompleteAsync(a, fx.Reading);
+
+        (await EnrollmentAsync(a)).ProgressPercentage.Should().Be(25m);
+        (await EnrollmentAsync(b)).ProgressPercentage.Should().Be(0m);
+        (await StateAsync(b, fx.WithExercise)).Kind.Should().Be(LessonAccessKind.Locked);
+        (await StateAsync(a, fx.WithExercise)).Kind.Should().Be(LessonAccessKind.Allowed);
+        (await RowsAsync(b, fx.Reading)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TentativasEsgotadas_CompleteAsync_ConcluiComAttemptsExhausted()
+    {
+        var user = await fx.EnrolledUserAsync();
+        await CompleteAsync(user, fx.Reading);
+
+        await using (var db = fx.CreateDbContext())
+        {
+            await db.Exercises.Where(e => e.Id == fx.Exercise.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.MaxAttempts, 2));
+        }
+
+        await fx.SubmitAsync(user, fx.Exercise, SubmissionResult.Fail, 2);
+        var result = await CompleteAsync(user, fx.WithExercise);
+
+        result.Kind.Should().Be(LessonCompletionResultKind.Completed);
+        result.State!.CompletionKind.Should().Be(LessonCompletionKind.AttemptsExhausted);
+        result.State.Points.Should().Be(0);
+        var enrollment = await EnrollmentAsync(user);
+        enrollment.ProgressPercentage.Should().Be(50m);
+        enrollment.CurrentModuleId.Should().Be(fx.Basic.Id, "% e CurrentModuleId gravados juntos na conclusão");
+    }
+
+    [Fact]
+    public async Task VoltarParaATrilha_RecalculaTambemOCurrentModuleId()
+    {
+        var user = await fx.EnrolledUserAsync();
+        await CompleteAsync(user, fx.Reading);
+        await fx.SubmitAsync(user, fx.Exercise, SubmissionResult.Pass);
+        (await PassOnWorkerAsync(user, fx.Exercise)).Should().BeTrue();
+        await CompleteAsync(user, fx.Reading2);
+
+        await using var db = fx.CreateDbContext();
+        await db.Users.Where(u => u.Id == user).ExecuteUpdateAsync(s => s.SetProperty(u => u.CurrentPathId, (Guid?)null));
+        await db.UserPathEnrollments.Where(e => e.UserId == user && e.CareerPathId == fx.Path.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.IsActive, false)
+                .SetProperty(e => e.ProgressPercentage, 0m)
+                .SetProperty(e => e.CurrentModuleId, (Guid?)null));
+        var journey = new StudentJourneyService(db, new JourneySnapshotLoader(db));
+        (await journey.EnrollAsync(user, fx.Path.Slug)).Kind.Should().Be(EnrollmentResultKind.Enrolled);
+
+        var enrollment = await EnrollmentAsync(user);
+        enrollment.ProgressPercentage.Should().Be(75m);
+        enrollment.CurrentModuleId.Should().Be(fx.Advanced.Id);
+    }
+
 }

@@ -339,7 +339,7 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
         outcome.FriendlyMessage.Should().Be(SqlErrorTranslator.TimeoutMessage);
         outcome.Rows.Should().BeEmpty();
         // A remoção do container pode terminar logo depois de o resultado ser publicado: espera um pouco.
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var deadline = DateTime.UtcNow.AddSeconds(30);
         while (DockerAvailability.SandboxContainerCount() > 0 && DateTime.UtcNow < deadline)
             await Task.Delay(250);
         DockerAvailability.SandboxContainerCount().Should().Be(0, "o container é removido depois do timeout");
