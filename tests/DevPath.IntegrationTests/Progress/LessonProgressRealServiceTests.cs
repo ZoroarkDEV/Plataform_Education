@@ -24,12 +24,15 @@ namespace DevPath.IntegrationTests.Progress;
 /// Trilha mínima para a tela de conclusão com o serviço REAL (#27): Leitura (só leitura) → Notas (exercício) → Depois.
 /// PostgreSQL + Redis do Testcontainers e o Worker real quando há Docker (como o <c>ExecutionApiFactory</c>).
 /// </summary>
-public sealed class LessonProgressWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
+public class LessonProgressWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine").Build();
     private readonly RedisContainer _redis = new RedisBuilder("redis:7-alpine").Build();
     private IHost? _worker;
     private readonly string _queueKey = $"devpath:teste:{Guid.NewGuid():N}";
+
+    /// <summary>Override em factory dedicada: exercício com MaxAttempts (fluxo AttemptsExhausted).</summary>
+    protected virtual int? ExerciseMaxAttempts => null;
 
     public string PathSlug { get; private set; } = "";
     public string ModuleSlug { get; private set; } = "";
@@ -72,7 +75,9 @@ public sealed class LessonProgressWebFactory : WebApplicationFactory<Program>, I
             module.Publish();
             var leitura = module.AddLesson("Leitura", ContentType.Markdown, "# Leitura\n\nTexto.");
             var notas = module.AddLesson("Notas", ContentType.Markdown, "# Notas\n\nTexto.");
-            ExerciseId = notas.AddExercise("Notas", "Liste nome e nota em ordem.", "sql", Execution.ExecutionApiFactory.TestCases).Id;
+            ExerciseId = notas.AddExercise(
+                "Notas", "Liste nome e nota em ordem.", "sql", Execution.ExecutionApiFactory.TestCases,
+                maxAttempts: ExerciseMaxAttempts).Id;
             var depois = module.AddLesson("Depois", ContentType.Markdown, "# Depois\n\nTexto.");
             db.CareerPaths.Add(path);
             await db.SaveChangesAsync();
@@ -286,6 +291,125 @@ public sealed class LessonProgressRealServiceTests(LessonProgressWebFactory fact
         var register = await client.SubmitFormAsync("/Account/Register", "/Account/Register", new Dictionary<string, string>
         {
             ["DisplayName"] = "Aluna Teste",
+            ["Email"] = email,
+            ["Password"] = "Senha123",
+            ["ConfirmPassword"] = "Senha123"
+        });
+        register.StatusCode.Should().Be(HttpStatusCode.Redirect);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DevPathDbContext>();
+        var userId = await db.Users.Where(u => u.Email == email).Select(u => u.Id).SingleAsync();
+        var journey = scope.ServiceProvider.GetRequiredService<IStudentJourneyService>();
+        (await journey.EnrollAsync(userId, factory.PathSlug)).Kind.Should().Be(EnrollmentResultKind.Enrolled);
+        return (client, userId);
+    }
+}
+
+
+/// <summary>Mesma trilha da <see cref="LessonProgressWebFactory"/>, com MaxAttempts=2 no exercício.</summary>
+public sealed class LessonProgressExhaustedWebFactory : LessonProgressWebFactory
+{
+    protected override int? ExerciseMaxAttempts => 2;
+}
+
+/// <summary>E2E: esgotar MaxAttempts → Concluí → AttemptsExhausted → Próxima liberada (também no reload).</summary>
+public sealed class LessonProgressExhaustedRealServiceTests(LessonProgressExhaustedWebFactory factory)
+    : IClassFixture<LessonProgressExhaustedWebFactory>
+{
+    private const string Wrong = "SELECT nome FROM alunos;";
+
+    [DockerFact]
+    public async Task Exhaust_MostraConcluir_ConcluiSemPontos_LiberaProxima_EPersisteNoReload()
+    {
+        var (client, userId) = await StudentAsync();
+        var leitura = factory.Url("leitura");
+        var notas = factory.Url("notas");
+        var depois = factory.Url("depois");
+
+        (await client.SubmitFormAsync(leitura, leitura + "/concluir", new Dictionary<string, string>()))
+            .StatusCode.Should().BeOneOf(HttpStatusCode.Redirect, HttpStatusCode.SeeOther);
+
+        await AddAntiforgeryHeaderAsync(client);
+        for (var i = 1; i <= 2; i++)
+        {
+            var outcome = await ExecuteRawAsync(client, Wrong);
+            outcome.GetProperty("lessonCompleted").GetBoolean().Should().BeFalse(
+                "esgotar tentativas não conclui a aula sozinho");
+            if (i == 2)
+                outcome.GetProperty("remainingAttempts").GetInt32().Should().Be(0);
+        }
+
+        var afterFail = await (await client.GetAsync(notas)).ReadHtmlAsync();
+        afterFail.Should().Contain("data-complete-form", "CanComplete + AttemptsExhausted mostra Concluí");
+        afterFail.Should().Contain(LessonCompletionTexts.CompleteButton);
+        afterFail.Should().NotContain("data-skip-form");
+        afterFail.Should().NotContain($"href=\"{depois}\"");
+        afterFail.Should().Contain(LessonCompletionTexts.AttemptsExhaustedReason);
+
+        var conclusao = await (await client.GetAsync(notas + "/conclusao")).ReadHtmlAsync();
+        conclusao.Should().Contain("data-complete-form");
+        conclusao.Should().Contain(LessonCompletionTexts.CompleteButton);
+
+        (await client.GetAsync(depois)).StatusCode.Should().Be(HttpStatusCode.Forbidden, "ainda locked antes do Concluí");
+
+        var post = await client.SubmitFormAsync(notas, notas + "/concluir", new Dictionary<string, string>());
+        post.StatusCode.Should().BeOneOf(HttpStatusCode.Redirect, HttpStatusCode.SeeOther);
+
+        var row = await ProgressAsync(userId, "notas");
+        row!.Status.Should().Be(ProgressStatus.Completed);
+        row.CompletionKind.Should().Be(LessonCompletionKind.AttemptsExhausted);
+        row.Score.Should().Be(0);
+
+        (await client.GetAsync(depois)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var after = await (await client.GetAsync(notas)).ReadHtmlAsync();
+        after.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        after.Should().ContainAny(
+            LessonCompletionTexts.AttemptsExhaustedJustCompleted,
+            LessonCompletionTexts.AttemptsExhaustedReopen);
+        after.Should().Contain($"href=\"{depois}\"");
+        after.Should().NotContain("+0");
+
+        var reload = await (await client.GetAsync(notas)).ReadHtmlAsync();
+        reload.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        reload.Should().Contain($"href=\"{depois}\"");
+        reload.Should().Contain(LessonCompletionTexts.AttemptsExhaustedReopen);
+    }
+
+    private async Task<JsonElement> ExecuteRawAsync(HttpClient client, string code)
+    {
+        factory.WorkerRunning.Should().BeTrue("o Worker sobe quando há Docker");
+        var response = await client.PostAsJsonAsync($"/api/exercicios/{factory.ExerciseId}/executar", new { code });
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    private static async Task AddAntiforgeryHeaderAsync(HttpClient client)
+    {
+        var token = await client.GetFromJsonAsync<JsonElement>("/api/antiforgery/token");
+        client.DefaultRequestHeaders.Add(token.GetProperty("headerName").GetString()!, token.GetProperty("token").GetString());
+    }
+
+    private async Task<UserProgress?> ProgressAsync(Guid userId, string lessonSlug)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DevPathDbContext>();
+        return await db.UserProgress.AsNoTracking()
+            .Where(p => p.UserId == userId && p.LessonId == factory.LessonIds[lessonSlug])
+            .SingleOrDefaultAsync();
+    }
+
+    private async Task<(HttpClient Client, Guid UserId)> StudentAsync()
+    {
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false, HandleCookies = true, BaseAddress = new Uri("https://localhost")
+        });
+        var email = $"{Guid.NewGuid():N}@devpath.test";
+        var register = await client.SubmitFormAsync("/Account/Register", "/Account/Register", new Dictionary<string, string>
+        {
+            ["DisplayName"] = "Aluna Exhaust",
             ["Email"] = email,
             ["Password"] = "Senha123",
             ["ConfirmPassword"] = "Senha123"

@@ -131,13 +131,21 @@ public sealed record LessonCompletionViewModel(
     /// <summary>Mensagem que a região polite estável da página (<c>#lesson-live</c>) deve anunciar depois da troca.</summary>
     public bool Announces => MovesFocus || JustPassed;
 
-    public bool ShowButton => !State.IsCompleted && State.CanComplete && State.Exercise is null;
+    /// <summary>
+    /// Leitura (<c>Exercise == null</c>) ou exercício com tentativas esgotadas (<see cref="LessonExerciseProgressView.AttemptsExhausted"/>).
+    /// O pass conclui sozinho; esgotar MaxAttempts só libera <c>CanComplete</c> — o aluno ainda clica em Concluí.
+    /// </summary>
+    public bool ShowButton =>
+        !State.IsCompleted
+        && State.CanComplete
+        && (State.Exercise is null || State.Exercise.AttemptsExhausted);
 
     public bool ShowDisabledExerciseButton =>
         !State.IsCompleted && !State.CanComplete && State.Blocker == LessonCompletionBlocker.ExerciseNotPassed;
 
     public bool ShowSkipButton =>
-        !State.IsCompleted && State.Exercise is { CanSkip: true, Passed: false };
+        !State.IsCompleted
+        && State.Exercise is { CanSkip: true, Passed: false, AttemptsExhausted: false };
 
     public bool ShowBadge => State.IsCompleted;
 

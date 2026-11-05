@@ -79,6 +79,20 @@ public sealed class FakeLessonProgressGateway : ILessonProgressGateway
             Exercise: new LessonExerciseProgressView(ExerciseId, points, false, 5, null, null, 5, true, 0),
             Previous: null, Next: Available(Where), PathProgressPercentage: 20);
 
+        /// <summary>MaxAttempts esgotado: Backend libera CanComplete; ainda não concluída; Próxima locked.</summary>
+        public static LessonProgressView ExerciseAttemptsExhaustedReady(int maxAttempts = 3) => new(
+            Select, LessonStatus.Available, null, null, null, null,
+            CanComplete: true, Blocker: null,
+            Exercise: new LessonExerciseProgressView(
+                ExerciseId, 10, false, maxAttempts, maxAttempts, 0, maxAttempts, false, 0),
+            Previous: null, Next: Locked(Where, Select), PathProgressPercentage: 0);
+
+        public static LessonProgressView ExerciseAttemptsExhaustedCompleted() => new(
+            Select, LessonStatus.Completed, null, DateTimeOffset.UtcNow,
+            LessonCompletionKind.AttemptsExhausted, 0, CanComplete: false, Blocker: null,
+            Exercise: new LessonExerciseProgressView(ExerciseId, 10, false, 3, 3, 0, 3, false, 0),
+            Previous: null, Next: Available(Where), PathProgressPercentage: 20);
+
         public static LessonAccessOutcome Allowed(LessonProgressView state) => new(LessonAccessStatus.Allowed, state);
         public static LessonAccessOutcome LockedState(LessonProgressView state) => new(LessonAccessStatus.Locked, state);
     }

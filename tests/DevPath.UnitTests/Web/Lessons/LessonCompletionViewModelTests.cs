@@ -106,6 +106,32 @@ public sealed class LessonCompletionViewModelTests
     }
 
     [Fact]
+    public void Attempts_exhausted_ready_shows_complete_button_not_skip()
+    {
+        var state = new LessonProgressView(
+            Select, LessonStatus.Available, null, null, null, null,
+            CanComplete: true, Blocker: null,
+            Exercise: new LessonExerciseProgressView(ExerciseId, 10, false, 3, 3, 0, 3, false, 0),
+            Previous: null, Next: Locked(Where, Select), PathProgressPercentage: 0);
+        state.Exercise!.AttemptsExhausted.Should().BeTrue();
+        var vm = Vm(state);
+        vm.ShowButton.Should().BeTrue("CanComplete + AttemptsExhausted libera Concluí");
+        vm.ShowDisabledExerciseButton.Should().BeFalse();
+        vm.ShowSkipButton.Should().BeFalse("CanSkip é false quando esgotou");
+        vm.ShowBadge.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Attempts_exhausted_completed_shows_badge_not_button()
+    {
+        var vm = Vm(Exhausted());
+        vm.ShowBadge.Should().BeTrue();
+        vm.ShowButton.Should().BeFalse();
+        vm.ShowSkipButton.Should().BeFalse();
+        vm.State.Next!.Status.Should().Be(LessonStatus.Available);
+    }
+
+    [Fact]
     public void CanSkip_shows_skip_without_countdown_text()
     {
         var vm = Vm(ExerciseNotPassed(failed: 5, canSkip: true));

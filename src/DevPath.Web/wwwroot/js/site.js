@@ -310,7 +310,8 @@ document.addEventListener("click", (event) => {
       };
 
       const maybeRefreshCompletion = async (outcome) => {
-        if (!outcome.lessonCompleted) return;
+        // pass auto-conclui (lessonCompleted); esgotar MaxAttempts só libera CanComplete — refresh mostra Concluí.
+        if (!outcome.lessonCompleted && outcome.remainingAttempts !== 0) return;
         const block = document.getElementById("lesson-completion");
         const url = block?.dataset.conclusaoUrl;
         if (!url || !window.htmx) return;

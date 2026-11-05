@@ -536,22 +536,70 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
     }
 
     [Fact]
-    public async Task Attempts_exhausted_trava_executar()
+    public async Task Attempts_exhausted_mostra_concluir_trava_executar_e_proxima()
     {
+        var ready = FakeLessonProgressGateway.Samples.ExerciseAttemptsExhaustedReady();
         await using var app = App(
             f =>
             {
-                f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(
-                    FakeLessonProgressGateway.Samples.ExerciseNotPassed(failed: 3, canSkip: true, maxAttempts: 3, remaining: 0));
+                f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(ready);
+                f.GetState = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(ready);
                 return f;
             },
             SampleExercise());
         var client = await LoggedInAsync(app);
         var html = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
         html.Should().Contain(LessonCompletionTexts.AttemptsExhaustedReason);
-        html.Should().Contain(LessonCompletionTexts.SkipButton);
+        html.Should().Contain("data-complete-form");
+        html.Should().Contain(LessonCompletionTexts.CompleteButton);
+        html.Should().NotContain("data-skip-form", "esgotar não libera Seguir; CanSkip=false");
         html.Should().Contain("data-execute-button");
         html.Should().Contain("aria-disabled");
+        html.Should().NotContain("href=\"/trilhas/" + Path + "/" + Module + "/filtrando-com-where\"");
+
+        var refresh = await (await client.GetAsync(ConclusaoUrl)).ReadHtmlAsync();
+        refresh.Should().Contain("data-complete-form", "GET /conclusao após remainingAttempts=0 traz o botão");
+        refresh.Should().Contain(LessonCompletionTexts.CompleteButton);
+    }
+
+    [Fact]
+    public async Task Attempts_exhausted_concluir_libera_proxima_e_persiste_no_reload()
+    {
+        var ready = FakeLessonProgressGateway.Samples.ExerciseAttemptsExhaustedReady();
+        var done = FakeLessonProgressGateway.Samples.ExerciseAttemptsExhaustedCompleted();
+        var calls = 0;
+        await using var app = App(
+            f =>
+            {
+                f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(calls == 0 ? ready : done);
+                f.GetState = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(done);
+                f.Complete = (_, _, _, _) =>
+                {
+                    calls++;
+                    return new LessonCompletionOutcome(LessonCompletionStatus.Completed, done);
+                };
+                return f;
+            },
+            SampleExercise());
+        var client = await LoggedInAsync(app);
+
+        (await client.GetAsync(LessonUrl)).EnsureSuccessStatusCode();
+        var post = await client.SubmitFormAsync(LessonUrl, CompleteUrl, new Dictionary<string, string>());
+        post.StatusCode.Should().Be(HttpStatusCode.Redirect);
+
+        var after = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        after.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        after.Should().ContainAny(
+            LessonCompletionTexts.AttemptsExhaustedJustCompleted,
+            LessonCompletionTexts.AttemptsExhaustedReopen);
+        after.Should().Contain("href=\"/trilhas/" + Path + "/" + Module + "/filtrando-com-where\"");
+        after.Should().NotContain("+0");
+
+        var reload = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        reload.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        reload.Should().Contain(LessonCompletionTexts.AttemptsExhaustedReopen);
+        reload.Should().Contain("href=\"/trilhas/" + Path + "/" + Module + "/filtrando-com-where\"");
+        calls.Should().Be(1);
     }
 
     [Fact]

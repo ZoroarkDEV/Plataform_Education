@@ -107,7 +107,12 @@ public sealed record LessonExerciseProgressView(
     int? RemainingAttempts,
     int FailedAttempts = 0,
     bool CanSkip = false,
-    int? FailuresUntilSkip = null);
+    int? FailuresUntilSkip = null)
+{
+    /// <summary>Alinhado ao DTO do Backend: sem pass e <c>MaxAttempts</c> esgotado.</summary>
+    public bool AttemptsExhausted =>
+        !Passed && MaxAttempts is not null && RemainingAttempts is 0;
+}
 
 /// <summary>ADR-007 <c>LessonProgressState</c>, no formato da Web.</summary>
 /// <param name="Lesson">A própria aula (<c>LessonRefDto</c> → <see cref="LessonRef"/>).</param>
