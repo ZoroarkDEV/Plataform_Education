@@ -221,6 +221,36 @@ public sealed class ContentSeederTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SeedAsync_DescricaoDaTrilha_ChegaAoBancoEEhAtualizadaNoReseed()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var esperadas = new FileSystemContentSource(copy).LoadPaths().ToDictionary(p => p.Slug, p => p.Description);
+
+            await using (var db = CreateDbContext())
+            {
+                var paths = await db.CareerPaths.ToListAsync();
+                paths.Should().HaveCount(2);
+                foreach (var p in paths)
+                    p.Description.Should().Be(esperadas[p.Slug]);
+            }
+
+            const string nova = "Descrição nova para iniciantes.";
+            EditPathYaml(copy, "sql-dados", yaml => System.Text.RegularExpressions.Regex.Replace(
+                yaml, "^description: .*$", $"description: \"{nova}\"", System.Text.RegularExpressions.RegexOptions.Multiline));
+
+            var result = await SeedAsync(copy);
+
+            result.Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using var db2 = CreateDbContext();
+            var sql = await db2.CareerPaths.SingleAsync(p => p.Slug == "sql-dados");
+            sql.Description.Should().Be(nova);
+            (await db2.CareerPaths.SingleAsync(p => p.Slug == "backend-net")).Description.Should().Be(esperadas["backend-net"]);
+        });
+    }
+
+    [Fact]
     public async Task SeedAsync_TituloDaTrilhaRenomeado_AtualizaAMesmaTrilha()
     {
         await WithContentCopy(async copy =>

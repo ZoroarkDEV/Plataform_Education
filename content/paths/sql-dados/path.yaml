@@ -1,7 +1,7 @@
 # Trilha SQL & Dados: metadados lidos pelo ContentSeeder.
 # O nome da pasta é o slug da trilha (fixo: é por ele que o seed acha a trilha no banco; o título pode mudar).
 title: "SQL & Dados"
-description: "SQL do zero com PostgreSQL rodando em Docker: modelagem, CRUD, consultas, performance, transactions e como conectar o C# ao banco."
+description: "Aprenda a consultar e organizar dados do zero, direto no navegador, sem instalar nada. Depois você monta o ambiente no seu computador e aprofunda."
 icon: database
 difficulty_level: beginner
 # Estimativa inicial; ajuste quando as aulas estiverem prontas.

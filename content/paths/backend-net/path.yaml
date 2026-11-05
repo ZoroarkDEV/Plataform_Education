@@ -1,7 +1,7 @@
 # Trilha Backend .NET: metadados lidos pelo ContentSeeder.
 # O nome da pasta é o slug da trilha (fixo: é por ele que o seed acha a trilha no banco; o título pode mudar).
 title: "Backend .NET"
-description: "Trilha principal do DevPath: do zero até um sistema completo com C#, ASP.NET Core MVC, Entity Framework Core, SQL e Docker."
+description: "Em breve: aprenda a criar sites e sistemas com C#, do primeiro programa até um projeto completo."
 icon: server
 difficulty_level: beginner
 # Estimativa inicial; ajuste quando as aulas estiverem prontas.

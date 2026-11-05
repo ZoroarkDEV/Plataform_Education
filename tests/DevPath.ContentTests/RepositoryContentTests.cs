@@ -162,6 +162,21 @@ public class RepositoryContentTests
         }
     }
 
+    [Fact]
+    public void TodasAsTrilhas_TemDescricaoCurtaESemJargao()
+    {
+        // #37 F: a descrição aparece no card de /escolha-sua-trilha para o aluno iniciante.
+        string[] jargao = ["ASP.NET", "Entity Framework", "PostgreSQL", "Docker", "CRUD", "transaction", "modelagem"];
+
+        foreach (var path in LoadPaths())
+        {
+            path.Description.Should().NotBeNullOrWhiteSpace($"a trilha '{path.Slug}' precisa de description");
+            path.Description.Length.Should().BeLessThanOrEqualTo(ContentValidator.MaxDescriptionLength);
+            foreach (var termo in jargao)
+                path.Description.Should().NotContainEquivalentOf(termo, $"a description de '{path.Slug}' é lida por iniciantes (#37 F)");
+        }
+    }
+
     private static IEnumerable<LessonContent> AllLessons() =>
         LoadPaths().SelectMany(p => p.Modules).SelectMany(m => m.Lessons);
 }
