@@ -49,6 +49,10 @@ public sealed record TestCaseFeedback(string Name, bool Passed, string? Message)
 /// <param name="TestCases">Um item por caso de teste do exercício, na ordem do conteúdo.</param>
 /// <param name="SubmissionId">Id da CodeSubmission gravada; nulo quando nada foi gravado (tentativas esgotadas, erro do exercício).</param>
 /// <param name="RemainingAttempts">Tentativas que ainda restam; nulo quando o exercício não tem limite.</param>
+/// <param name="CommonErrorMessage">
+/// Dica de um <c>common_errors</c> que casou com a tentativa; nulo quando passou, quando nenhum casou,
+/// ou quando a falha não é do aluno (preparação quebrada, tentativas esgotadas...). Nunca traz o example nem a solução.
+/// </param>
 public sealed record ExecutionOutcome(
     ExecutionStatus Status,
     IReadOnlyList<string> Columns,
@@ -61,7 +65,8 @@ public sealed record ExecutionOutcome(
     int TotalCases,
     IReadOnlyList<TestCaseFeedback> TestCases,
     Guid? SubmissionId,
-    int? RemainingAttempts)
+    int? RemainingAttempts,
+    string? CommonErrorMessage = null)
 {
     /// <summary>Resultado sem tabela (recusado antes de executar, erro do exercício, executor fora do ar...).</summary>
     public static ExecutionOutcome Failure(ExecutionStatus status, string friendlyMessage, string? technicalDetail = null,

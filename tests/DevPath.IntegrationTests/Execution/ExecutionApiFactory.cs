@@ -97,7 +97,14 @@ public sealed class ExecutionApiFactory : WebApplicationFactory<Program>, IAsync
         var module = path.AddModule("SQL básico");
         module.Publish();
         var lesson = module.AddLesson("SELECT", ContentType.Markdown, "# SELECT");
-        ExerciseId = lesson.AddExercise("Notas", "Liste nome e nota em ordem.", "sql", TestCases).Id;
+        // Solução e common_errors secretos: os testes de /executar conferem que a dica volta e que nada disso vaza.
+        ExerciseId = lesson.AddExercise("Notas", "Liste nome e nota em ordem.", "sql", TestCases,
+            solutionCode: "SOLUCAO_SECRETA_NAO_VAZAR: SELECT nome, nota FROM alunos ORDER BY nome;",
+            commonErrors:
+            [
+                new("SELECT nme FROM alunos;", "A coluna se chama nome, não nme. Confira a lista de colunas."),
+                new("SELECT nome FROM alunos ORDER BY nome;", "Faltou a coluna nota: o exercício pede nome e nota.")
+            ]).Id;
         LimitedExerciseId = lesson.AddExercise("Uma tentativa", "Só uma chance.", "sql", TestCases, maxAttempts: 1).Id;
         DraftExerciseId = module.AddLesson("Em construção", ContentType.Markdown, "# ...", isDraft: true)
             .AddExercise("Rascunho", "x", "sql", TestCases).Id;

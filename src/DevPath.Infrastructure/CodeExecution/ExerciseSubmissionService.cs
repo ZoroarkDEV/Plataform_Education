@@ -150,9 +150,14 @@ public sealed partial class ExerciseSubmissionService(
         // A tabela mostrada é a que o aluno produziu no primeiro caso (os dados "principais" do exercício).
         var table = runs[0].Table;
         var (rows, truncated) = table is null ? ([], false) : ExecutionLimits.CapRows(table);
+        // Dica de erro comum só em falha/erro do aluno: nunca no Pass e nunca vazando o example/solução.
+        var commonErrorMessage = status is ExecutionStatus.Fail or ExecutionStatus.Error
+            ? CommonErrorMatcher.Match(code, exercise.CommonErrors)
+            : null;
         return new ExecutionOutcome(status, table?.Columns ?? [], rows, truncated, friendly, technical, totalMs,
             passed, cases.Count, feedback, submission.Id,
-            exercise.MaxAttempts is { } limit ? limit - usedAttempts - 1 : null);
+            exercise.MaxAttempts is { } limit ? limit - usedAttempts - 1 : null,
+            commonErrorMessage);
     }
 
     /// <summary>

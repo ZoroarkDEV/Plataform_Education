@@ -109,6 +109,7 @@ public class ExecutionLimitsTests
         outcome.TestCases.Should().BeEmpty();
         outcome.SubmissionId.Should().BeNull();
         outcome.RemainingAttempts.Should().Be(2);
+        outcome.CommonErrorMessage.Should().BeNull();
     }
 
     [Theory]

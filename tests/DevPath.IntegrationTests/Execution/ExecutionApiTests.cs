@@ -204,6 +204,38 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
     }
 
     [DockerFact]
+    public async Task ErroComumSemeado_DevolveCommonErrorMessage_ESolucaoNaoVaza()
+    {
+        var client = await LoggedInClientAsync();
+
+        var response = await client.PostAsJsonAsync(ExecuteUrl(factory.ExerciseId),
+            new { code = "  SELECT   nme  FROM  alunos ; " });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("status").GetString().Should().Be("error");
+        body.GetProperty("commonErrorMessage").GetString()
+            .Should().Be("A coluna se chama nome, não nme. Confira a lista de colunas.");
+
+        var raw = body.GetRawText();
+        raw.Should().NotContain("SOLUCAO_SECRETA")
+            .And.NotContain("\"example\"")
+            .And.NotContain("common_errors")
+            .And.NotContain("SELECT nme FROM alunos;"); // o example em si não volta
+    }
+
+    [DockerFact]
+    public async Task SolucaoCorreta_CommonErrorMessageNulo()
+    {
+        var client = await LoggedInClientAsync();
+
+        var outcome = await ExecuteAsync(client, factory.ExerciseId, "SELECT nome, nota FROM alunos ORDER BY nome;");
+
+        outcome.Status.Should().Be(ExecutionStatus.Pass, outcome.FriendlyMessage);
+        outcome.CommonErrorMessage.Should().BeNull();
+    }
+
+    [DockerFact]
     public async Task RespostaJson_UsaOContratoDoFrontend()
     {
         var client = await LoggedInClientAsync();
@@ -214,10 +246,12 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("status").GetString().Should().Be("fail");
         foreach (var field in new[] { "columns", "rows", "truncated", "friendlyMessage", "technicalDetail", "executionTimeMs",
-                     "passedCases", "totalCases", "testCases", "submissionId", "remainingAttempts" })
+                     "passedCases", "totalCases", "testCases", "submissionId", "remainingAttempts", "commonErrorMessage" })
         {
             body.TryGetProperty(field, out _).Should().BeTrue($"o campo {field} faz parte do contrato");
         }
+        body.GetProperty("commonErrorMessage").GetString()
+            .Should().Be("Faltou a coluna nota: o exercício pede nome e nota.");
         var testCase = body.GetProperty("testCases")[0];
         testCase.GetProperty("name").GetString().Should().Be("notas por nome");
         testCase.GetProperty("passed").GetBoolean().Should().BeFalse();
@@ -225,7 +259,8 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
 
         // O retorno nunca entrega a resposta: nem as linhas esperadas (as notas) nem o formato do caso de teste.
         var raw = body.GetRawText();
-        raw.Should().NotContain("\"9\"").And.NotContain("orderMatters").And.NotContain("expected").And.NotContain("solution");
+        raw.Should().NotContain("\"9\"").And.NotContain("orderMatters").And.NotContain("expected").And.NotContain("solution")
+            .And.NotContain("SOLUCAO_SECRETA").And.NotContain("common_errors");
     }
 
     [DockerTheory]

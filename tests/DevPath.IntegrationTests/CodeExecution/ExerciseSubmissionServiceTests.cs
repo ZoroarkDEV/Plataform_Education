@@ -64,14 +64,16 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
         return dataset.Slug;
     }
 
-    private async Task<(Guid UserId, Guid ExerciseId)> CreateExerciseAsync(string testCases, int? maxAttempts = null, string? dataset = null)
+    private async Task<(Guid UserId, Guid ExerciseId)> CreateExerciseAsync(string testCases, int? maxAttempts = null, string? dataset = null,
+        IEnumerable<CommonError>? commonErrors = null, string solutionCode = "")
     {
         await using var db = fixture.CreateDbContext();
         var user = new ApplicationUser { UserName = $"{Guid.NewGuid():N}@devpath.test", Email = $"{Guid.NewGuid():N}@devpath.test", DisplayName = "Aluno" };
         db.Users.Add(user);
         var path = CareerPath.Create($"Trilha {Guid.NewGuid():N}");
         var exercise = path.AddModule("SQL").AddLesson("Select", ContentType.Markdown, "# x")
-            .AddExercise("Caros", "Liste os livros com preço, do mais caro para o mais barato.", "sql", testCases, maxAttempts: maxAttempts, dataset: dataset);
+            .AddExercise("Caros", "Liste os livros com preço, do mais caro para o mais barato.", "sql", testCases,
+                maxAttempts: maxAttempts, dataset: dataset, solutionCode: solutionCode, commonErrors: commonErrors);
         db.CareerPaths.Add(path);
         await db.SaveChangesAsync();
         return (user.Id, exercise.Id);
@@ -265,6 +267,65 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
         outcome.RemainingAttempts.Should().Be(1);
         await using var db = fixture.CreateDbContext();
         (await db.CodeSubmissions.CountAsync(s => s.ExerciseId == exerciseId)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ErroComum_Casado_DevolveMensagemSemVazarExampleNemSolucao()
+    {
+        var slug = await CreateDatasetAsync();
+        const string secretSolution = "SELECT_SOLUCAO_SECRETA_XYZ FROM livros;";
+        const string tip = "DICA_ERRO_COMUM_SECRETA: use virgula entre as colunas.";
+        var (userId, exerciseId) = await CreateExerciseAsync(TestCases(slug),
+            commonErrors:
+            [
+                new("SELECT titulo preco FROM livros;", tip),
+                new("SELECT * FROM livros;", "Trouxe colunas a mais.")
+            ],
+            solutionCode: secretSolution);
+        // Resultado errado (1 coluna) — o FakeRunner devolve o que o aluno "produziu".
+        var runner = new FakeRunner(_ => "titulo\n[{\"titulo\":\"Dom Casmurro\"}]\n");
+
+        var outcome = await SubmitAsync(userId, exerciseId, "  select   titulo   preco  FROM livros ;; ", runner);
+
+        outcome.Status.Should().Be(ExecutionStatus.Fail, Shown(outcome));
+        outcome.CommonErrorMessage.Should().Be(tip);
+        Shown(outcome).Should().NotContain("SELECT titulo preco")
+            .And.NotContain(secretSolution)
+            .And.NotContain("SELECT_SOLUCAO_SECRETA");
+        // O campo novo também não carrega o example.
+        outcome.CommonErrorMessage.Should().NotContain("SELECT");
+    }
+
+    [Fact]
+    public async Task ErroComum_Passou_CommonErrorMessageNulo()
+    {
+        var slug = await CreateDatasetAsync();
+        var (userId, exerciseId) = await CreateExerciseAsync(TestCases(slug),
+            commonErrors: [new("SELECT titulo preco FROM livros;", "faltou virgula")]);
+        var runner = new FakeRunner(prep => prep!.Contains("UPDATE")
+            ? "titulo,preco\n[{\"titulo\":\"Dom Casmurro\",\"preco\":99.00},{\"titulo\":\"O Cortiço\",\"preco\":35.00}]\n"
+            : CorrectStdout);
+
+        var outcome = await SubmitAsync(userId, exerciseId, "SELECT titulo, preco FROM livros ORDER BY preco DESC;", runner);
+
+        outcome.Status.Should().Be(ExecutionStatus.Pass, Shown(outcome));
+        outcome.CommonErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ErroComum_SqlDeErro_TambemCasa()
+    {
+        var slug = await CreateDatasetAsync();
+        const string tip = "Não existe tabela chamada livro (singular).";
+        var (userId, exerciseId) = await CreateExerciseAsync(TestCases(slug),
+            commonErrors: [new("SELECT titulo, preco FROM livro;", tip)]);
+        var runner = new FakeRunner(_ => "", exitCode: 1,
+            stderr: "ERROR:  42P01: relation \"livro\" does not exist");
+
+        var outcome = await SubmitAsync(userId, exerciseId, "SELECT titulo, preco FROM livro;", runner);
+
+        outcome.Status.Should().Be(ExecutionStatus.Error);
+        outcome.CommonErrorMessage.Should().Be(tip);
     }
 
     [Fact]
