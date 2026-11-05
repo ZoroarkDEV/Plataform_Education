@@ -252,13 +252,19 @@ conclusão vinda do exercício **não** move o foco. Contraste do selo e do moti
 
 ### Modo demo da conclusão (#27)
 
-Para revisar as telas de conclusão sem Backend/Worker de progresso, só em **Development**:
+Para revisar as telas de conclusão sem Worker de progresso, só em **Development**. O fake só substitui
+o gateway de progresso: a Web ainda exige PostgreSQL e Redis no startup (`ConnectionStrings__DevPath`
+e `ConnectionStrings__Redis` — ver `.env.example`). Infra mínima:
 
 ```bash
+cp -n .env.example .env   # se ainda não tiver
+docker compose up -d postgres redis
+set -a && . ./.env && set +a
 Demo__FakeLessonProgress=true Demo__LessonScenario=reading dotnet run --project src/DevPath.Web
 ```
 
 Registra `DevPath.Web/Demo/FakeLessonProgressGateway` (em memória, por processo) no lugar do adapter real.
 `Demo__LessonScenario`: `reading` (padrão), `exercise`, `skip` (5 falhas, "Seguir sem pontos"), `exhausted`
-(tentativas esgotadas) ou `skipped`. Fora de Development a flag é ignorada. O Executar continua real.
+(tentativas esgotadas) ou `skipped`. Fora de Development a flag é ignorada. O Executar continua real
+(precisa do Worker + Redis se for testar o botão Executar; só o bloco de conclusão basta o fake).
 

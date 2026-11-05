@@ -204,7 +204,8 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         await using var app = App(f =>
         {
             f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(
-                FakeLessonProgressGateway.Samples.ReadingAvailable());
+                calls == 0 ? FakeLessonProgressGateway.Samples.ReadingAvailable() : completed);
+            f.GetState = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(completed);
             f.Complete = (_, _, _, _) =>
             {
                 calls++;
@@ -217,8 +218,99 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         var client = await LoggedInAsync(app);
         (await client.SubmitFormAsync(LessonUrl, CompleteUrl, new Dictionary<string, string>()))
             .StatusCode.Should().Be(HttpStatusCode.Redirect);
+        var after1 = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        after1.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        after1.Should().NotContain("+0");
+
         (await client.SubmitFormAsync(LessonUrl, CompleteUrl, new Dictionary<string, string>()))
             .StatusCode.Should().Be(HttpStatusCode.Redirect);
+        var after2 = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        after2.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        after2.Should().NotContain("+0");
+        // Mesmo estado/texto de reabrir (2º POST AlreadyCompleted, sem flash novo de sucesso).
+        after2.Should().Contain(LessonCompletionTexts.ReopenReading);
+        calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Double_submit_concluir_com_pontos_mantem_mesmo_estado()
+    {
+        var completed = FakeLessonProgressGateway.Samples.ExercisePassedCompleted(10);
+        var calls = 0;
+        await using var app = App(f =>
+        {
+            f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(
+                calls == 0
+                    ? FakeLessonProgressGateway.Samples.ExerciseNotPassed() with { CanComplete = true, Blocker = null }
+                    : completed);
+            f.GetState = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(completed);
+            f.Complete = (_, _, _, _) =>
+            {
+                calls++;
+                return new LessonCompletionOutcome(
+                    calls == 1 ? LessonCompletionStatus.Completed : LessonCompletionStatus.AlreadyCompleted,
+                    completed);
+            };
+            return f;
+        }, SampleExercise());
+        var client = await LoggedInAsync(app);
+
+        (await client.SubmitFormAsync(LessonUrl, CompleteUrl, new Dictionary<string, string>()))
+            .StatusCode.Should().Be(HttpStatusCode.Redirect);
+        var after1 = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        after1.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        after1.Should().Contain("+10 pontos");
+
+        (await client.SubmitFormAsync(LessonUrl, CompleteUrl, new Dictionary<string, string>()))
+            .StatusCode.Should().Be(HttpStatusCode.Redirect);
+        var after2 = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        after2.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        after2.Should().Contain("+10 pontos");
+        after2.Should().NotContain("+0");
+        calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Double_submit_seguir_sem_pontos_mantem_mesmo_estado()
+    {
+        var skipped = FakeLessonProgressGateway.Samples.Skipped(10);
+        var calls = 0;
+        await using var app = App(f =>
+        {
+            f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(
+                calls == 0
+                    ? FakeLessonProgressGateway.Samples.ExerciseNotPassed(5, canSkip: true)
+                    : skipped);
+            f.GetState = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(skipped);
+            f.Skip = (_, _, _, _) =>
+            {
+                calls++;
+                return new LessonCompletionOutcome(
+                    calls == 1 ? LessonCompletionStatus.Completed : LessonCompletionStatus.AlreadyCompleted,
+                    skipped);
+            };
+            return f;
+        }, SampleExercise());
+        var client = await LoggedInAsync(app);
+        var body = new Dictionary<string, string> { ["skipWithoutPoints"] = "true" };
+
+        (await client.SubmitFormAsync(LessonUrl, CompleteUrl, body)).StatusCode.Should().Be(HttpStatusCode.Redirect);
+        var after1 = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        after1.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        after1.Should().ContainAny(LessonCompletionTexts.SkipJustCompleted, "seguiu sem pontos");
+        after1.Should().NotContain("+0");
+        // Consome o flash do 1º POST; o reopen mostra os pontos ainda a ganhar.
+        var after1b = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        after1b.Should().Contain("+10 pontos");
+
+        (await client.SubmitFormAsync(LessonUrl, CompleteUrl, body)).StatusCode.Should().Be(HttpStatusCode.Redirect);
+        var after2 = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        after2.Should().Contain(LessonCompletionTexts.BadgeVisible);
+        after2.Should().NotContain("+0");
+        // AlreadyCompleted não cria flash novo: mesmo reopen / mesmos pontos a ganhar.
+        var after2b = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+        after2b.Should().Contain("+10 pontos");
+        after2b.Should().Contain("seguiu sem pontos");
         calls.Should().Be(2);
     }
 

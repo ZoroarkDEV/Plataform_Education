@@ -157,7 +157,8 @@ public sealed record LessonCompletionViewModel(
 
             if (!JustSkipped && State.CompletionKind == LessonCompletionKind.AttemptsExhausted)
             {
-                return JustCompleted
+                // JustPassed: GET /conclusao depois do último Executar que esgotou e concluiu a aula.
+                return JustCompleted || JustPassed
                     ? LessonCompletionTexts.AttemptsExhaustedJustCompleted
                     : LessonCompletionTexts.AttemptsExhaustedReopen;
             }

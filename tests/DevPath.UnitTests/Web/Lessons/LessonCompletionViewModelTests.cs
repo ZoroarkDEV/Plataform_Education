@@ -204,6 +204,19 @@ public sealed class LessonCompletionViewModelTests
     }
 
     [Fact]
+    public void Attempts_exhausted_via_executar_conclusao_usa_texto_do_momento()
+    {
+        // GET /conclusao depois do último Executar: AfterPass → JustPassed, sem JustCompleted.
+        var vm = LessonCompletionViewModel.AfterPass(Exhausted(), Reading, previousKind: null);
+        vm.JustPassed.Should().BeTrue();
+        vm.JustCompleted.Should().BeFalse();
+        vm.MovesFocus.Should().BeFalse("pass pelo Executar só anuncia");
+        vm.Announces.Should().BeTrue();
+        vm.SuccessMessage.Should().Be(LessonCompletionTexts.AttemptsExhaustedJustCompleted);
+        vm.SuccessMessage.Should().NotBe(LessonCompletionTexts.AttemptsExhaustedReopen);
+    }
+
+    [Fact]
     public void Only_click_moves_focus()
     {
         Vm(ReadingCompleted(), justCompleted: true).MovesFocus.Should().BeTrue();
