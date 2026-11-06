@@ -1,10 +1,17 @@
 @model DevPath.Web.ViewModels.Account.RegisterViewModel
 @{
     ViewData["Title"] = "Criar conta";
+    const string duplicateAccountMessage = "Já existe uma conta com este e-mail.";
+    var hasDuplicateAccount = ViewData.ModelState[string.Empty]?.Errors
+        .Any(error => error.ErrorMessage == duplicateAccountMessage) == true;
+    var passwordDescribedBy = ViewData.ModelState["Password"]?.Errors.Count > 0
+        ? "Password-hint Password-error"
+        : "Password-hint";
 }
 @*
-    Validação: no servidor (Data Annotations + ModelState) e, no navegador, pelos atributos HTML5
-    (required, minlength/maxlength, pattern, type="email"), que espelham o RegisterViewModel.
+    Validação visível: só no servidor (Data Annotations + ModelState). novalidate desliga a
+    bolha nativa do navegador (em inglês) para o POST chegar e os ErrorMessage em pt-BR aparecerem.
+    Os atributos HTML5 (required, minlength, pattern) ficam por semântica; não disparam validação nativa.
     "Confirmar senha" igual à senha só é checado no servidor ([Compare]).
 *@
 <div class="mx-auto max-w-md">
@@ -12,8 +19,23 @@
         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Criar conta</h1>
         <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Comece sua trilha e acompanhe seu progresso.</p>
 
-        <form asp-controller="Account" asp-action="Register" method="post" class="mt-6 space-y-5">
-            <div asp-validation-summary="ModelOnly" role="alert"></div>
+        <form asp-controller="Account" asp-action="Register" method="post" class="mt-6 space-y-5" novalidate>
+            @if (hasDuplicateAccount)
+            {
+                <div class="validation-summary-errors" role="alert" tabindex="-1" id="register-summary">
+                    <ul>
+                        <li>
+                            Já existe uma conta com este e-mail.
+                            <a asp-controller="Account" asp-action="Login"
+                               class="link inline-flex min-h-11 min-w-11 items-center">Quer entrar?</a>
+                        </li>
+                    </ul>
+                </div>
+            }
+            else
+            {
+                <div asp-validation-summary="ModelOnly" role="alert"></div>
+            }
 
             <div>
                 <label asp-for="DisplayName" class="form-label"></label>
@@ -35,7 +57,7 @@
                        required minlength="8" maxlength="100"
                        pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+"
                        title="@DevPath.Web.ViewModels.Account.RegisterViewModel.PasswordRule"
-                       aria-describedby="Password-hint" />
+                       aria-describedby="@passwordDescribedBy" />
                 <p id="Password-hint" class="form-hint">@DevPath.Web.ViewModels.Account.RegisterViewModel.PasswordRule</p>
                 <span asp-validation-for="Password" id="Password-error"></span>
             </div>
@@ -59,4 +81,20 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            var firstInvalid = document.querySelector("input[aria-invalid=\"true\"], input.input-validation-error");
+            if (firstInvalid) {
+                firstInvalid.focus();
+                return;
+            }
+            var summary = document.querySelector(".validation-summary-errors[role=\"alert\"]");
+            if (summary && summary.textContent.trim()) {
+                if (!summary.hasAttribute("tabindex")) {
+                    summary.setAttribute("tabindex", "-1");
+                }
+                summary.focus();
+            }
+        })();
+    </script>
 }

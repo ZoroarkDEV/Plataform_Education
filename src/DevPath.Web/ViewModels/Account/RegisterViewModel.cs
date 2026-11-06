@@ -5,9 +5,9 @@ namespace DevPath.Web.ViewModels.Account;
 /// <summary>Campos do formulário de cadastro (POST /Account/Register).</summary>
 /// <remarks>
 /// Data Annotations validam no SERVIDOR (ModelState), sempre. O DevPath não usa jquery-validation
-/// (a stack é Tailwind + HTMX; o _ValidationScriptsPartial é vazio de propósito). No navegador, a
-/// validação vem dos atributos HTML5 que a view coloca nos inputs (required, minlength, maxlength e
-/// o type="email" que o [EmailAddress] gera). Ao mudar um limite aqui, ajuste também a view.
+/// (a stack é Tailwind + HTMX; o _ValidationScriptsPartial é vazio de propósito). O formulário de
+/// cadastro usa novalidate para a bolha nativa do navegador não esconder esses ErrorMessage.
+/// Ao mudar um limite aqui, ajuste também a view.
 /// Toda regra tem ErrorMessage em português (há um teste que garante isso).
 /// As regras de senha aqui espelham a política do Identity (8+ caracteres, número, minúscula, maiúscula).
 /// </remarks>

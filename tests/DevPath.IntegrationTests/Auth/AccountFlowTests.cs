@@ -70,6 +70,62 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Register_Formulario_TemNovalidate()
+    {
+        var client = factory.CreateBrowserClient();
+
+        var html = await (await client.GetAsync("/Account/Register")).ReadHtmlAsync();
+
+        html.Should().Contain("novalidate");
+    }
+
+    [Fact]
+    public async Task Register_CamposVazios_MostraErrosInlineEmPortugues()
+    {
+        var client = factory.CreateBrowserClient();
+
+        var response = await client.SubmitFormAsync("/Account/Register", "/Account/Register", new Dictionary<string, string>
+        {
+            ["DisplayName"] = "",
+            ["Email"] = "",
+            ["Password"] = "",
+            ["ConfirmPassword"] = ""
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.ReadHtmlAsync();
+        html.Should().Contain("Informe seu nome.");
+        html.Should().Contain("Informe seu e-mail.");
+        html.Should().Contain("Informe uma senha.");
+        html.Should().Contain("Confirme a senha.");
+        html.Should().Contain("novalidate");
+    }
+
+    [Fact]
+    public async Task Register_SenhaFraca_MostraRegraEDicaAcimaDoErro()
+    {
+        var client = factory.CreateBrowserClient();
+
+        var response = await client.SubmitFormAsync("/Account/Register", "/Account/Register", new Dictionary<string, string>
+        {
+            ["DisplayName"] = "Ana",
+            ["Email"] = NewEmail(),
+            ["Password"] = "abc123",
+            ["ConfirmPassword"] = "abc123"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.ReadHtmlAsync();
+        var rule = "A senha precisa ter pelo menos 8 caracteres, com letra maiúscula, letra minúscula e número.";
+        html.Should().Contain(rule);
+        var hint = html.IndexOf("id=\"Password-hint\"", StringComparison.Ordinal);
+        var error = html.IndexOf("id=\"Password-error\"", StringComparison.Ordinal);
+        hint.Should().BeGreaterThan(-1);
+        error.Should().BeGreaterThan(-1);
+        hint.Should().BeLessThan(error, "a dica permanente fica acima do erro");
+    }
+
+    [Fact]
     public async Task Register_ComEmailJaUsado_MostraErroEmPortugues()
     {
         var email = await CreateUserAsync();
@@ -84,9 +140,16 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var summary = await ErrorSummaryAsync(response);
+        var html = await response.ReadHtmlAsync();
+        var summary = ErrorSummaryFrom(html);
         summary.Should().Contain("Já existe uma conta com este e-mail.");
+        summary.Should().Contain("Quer entrar?");
         summary.Should().NotContain(email, "a mensagem não repete o e-mail (#33)");
+        html.Should().Contain("href=\"/Account/Login\"");
+        html.Should().Contain("min-h-11");
+        html.Should().Contain("value=\"Outra Pessoa\"");
+        html.Should().Contain($"value=\"{email}\"");
+        html.Should().NotContain("value=\"Senha123\"");
     }
 
     [Fact]
@@ -301,9 +364,11 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
     private const string GenericLoginError = "E-mail ou senha inválidos.";
 
     // Texto do primeiro erro do resumo de validação (asp-validation-summary) da página de login.
-    private static async Task<string> ErrorSummaryAsync(HttpResponseMessage response)
+    private static async Task<string> ErrorSummaryAsync(HttpResponseMessage response) =>
+        ErrorSummaryFrom(await response.ReadHtmlAsync());
+
+    private static string ErrorSummaryFrom(string html)
     {
-        var html = await response.ReadHtmlAsync();
         var match = System.Text.RegularExpressions.Regex.Match(html, @"validation-summary-errors[^>]*>\s*<ul>\s*<li>(.*?)</li>", System.Text.RegularExpressions.RegexOptions.Singleline);
         return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
     }
