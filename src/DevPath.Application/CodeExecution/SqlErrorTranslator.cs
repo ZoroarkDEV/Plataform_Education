@@ -34,7 +34,7 @@ public static partial class SqlErrorTranslator
         "Sua consulta demorou demais e foi interrompida. Verifique se não falta uma condição no JOIN/WHERE " +
         "ou se há uma recursão sem fim.";
 
-    public const string GenericMessage = "O PostgreSQL não conseguiu executar o seu SQL. Veja o detalhe técnico.";
+    public const string GenericMessage = "Não foi possível executar o seu SQL. Veja o detalhe técnico.";
 
     // "ERROR:  42P01: relation "x" does not exist" (o psql em modo verbose põe o código depois de ERROR:).
     [GeneratedRegex(@"^(?:psql:[^\n]*?:\s*)?ERROR:\s+([0-9A-Z]{5}):\s*(.*)$", RegexOptions.Multiline)]

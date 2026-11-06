@@ -125,7 +125,8 @@ public sealed class ExerciseSubmissionServiceTests(SubmissionDatabaseFixture fix
         var saved = await db.CodeSubmissions.SingleAsync(s => s.Id == outcome.SubmissionId);
         saved.UserId.Should().Be(userId);
         saved.Result.Should().Be(SubmissionResult.Pass);
-        saved.Feedback.Should().Be("Todos os 2 casos de teste passaram.");
+        saved.Feedback.Should().Be("Todos os 2 resultados estão como esperado.");
+        outcome.FriendlyMessage.Should().Be(ExerciseSubmissionService.PassMessage);
     }
 
     [Fact]
