@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace DevPath.Application.CodeExecution;
@@ -43,6 +45,9 @@ public static partial class SqlErrorTranslator
     [GeneratedRegex("\"([^\"]+)\"")]
     private static partial Regex FirstQuoted();
 
+    [GeneratedRegex(@"HINT:\s+Perhaps you meant to reference the column ""([^""]+)""", RegexOptions.IgnoreCase)]
+    private static partial Regex SuggestedColumnHint();
+
     public static TranslatedSqlError Translate(string stderr)
     {
         var technical = (stderr ?? string.Empty).Trim();
@@ -68,9 +73,7 @@ public static partial class SqlErrorTranslator
             "42P01" => name is null
                 ? "Você usou uma tabela que não existe. Confira o nome das tabelas do exercício."
                 : $"A tabela \"{name}\" não existe. Confira o nome das tabelas do exercício.",
-            "42703" => name is null
-                ? "Você usou uma coluna que não existe. Confira o nome das colunas."
-                : $"A coluna \"{name}\" não existe. Confira o nome das colunas (e de qual tabela elas são).",
+            "42703" => MissingColumnMessage(name, technical),
             "42702" => $"O nome da coluna{(name is null ? "" : $" \"{name}\"")} é ambíguo: ele existe em mais de uma tabela. Indique a tabela, ex.: alunos.nome.",
             "42803" => "Toda coluna do SELECT que não está dentro de uma função de agregação (COUNT, SUM...) precisa aparecer no GROUP BY.",
             "42883" => "Essa função ou operador não existe para esses tipos de dado. Confira o nome da função e os tipos dos valores.",
@@ -86,5 +89,65 @@ public static partial class SqlErrorTranslator
         };
 
         return new TranslatedSqlError(code, friendly, technical, IsTimeout: code == "57014");
+    }
+
+    private static string MissingColumnMessage(string? name, string technical)
+    {
+        var suggestion = SuggestedColumnName(technical);
+        var unaccented = name is null ? null : RemoveDiacritics(name);
+
+        string? tip = null;
+        if (suggestion is not null)
+        {
+            var accentTypo = unaccented is not null
+                && suggestion.Equals(unaccented, StringComparison.OrdinalIgnoreCase);
+            tip = accentTypo
+                ? $"Tente \"{suggestion}\" (sem acento)."
+                : $"Será que você quis dizer \"{suggestion}\"?";
+        }
+        else if (name is not null && unaccented is not null
+                 && !name.Equals(unaccented, StringComparison.Ordinal))
+        {
+            tip = $"Tente \"{unaccented}\" (sem acento).";
+        }
+
+        if (name is null)
+        {
+            return tip is null
+                ? "Você usou uma coluna que não existe. Confira o nome das colunas."
+                : $"Você usou uma coluna que não existe. {tip}";
+        }
+
+        return tip is null
+            ? $"A coluna \"{name}\" não existe. Confira o nome das colunas (e de qual tabela elas são)."
+            : $"A coluna \"{name}\" não existe. {tip}";
+    }
+
+    private static string? SuggestedColumnName(string technical)
+    {
+        var match = SuggestedColumnHint().Match(technical);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var quoted = match.Groups[1].Value;
+        var dot = quoted.LastIndexOf('.');
+        return dot >= 0 && dot < quoted.Length - 1 ? quoted[(dot + 1)..] : quoted;
+    }
+
+    private static string RemoveDiacritics(string value)
+    {
+        var normalized = value.Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(normalized.Length);
+        foreach (var ch in normalized)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+            {
+                builder.Append(ch);
+            }
+        }
+
+        return builder.ToString().Normalize(NormalizationForm.FormC);
     }
 }
