@@ -241,7 +241,9 @@ Partials: `_LessonCompletion`, `_CompletedBadge`, `_LessonPager` (Previous/Next 
 (`code_empty`, `code_too_long`, `antiforgery_invalid`, `malformed_body`). Em
 `antiforgery_invalid`, busca um token novo e tenta **uma** vez em silêncio; se falhar de novo,
 mostra o erro genérico. O campo opcional `commonErrorMessage` (#32) aparece como "Dica" (estilo
-informativo) abaixo do feedback, na mesma região polite — a UI tolera a ausência. "Dados usados"
+informativo) abaixo da tabela de resultado; se não houver tabela, fica abaixo do
+feedback. A dica não entra na fila `data-hints` e é anunciada na região polite (`#lesson-live` ou `#copy-status`)
+— a UI tolera a ausência do campo. "Dados usados"
 usa `ExerciseDto.DatasetDisplayName` quando existir; senão humaniza o slug (`livraria` → "Livraria",
 `loja_online` → "Loja online").
 
