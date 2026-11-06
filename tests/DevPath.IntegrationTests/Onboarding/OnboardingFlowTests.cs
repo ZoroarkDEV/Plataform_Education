@@ -31,8 +31,14 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
         var html = await (await client.GetAsync("/")).ReadHtmlAsync();
 
         Regex.Matches(html, @"class=""btn-primary\b").Count.Should().Be(1, "a home tem uma única ação principal");
-        html.Should().MatchRegex(@"<a (?=[^>]*href=""/Account/Register"")(?=[^>]*class=""btn-primary)[^>]*>Começar Agora</a>");
+        html.Should().MatchRegex(@"<a (?=[^>]*href=""/Account/Register"")(?=[^>]*class=""btn-primary)[^>]*>Começar agora</a>");
         html.Should().Contain("Já tenho conta").And.Contain("href=\"/Account/Login\"");
+        html.Should().Contain("Trilhas práticas para aprender programação e dados no seu ritmo, com exercícios e progresso salvos.")
+            .And.Contain("Comece pelo que já está disponível — hoje, SQL & Dados.")
+            .And.Contain("A página Minha trilha mostra onde você parou.")
+            .And.NotContain("ASP.NET Core MVC")
+            .And.NotContain("ou Backend .NET")
+            .And.NotContain("O dashboard mostra onde você parou.");
     }
 
     [Fact]
