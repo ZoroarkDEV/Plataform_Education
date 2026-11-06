@@ -32,7 +32,7 @@ public static class ResultComparer
         if (actual.Columns.Count != expected.Columns.Count)
         {
             return ResultComparison.Fail(
-                $"Sua consulta devolveu {Plural(actual.Columns.Count, "coluna", "colunas")}, mas o esperado é {Plural(expected.Columns.Count, "coluna", "colunas")}. " +
+                $"Ainda não está certo: sua consulta trouxe {Plural(actual.Columns.Count, "coluna", "colunas")}, e o exercício pede {Plural(expected.Columns.Count, "coluna", "colunas")}. " +
                 "Confira a lista depois do SELECT.");
         }
 
@@ -53,14 +53,14 @@ public static class ResultComparer
         if (actual.Truncated)
         {
             return ResultComparison.Fail(
-                $"Sua consulta devolveu mais de {actual.Rows.Count} linhas, mas o esperado é {Plural(expected.Rows.Count, "linha", "linhas")}. " +
+                $"Ainda não está certo: sua consulta trouxe mais de {actual.Rows.Count} linhas, e o exercício pede {Plural(expected.Rows.Count, "linha", "linhas")}. " +
                 "Faltou um filtro (WHERE) ou um JOIN está multiplicando linhas?");
         }
 
         if (actual.Rows.Count != expected.Rows.Count)
         {
             return ResultComparison.Fail(
-                $"Sua consulta devolveu {Plural(actual.Rows.Count, "linha", "linhas")}, mas o esperado é {Plural(expected.Rows.Count, "linha", "linhas")}.");
+                $"Ainda não está certo: sua consulta trouxe {Plural(actual.Rows.Count, "linha", "linhas")}, e o exercício pede {Plural(expected.Rows.Count, "linha", "linhas")}.");
         }
 
         // 3) valores. Primeiro como multiconjunto: serve para os dois modos e ajuda a explicar o erro.

@@ -38,7 +38,8 @@ public class ResultComparerTests
     {
         var r = Compare(Expected("""["titulo","preco"]""", """[["A",10]]"""), Actual(["titulo"], """[["A"]]"""));
         r.Passed.Should().BeFalse();
-        r.Feedback.Should().Contain("1 coluna").And.Contain("2 colunas");
+        r.Feedback.Should().Contain("Ainda não está certo").And.Contain("1 coluna").And.Contain("2 colunas")
+            .And.NotContain("devolveu");
     }
 
     [Fact]
@@ -107,7 +108,8 @@ public class ResultComparerTests
     {
         var r = Compare(Expected("""["n"]""", """[["A"],["B"]]"""), Actual(["n"], """[["A"]]"""));
         r.Passed.Should().BeFalse();
-        r.Feedback.Should().Contain("1 linha").And.Contain("2 linhas");
+        r.Feedback.Should().Contain("Ainda não está certo").And.Contain("1 linha").And.Contain("2 linhas")
+            .And.NotContain("devolveu");
     }
 
     [Fact]
