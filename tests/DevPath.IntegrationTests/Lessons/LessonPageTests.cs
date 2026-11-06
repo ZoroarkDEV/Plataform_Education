@@ -165,6 +165,8 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
         html.Should().Contain("name=\"dicas-exercicio\"");
         System.Text.RegularExpressions.Regex.Matches(html, "name=\"dicas-exercicio\"").Count.Should().Be(2);
         html.Should().NotMatchRegex(@"<li data-hint[^>]*\bhidden\b");
+        html.Should().MatchRegex(@"<summary class=""min-h-11 cursor-pointer py-3 font-medium");
+        html.Should().NotMatchRegex(@"<summary[^>]*\bflex\b");
 
         var order = new[] { "data-lesson-content", "data-exercise", "id=\"sec-resumo\"" }
             .Select(marker => html.IndexOf(marker, StringComparison.Ordinal)).ToList();
