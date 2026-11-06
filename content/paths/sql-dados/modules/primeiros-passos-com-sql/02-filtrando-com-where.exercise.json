@@ -8,7 +8,7 @@
   "solution": "SELECT titulo, preco FROM livros WHERE genero = 'Fantasia' AND preco < 60;",
   "hints": [
     "Você precisa de duas condições ao mesmo tempo: gênero e preço. Que palavra junta duas condições?",
-    "O filtro precisa das duas condições ao mesmo tempo: gênero e preço. O texto do gênero vai entre aspas simples, escrito exatamente como na tabela (a primeira letra é maiúscula). O número do preço vai sem aspas. Qual sinal significa \"menor que\"?"
+    "No filtro, o gênero é um texto e o preço é um número. Qual dos dois vai entre aspas simples, escrito como na tabela? E qual sinal significa \"menor que\"?"
   ],
   "test_cases": [
     {
