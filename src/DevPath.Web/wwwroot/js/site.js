@@ -245,16 +245,28 @@ document.addEventListener("click", (event) => {
     const detail = outcome.technicalDetail
       ? `<details class="mt-2 text-sm"><summary class="cursor-pointer">Ver detalhe técnico</summary><pre class="mt-1 whitespace-pre-wrap font-mono text-xs">${escapeHtml(outcome.technicalDetail)}</pre></details>`
       : "";
-    // #32: commonErrorMessage opcional; tolerante se ausente.
-    const tip = outcome.commonErrorMessage
-      ? `<p class="mt-2 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" data-common-error><span class="font-semibold">Dica:</span> ${escapeHtml(outcome.commonErrorMessage)}</p>`
-      : "";
     container.innerHTML = `
       <p class="font-medium text-slate-900 dark:text-white" data-friendly-message>${escapeHtml(outcome.friendlyMessage || "")}</p>
       ${cases ? `<ul class="mt-2 list-disc space-y-1 pl-5 text-sm">${cases}</ul>` : ""}
-      ${tip}
       ${detail}
       ${extras}`;
+  };
+
+  // #32: dica de erro comum abaixo do resultado (tabela, se houver), fora da fila de dicas.
+  const renderCommonErrorTip = (section, feedback, results, outcome) => {
+    section.querySelector("[data-common-error]")?.remove();
+    if (!outcome.commonErrorMessage) return;
+
+    const tip = document.createElement("p");
+    tip.dataset.commonError = "";
+    tip.className = "mt-4 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200";
+    tip.innerHTML = `<span class="font-semibold">Dica:</span> ${escapeHtml(outcome.commonErrorMessage)}`;
+
+    const hasTable = Boolean(results && !results.hidden && results.querySelector("[data-result-table]"));
+    if (hasTable) results.after(tip);
+    else feedback.after(tip);
+
+    announce(`Dica: ${outcome.commonErrorMessage}`);
   };
 
   const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({
@@ -408,6 +420,7 @@ document.addEventListener("click", (event) => {
 
           renderFeedback(feedback, outcome, extras);
           if (results) renderResults(results, outcome);
+          renderCommonErrorTip(section, feedback, results, outcome);
           await maybeRefreshCompletion(outcome);
         } catch (err) {
           const msg = err?.status === 401 ? TEXTS.unauthorized : TEXTS.platform;
