@@ -88,20 +88,35 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  // Dicas do exercício: sem JS todas aparecem (fechadas). Com JS, só a primeira aparece; abrir
-  // uma dica libera a seguinte, e o leitor de tela é avisado.
+  // Dicas do exercício: sem JS todas aparecem (fechadas, name=dicas-exercicio).
+  // Com JS, só a primeira aparece; abrir uma libera a seguinte (ainda fechada),
+  // fecha as outras (accordion) e o leitor de tela é avisado. Não persiste.
   const setupHints = (root) => {
     root.querySelectorAll("[data-hints]").forEach((list) => {
       if (list.dataset.hintsReady) return;
       list.dataset.hintsReady = "true";
       const items = [...list.querySelectorAll("[data-hint]")];
+      const panels = items
+        .map((item) => item.querySelector("details"))
+        .filter(Boolean);
+
       items.forEach((item, index) => {
         if (index > 0) item.hidden = true;
-        item.querySelector("details")?.addEventListener("toggle", (event) => {
+        const panel = panels[index];
+        if (!panel) return;
+
+        panel.addEventListener("toggle", (event) => {
+          if (!event.target.open) return;
+
+          panels.forEach((other) => {
+            if (other !== panel && other.open) other.open = false;
+          });
+
           const next = items[index + 1];
-          if (event.target.open && next && next.hidden) {
+          if (next && next.hidden) {
             next.hidden = false;
             announce(`Dica ${index + 2} de ${items.length} disponível.`);
+            next.querySelector("summary")?.focus();
           }
         });
       });

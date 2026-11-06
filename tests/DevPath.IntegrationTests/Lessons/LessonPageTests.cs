@@ -161,6 +161,10 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
         html.Should().Contain("Código para começar").And.Contain("Copiar código SQL");
         html.Should().Contain("Ver dica 1 de 2").And.Contain("Ver dica 2 de 2");
         html.Should().Contain("data-hints");
+        html.Should().Contain("Tente sozinho primeiro. Abra uma dica de cada vez: a primeira é a mais geral.");
+        html.Should().Contain("name=\"dicas-exercicio\"");
+        System.Text.RegularExpressions.Regex.Matches(html, "name=\"dicas-exercicio\"").Count.Should().Be(2);
+        html.Should().NotMatchRegex(@"<li data-hint[^>]*\bhidden\b");
 
         var order = new[] { "data-lesson-content", "data-exercise", "id=\"sec-resumo\"" }
             .Select(marker => html.IndexOf(marker, StringComparison.Ordinal)).ToList();
