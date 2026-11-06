@@ -38,8 +38,8 @@ public sealed partial class ExerciseSubmissionService(
     /// <summary>Quanto do erro técnico vai para o "Ver detalhe técnico".</summary>
     private const int MaxTechnicalDetailChars = 1_000;
 
-    public const string PassMessage = "Parabéns! Sua consulta passou em todos os casos de teste.";
-    public const string FailMessage = "Sua consulta rodou, mas o resultado ainda não é o esperado. Veja os casos de teste.";
+    public const string PassMessage = "Parabéns! Sua consulta devolveu o resultado esperado.";
+    public const string FailMessage = "Sua consulta rodou, mas o resultado ainda não é o esperado.";
     public const string OomMessage = "Sua consulta usou memória demais e foi interrompida. Tente filtrar mais os dados.";
     public const string OutputTooLargeMessage = "Sua consulta devolveu dados demais. Filtre as linhas (WHERE) ou escolha menos colunas.";
     public const string SetupFailedMessage = "Houve um erro na preparação deste exercício (não é culpa sua). A tentativa não foi contada. Avise a equipe.";
@@ -129,7 +129,7 @@ public sealed partial class ExerciseSubmissionService(
             : passed == cases.Count ? (ExecutionStatus.Pass, PassMessage, (string?)null) : (ExecutionStatus.Fail, FailMessage, null);
 
         var summary = status == ExecutionStatus.Pass
-            ? (cases.Count == 1 ? "O caso de teste passou." : $"Todos os {cases.Count} casos de teste passaram.")
+            ? (cases.Count == 1 ? "O resultado está como esperado." : $"Todos os {cases.Count} resultados estão como esperado.")
             : string.Join("\n", feedback.Where(f => !f.Passed).Select(f => $"Caso \"{f.Name}\": {f.Message}"));
 
         var submission = CodeSubmission.Create(userId, exerciseId, code, AttemptCounting.ResultFor(status), totalMs, summary);
