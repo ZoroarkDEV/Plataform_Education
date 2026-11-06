@@ -8,7 +8,7 @@
   "solution": "SELECT titulo, preco FROM livros ORDER BY preco DESC LIMIT 3;",
   "hints": [
     "Primeiro ordene pelo preço do maior para o menor, depois corte o resultado.",
-    "Complete o final: ORDER BY ______ ____ LIMIT ___ . Qual palavra faz a ordem ir do maior para o menor?"
+    "Depois de escolher as colunas, ordene pelo preço do maior para o menor — qual palavra depois do nome da coluna faz a ordem começar do mais alto? No final, limite o resultado às 3 linhas da vitrine."
   ],
   "test_cases": [
     {

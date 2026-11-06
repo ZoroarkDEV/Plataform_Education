@@ -163,6 +163,24 @@ public class RepositoryContentTests
     }
 
     [Fact]
+    public void Exercicios_NenhumaDicaContemASolucao()
+    {
+        // Dicas guiam com pistas ou lacunas, sem entregar a query completa.
+        foreach (var lesson in AllLessons().Where(l => l.Exercise is not null))
+        {
+            var exercise = lesson.Exercise!;
+            var solution = NormalizeSql(exercise.Solution);
+            solution.Should().NotBeNullOrWhiteSpace(exercise.SourceFile);
+
+            foreach (var hint in exercise.Hints)
+            {
+                NormalizeSql(hint).Should().NotContain(solution,
+                    $"a dica de {exercise.SourceFile} não pode conter a solução");
+            }
+        }
+    }
+
+    [Fact]
     public void TodasAsTrilhas_TemDescricaoCurtaESemJargao()
     {
         // #37 F: a descrição aparece no card de /escolha-sua-trilha para o aluno iniciante.
@@ -179,4 +197,10 @@ public class RepositoryContentTests
 
     private static IEnumerable<LessonContent> AllLessons() =>
         LoadPaths().SelectMany(p => p.Modules).SelectMany(m => m.Lessons);
+
+    private static string NormalizeSql(string sql)
+    {
+        var trimmed = sql.Trim().TrimEnd(';').Trim();
+        return Regex.Replace(trimmed, @"\s+", " ").ToLowerInvariant();
+    }
 }
