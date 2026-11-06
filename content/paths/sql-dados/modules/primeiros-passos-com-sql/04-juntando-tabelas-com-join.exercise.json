@@ -8,7 +8,7 @@
   "solution": "SELECT livros.titulo, autores.nome FROM livros INNER JOIN autores ON livros.autor_id = autores.id;",
   "hints": [
     "O nome do autor está em outra tabela. Qual coluna de livros aponta para autores?",
-    "Para trazer o nome do autor, una as duas tabelas com INNER JOIN. No ON, ligue a coluna de livros que guarda o número do autor ao id da tabela de autores. No SELECT, peça o título e o nome — e anteponha o nome da tabela em cada coluna para o banco não se confundir."
+    "O título está numa tabela e o nome do autor em outra. Como você une as duas tabelas para cada livro aparecer com o nome certo do autor? No SELECT, como você deixa claro de qual tabela vem cada coluna?"
   ],
   "test_cases": [
     {
