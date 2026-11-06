@@ -4,9 +4,7 @@
     const string duplicateAccountMessage = "Já existe uma conta com este e-mail.";
     var hasDuplicateAccount = ViewData.ModelState[string.Empty]?.Errors
         .Any(error => error.ErrorMessage == duplicateAccountMessage) == true;
-    var passwordDescribedBy = ViewData.ModelState["Password"]?.Errors.Count > 0
-        ? "Password-hint Password-error"
-        : "Password-hint";
+    const string passwordDescribedBy = "Password-hint";
 }
 @*
     Validação visível: só no servidor (Data Annotations + ModelState). novalidate desliga a
