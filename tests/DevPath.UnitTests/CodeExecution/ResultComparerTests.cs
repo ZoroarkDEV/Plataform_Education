@@ -314,6 +314,50 @@ public class SqlErrorTranslatorTests
     }
 
     [Fact]
+    public void ColunaInexistente_ComHintDeAcento_SugereNomeSemAcento()
+    {
+        const string stderr =
+            """
+            ERROR:  42703: column "preço" does not exist
+            LINE 1: SELECT título, preço FROM livros
+            HINT:  Perhaps you meant to reference the column "livros.preco".
+            """;
+        var error = SqlErrorTranslator.Translate(stderr);
+        error.SqlState.Should().Be("42703");
+        error.FriendlyMessage.Should().Be("A coluna \"preço\" não existe. Tente \"preco\" (sem acento).");
+        error.FriendlyMessage.Should().NotContain("livros.preco");
+        error.FriendlyMessage.Should().NotContain("Perhaps you meant");
+        error.TechnicalDetail.Should().Contain("42703");
+    }
+
+    [Fact]
+    public void ColunaInexistente_ComHintDeTypo_SugereAlternativa()
+    {
+        const string stderr =
+            """
+            ERROR:  42703: column "nme" does not exist
+            HINT:  Perhaps you meant to reference the column "alunos.nome".
+            """;
+        var error = SqlErrorTranslator.Translate(stderr);
+        error.FriendlyMessage.Should().Be("A coluna \"nme\" não existe. Será que você quis dizer \"nome\"?");
+        error.FriendlyMessage.Should().NotContain("sem acento");
+    }
+
+    [Fact]
+    public void ColunaInexistente_ComAcentoSemHint_SugereSemAcento()
+    {
+        var error = SqlErrorTranslator.Translate("ERROR:  42703: column \"preço\" does not exist");
+        error.FriendlyMessage.Should().Be("A coluna \"preço\" não existe. Tente \"preco\" (sem acento).");
+    }
+
+    [Fact]
+    public void ColunaInexistente_SemHintNemAcento_PedeParaConferir()
+    {
+        var error = SqlErrorTranslator.Translate("ERROR:  42703: column \"xyz\" does not exist");
+        error.FriendlyMessage.Should().Be("A coluna \"xyz\" não existe. Confira o nome das colunas (e de qual tabela elas são).");
+    }
+
+    [Fact]
     public void Timeout_EhMarcado() =>
         SqlErrorTranslator.Translate("ERROR:  57014: canceling statement due to statement timeout").IsTimeout.Should().BeTrue();
 }
