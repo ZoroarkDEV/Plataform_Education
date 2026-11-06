@@ -39,7 +39,7 @@ public sealed partial class ExerciseSubmissionService(
     private const int MaxTechnicalDetailChars = 1_000;
 
     public const string PassMessage = "Parabéns! Sua consulta devolveu o resultado esperado.";
-    public const string FailMessage = "Sua consulta rodou, mas o resultado ainda não é o esperado.";
+    public const string FailMessage = "Ainda não é isso. O resultado da sua consulta é diferente do que pedimos.";
     public const string OomMessage = "Sua consulta usou memória demais e foi interrompida. Tente filtrar mais os dados.";
     public const string OutputTooLargeMessage = "Sua consulta devolveu dados demais. Filtre as linhas (WHERE) ou escolha menos colunas.";
     public const string SetupFailedMessage = "Houve um erro na preparação deste exercício (não é culpa sua). A tentativa não foi contada. Avise a equipe.";
