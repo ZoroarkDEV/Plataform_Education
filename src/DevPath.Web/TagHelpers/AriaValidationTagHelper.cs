@@ -6,9 +6,9 @@ namespace DevPath.Web.TagHelpers;
 
 /// <summary>
 /// Acessibilidade dos erros de validação: em todo &lt;input asp-for&gt; / &lt;select asp-for&gt; / &lt;textarea asp-for&gt;
-/// adiciona aria-describedby="{id}-error" (o &lt;span asp-validation-for&gt; correspondente deve ter esse id)
-/// e, quando o ModelState tem erro para o campo, aria-invalid="true".
-/// Assim o leitor de tela anuncia a mensagem de erro junto com o campo.
+/// junta o aria-describedby já existente (ex.: dica permanente) com "{id}-error" só quando o campo
+/// tem erro no ModelState — sem duplicar ids — e marca aria-invalid="true".
+/// O &lt;span asp-validation-for&gt; correspondente deve ter id="{id}-error".
 /// </summary>
 [HtmlTargetElement("input", Attributes = ForAttributeName)]
 [HtmlTargetElement("select", Attributes = ForAttributeName)]
@@ -40,15 +40,27 @@ public sealed class AriaValidationTagHelper : TagHelper
             ? idAttr.Value?.ToString() ?? TagBuilder.CreateSanitizedId(fullName, "_")
             : TagBuilder.CreateSanitizedId(fullName, "_");
 
-        var describedBy = $"{id}-error";
+        var parts = new List<string>();
         if (output.Attributes.TryGetAttribute("aria-describedby", out var existing) &&
             !string.IsNullOrWhiteSpace(existing.Value?.ToString()))
         {
-            describedBy = $"{existing.Value} {describedBy}";
+            parts.AddRange(existing.Value.ToString()!
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         }
-        output.Attributes.SetAttribute("aria-describedby", describedBy);
 
-        if (ViewContext.ViewData.ModelState.TryGetValue(fullName, out var entry) && entry.Errors.Count > 0)
+        var hasError = ViewContext.ViewData.ModelState.TryGetValue(fullName, out var entry) && entry.Errors.Count > 0;
+        var errorId = $"{id}-error";
+        if (hasError && !parts.Contains(errorId, StringComparer.Ordinal))
+        {
+            parts.Add(errorId);
+        }
+
+        if (parts.Count > 0)
+        {
+            output.Attributes.SetAttribute("aria-describedby", string.Join(" ", parts));
+        }
+
+        if (hasError)
         {
             output.Attributes.SetAttribute("aria-invalid", "true");
         }

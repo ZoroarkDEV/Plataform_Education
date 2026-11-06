@@ -96,14 +96,6 @@ internal sealed class AuthService(
 
     // UserName = Email, então e-mail repetido gera DuplicateEmail E DuplicateUserName.
     // Mostramos só uma vez.
-    private static IEnumerable<string> DescribeErrors(IEnumerable<IdentityError> errors)
-    {
-        var list = errors.ToList();
-        if (list.Any(e => e.Code == nameof(IdentityErrorDescriber.DuplicateEmail)))
-        {
-            list.RemoveAll(e => e.Code == nameof(IdentityErrorDescriber.DuplicateUserName));
-        }
-
-        return list.Select(e => e.Description).Distinct();
-    }
+    private static IEnumerable<string> DescribeErrors(IEnumerable<IdentityError> errors) =>
+        RegisterErrorDescriptions.Describe(errors);
 }

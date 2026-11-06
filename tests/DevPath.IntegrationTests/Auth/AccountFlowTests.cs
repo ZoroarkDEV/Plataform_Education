@@ -77,6 +77,8 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
         var html = await (await client.GetAsync("/Account/Register")).ReadHtmlAsync();
 
         html.Should().Contain("novalidate");
+        html.Should().MatchRegex(@"<input(?=[^>]*id=""Password"")(?=[^>]*aria-describedby=""Password-hint"")[^>]*>");
+        html.Should().NotMatchRegex(@"<input(?=[^>]*id=""Password"")[^>]*aria-describedby=""[^""]*Password-error");
     }
 
     [Fact]
@@ -99,6 +101,10 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
         html.Should().Contain("Informe uma senha.");
         html.Should().Contain("Confirme a senha.");
         html.Should().Contain("novalidate");
+        html.Should().Contain("aria-invalid=\"true\"");
+        html.Should().MatchRegex(@"<input(?=[^>]*id=""DisplayName"")(?=[^>]*aria-invalid=""true"")[^>]*>");
+        html.Should().Contain("input[aria-invalid=\\\"true\\\"]");
+        html.Should().Contain(".validation-summary-errors[role=\\\"alert\\\"]");
     }
 
     [Fact]
@@ -123,6 +129,8 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
         hint.Should().BeGreaterThan(-1);
         error.Should().BeGreaterThan(-1);
         hint.Should().BeLessThan(error, "a dica permanente fica acima do erro");
+        html.Should().MatchRegex(@"<input(?=[^>]*id=""Password"")(?=[^>]*aria-describedby=""Password-hint Password-error"")(?=[^>]*aria-invalid=""true"")[^>]*>");
+        html.Should().NotContain("Password-hint Password-error Password-error");
     }
 
     [Fact]
@@ -144,8 +152,8 @@ public sealed class AccountFlowTests(DevPathWebApplicationFactory factory)
         var summary = ErrorSummaryFrom(html);
         summary.Should().Contain("Já existe uma conta com este e-mail.");
         summary.Should().Contain("Quer entrar?");
+        summary.Should().Contain("href=\"/Account/Login\"", "o link fica no resumo, não só o Entrar do rodapé");
         summary.Should().NotContain(email, "a mensagem não repete o e-mail (#33)");
-        html.Should().Contain("href=\"/Account/Login\"");
         html.Should().Contain("min-h-11");
         html.Should().Contain("value=\"Outra Pessoa\"");
         html.Should().Contain($"value=\"{email}\"");
