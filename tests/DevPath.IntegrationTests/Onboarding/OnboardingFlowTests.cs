@@ -205,10 +205,13 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
             .And.MatchRegex(@"href=""/trilhas/sql-dados/primeiros-passos-com-sql/juntando-tabelas-com-join""[^>]*data-continue>\s*Continuar")
             .And.Contain("Concluída").And.Contain("Em andamento").And.Contain("Bloqueada").And.Contain("Em breve")
             .And.Contain("Conclua '<a href=\"/trilhas/sql-dados/primeiros-passos-com-sql/juntando-tabelas-com-join\" class=\"link\">Juntando tabelas com JOIN</a>' para liberar esta aula")
-            .And.Contain("Esta aula está sendo escrita");
+            .And.Contain("Aulas da trilha")
+            .And.Contain("Este módulo ainda está sendo escrito. Ele aparece aqui quando a primeira aula for publicada.");
         // Aula bloqueada e "Em breve" não viram link.
         html.Should().NotContain("href=\"/trilhas/sql-dados/primeiros-passos-com-sql/resumindo-dados-com-group-by\"")
-            .And.NotContain("href=\"/trilhas/sql-dados/ambiente/o-que-e-banco-relacional\"");
+            .And.NotContain("href=\"/trilhas/sql-dados/ambiente/o-que-e-banco-relacional\"")
+            .And.NotContain("O que é um banco relacional")
+            .And.NotContain("Instalando o Docker Desktop");
     }
 
     [Fact]
@@ -230,6 +233,23 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
         };
         var positions = titles.Select(t => html.IndexOf(t, StringComparison.Ordinal)).ToArray();
         positions.Should().OnlyContain(p => p >= 0).And.BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task Dashboard_ModuloEmBreve_NaoListaAulasRascunho()
+    {
+        var client = CreateClientWith(new FakeStudentJourneyGateway());
+        await RegisterAsync(client);
+        await ChooseSqlAsync(client);
+
+        var html = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
+
+        html.Should().Contain("Aulas da trilha")
+            .And.Contain("Este módulo ainda está sendo escrito. Ele aparece aqui quando a primeira aula for publicada.")
+            .And.Contain("Em breve")
+            .And.NotContain("Roadmap da trilha")
+            .And.NotContain("O que é um banco relacional")
+            .And.NotContain("Instalando o Docker Desktop");
     }
 
     [Fact]

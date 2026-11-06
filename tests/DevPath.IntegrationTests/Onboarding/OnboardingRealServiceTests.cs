@@ -53,7 +53,8 @@ public sealed class OnboardingRealServiceTests(JourneyWebApplicationFactory fact
             .And.Contain("0% concluído — 0 de 2 aulas", "o % e o total usam AvailableLessons, sem o rascunho")
             .And.MatchRegex($@"href=""/trilhas/{factory.SqlSlug}/{module}/primeira-aula""[^>]*data-continue>\s*Começar pela aula 1")
             .And.Contain($"Conclua '<a href=\"/trilhas/{factory.SqlSlug}/{module}/primeira-aula\" class=\"link\">Primeira Aula</a>' para liberar esta aula")
-            .And.Contain("Aula Rascunho").And.Contain("Esta aula está sendo escrita");
+            .And.Contain("Mais aulas deste módulo em breve")
+            .And.NotContain("Aula Rascunho").And.NotContain("Esta aula está sendo escrita");
         html.Should().NotContain($"href=\"/trilhas/{factory.SqlSlug}/{module}/segunda-aula\"", "aula bloqueada não vira link")
             .And.NotContain("0 de 3");
         Regex.Matches(html, @"class=""btn-primary\b").Count.Should().Be(1);

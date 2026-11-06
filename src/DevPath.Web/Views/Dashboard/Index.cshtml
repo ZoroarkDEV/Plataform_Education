@@ -1,3 +1,4 @@
+@using System.Linq
 @using DevPath.Web.ViewModels.Onboarding
 @model DashboardViewModel
 @{
@@ -73,8 +74,8 @@
 
 @if (Model.Modules.Count > 0)
 {
-    <section class="mt-10" aria-labelledby="roadmap-titulo">
-        <h2 id="roadmap-titulo" class="text-xl font-semibold text-slate-900 dark:text-white">Roadmap da trilha</h2>
+    <section class="mt-10" aria-labelledby="aulas-trilha-titulo">
+        <h2 id="aulas-trilha-titulo" class="text-xl font-semibold text-slate-900 dark:text-white">Aulas da trilha</h2>
         <ol class="mt-4 space-y-4">
             @foreach (var module in Model.Modules)
             {
@@ -95,8 +96,19 @@
                         </div>
                     }
 
+                    @if (module.IsComingSoon)
+                    {
+                        <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                            Este módulo ainda está sendo escrito. Ele aparece aqui quando a primeira aula for publicada.
+                        </p>
+                    }
+                    else
+                    {
+                        var visibleLessons = module.Lessons.Where(item => item.Status != LessonStatus.ComingSoon).ToList();
+                        var hasUpcomingLessons = module.Lessons.Any(item => item.Status == LessonStatus.ComingSoon);
+
                     <ol class="mt-4 divide-y divide-slate-200 dark:divide-slate-700">
-                        @foreach (var item in module.Lessons)
+                        @foreach (var item in visibleLessons)
                         {
                             <li class="flex flex-col gap-1 py-3 sm:flex-row sm:items-start sm:gap-3" data-lesson-status="@item.Status">
                                 @if (item.Status == LessonStatus.Completed)
@@ -140,14 +152,15 @@
                                             }
                                         </p>
                                     }
-                                    else if (item.Status == LessonStatus.ComingSoon)
-                                    {
-                                        <p class="mt-0.5 text-sm text-slate-600 dark:text-slate-300">Esta aula está sendo escrita</p>
-                                    }
                                 </div>
                             </li>
                         }
                     </ol>
+                        @if (hasUpcomingLessons)
+                        {
+                            <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">Mais aulas deste módulo em breve</p>
+                        }
+                    }
                 </li>
             }
         </ol>
