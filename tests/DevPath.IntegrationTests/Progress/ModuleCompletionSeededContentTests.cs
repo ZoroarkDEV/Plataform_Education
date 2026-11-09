@@ -41,8 +41,9 @@ public sealed class SeededContentWebFactory : WebApplicationFactory<Program>, IA
 }
 
 /// <summary>
-/// Módulo 1 de SQL &amp; Dados com o conteúdo do repositório: a tela mostra o subtítulo do path.yaml e as 5 frases
-/// de completion_summary, na ordem das aulas (seed → IModuleCompletionContentService → adapter da Web).
+/// Conteúdo real de SQL &amp; Dados (#41+#42): subtítulo do path.yaml e frases de completion_summary
+/// (seed → IModuleCompletionContentService → adapter da Web). Com o módulo 2 publicado, concluir o 1
+/// mostra o botão "Começar o módulo 2"; concluir 1+2 (ambiente só Em breve) mostra "chegando".
 /// </summary>
 public sealed class ModuleCompletionSeededContentTests(SeededContentWebFactory factory) : IClassFixture<SeededContentWebFactory>
 {
@@ -60,11 +61,15 @@ public sealed class ModuleCompletionSeededContentTests(SeededContentWebFactory f
 
     private const string Subtitle = "Você fez um banco de dados de verdade responder às suas perguntas, direto no navegador.";
 
+    private const string Module2 = "mais-consultas-com-sql";
+    private const string Module2FirstLesson = "buscando-parte-do-texto-com-like";
+    private const string Module2Title = "Mais consultas com SQL";
+
     [Fact]
     public async Task Modulo1Concluido_MostraSubtitulo_EAsCincoFrasesDoConteudo_NaOrdem()
     {
         var (client, userId) = await StudentAsync();
-        await CompleteModule1Async(userId);
+        await CompleteModuleAsync(userId, Module1, expectedReadyLessons: 5);
 
         var response = await client.GetAsync($"/trilhas/{PathSlug}/modulos/{Module1}/concluido");
 
@@ -78,15 +83,43 @@ public sealed class ModuleCompletionSeededContentTests(SeededContentWebFactory f
                 @"<li class=""break-words"">(.*?)</li>")
             .Select(m => m.Groups[1].Value).ToList();
         items.Should().Equal(Learned);
-        html.Should().Contain("+50 pontos neste módulo · Trilha SQL & Dados: 100%", "pontos e % do servidor");
-        html.Should().Contain("data-next-module-coming-soon>O próximo módulo está chegando. Seu progresso fica guardado.</p>",
-            "o módulo seguinte (ambiente) só tem aulas Em breve");
+        // #41 publicou 5 aulas no módulo 2: 5 de 10 prontas → 50%; botão para a 1ª aula do módulo 2.
+        html.Should().Contain("+50 pontos neste módulo · Trilha SQL & Dados: 50%", "pontos e % do servidor");
+        html.Should().MatchRegex(
+            $@"<a href=""/trilhas/{PathSlug}/{Module2}/{Module2FirstLesson}""[^>]*data-next-module>Começar o módulo 2: {Regex.Escape(Module2Title)}</a>");
         html.Should().NotContain(ModuleCompletionTexts.EverythingDone);
-        html.Should().NotContain("data-next-module>");
+        html.Should().NotContain(ModuleCompletionTexts.NextModuleComingSoon);
+        html.Should().NotContain("data-next-module-coming-soon");
     }
 
-    // Conclui as 5 aulas do módulo 1 direto no banco (o fluxo de clique/Executar já tem testes próprios).
-    private async Task CompleteModule1Async(Guid userId)
+    [Fact]
+    public async Task Modulo2Concluido_ComAmbienteSoEmBreve_MostraProximoChegando()
+    {
+        var (client, userId) = await StudentAsync();
+        await CompleteModuleAsync(userId, Module1, expectedReadyLessons: 5);
+        await CompleteModuleAsync(userId, Module2, expectedReadyLessons: 5);
+
+        var response = await client.GetAsync($"/trilhas/{PathSlug}/modulos/{Module2}/concluido");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.ReadHtmlAsync();
+        html.Should().Contain("Módulo concluído: Mais consultas com SQL");
+        html.Should().Contain("data-module-subtitle>Agora você busca, filtra e cruza dados como quem trabalha com isso no dia a dia.</p>");
+        html.Should().Contain("+50 pontos neste módulo · Trilha SQL & Dados: 100%");
+        html.Should().Contain("data-next-module-coming-soon>O próximo módulo está chegando. Seu progresso fica guardado.</p>",
+            "ambiente e os demais módulos seguintes só têm aulas Em breve");
+        html.Should().NotContain(ModuleCompletionTexts.EverythingDone);
+        html.Should().NotContain("data-next-module>");
+        html.Should().NotContain("Começar o módulo");
+
+        var dashboard = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
+        dashboard.Should().Contain("Você concluiu tudo o que está disponível <span aria-hidden=\"true\">🎉</span>")
+            .And.Contain("Novas aulas estão chegando, e seu progresso fica guardado.")
+            .And.NotContain("data-continue");
+    }
+
+    // Conclui as aulas prontas do módulo direto no banco (o fluxo de clique/Executar já tem testes próprios).
+    private async Task CompleteModuleAsync(Guid userId, string moduleSlug, int expectedReadyLessons)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DevPathDbContext>();
@@ -94,11 +127,11 @@ public sealed class ModuleCompletionSeededContentTests(SeededContentWebFactory f
                 from l in db.Lessons
                 join m in db.Modules on l.ModuleId equals m.Id
                 join p in db.CareerPaths on m.CareerPathId equals p.Id
-                where p.Slug == PathSlug && m.Slug == Module1 && !l.IsDraft && l.IsPublished
+                where p.Slug == PathSlug && m.Slug == moduleSlug && !l.IsDraft && l.IsPublished
                 orderby l.Order
                 select l.Id)
             .ToListAsync();
-        lessons.Should().HaveCount(5);
+        lessons.Should().HaveCount(expectedReadyLessons);
         foreach (var id in lessons)
         {
             var progress = UserProgress.StartLesson(userId, id);
