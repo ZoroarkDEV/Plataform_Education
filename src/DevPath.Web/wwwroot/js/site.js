@@ -194,18 +194,28 @@ document.addEventListener("click", (event) => {
     }
   };
 
-  // Após HTMX trocar o bloco de conclusão: anuncia na região estável; só move o foco quando o
-  // servidor marcou data-just-completed (clique em "Concluí esta aula" / "Seguir sem pontos").
-  // Depois de um pass no Executar vem só data-announce: anuncia, foco fica onde está.
+  // Após HTMX trocar o bloco de conclusão:
+  // - "Concluí" / "Seguir sem pontos" (data-just-completed): move o foco. Se o foco foi para a
+  //   própria [data-completion-message] (última aula / módulo concluído), o leitor já a lê — não
+  //   duplicar no #lesson-live. Se o foco foi para #next-lesson-link, ainda anuncia a mensagem.
+  // - Pass no Executar (só data-announce): anuncia no #lesson-live; o foco fica onde está.
   document.body.addEventListener("htmx:afterSwap", (event) => {
     const target = document.getElementById("lesson-completion");
     if (!target || event.detail?.target?.id !== "lesson-completion") return;
-    if (target.dataset.announce === "true" || target.dataset.justCompleted === "true") {
-      const msg = target.querySelector("[data-completion-message]");
-      if (msg) announce(msg.textContent.trim());
-    }
+
     if (target.dataset.justCompleted === "true") {
       focusAfterComplete(document);
+      const msg = target.querySelector("[data-completion-message]");
+      // Foco na própria mensagem: o leitor de tela já anuncia; pular o #lesson-live (QA #42).
+      if (msg && document.activeElement !== msg) {
+        announce(msg.textContent.trim());
+      }
+      return;
+    }
+
+    if (target.dataset.announce === "true") {
+      const msg = target.querySelector("[data-completion-message]");
+      if (msg) announce(msg.textContent.trim());
     }
   });
 

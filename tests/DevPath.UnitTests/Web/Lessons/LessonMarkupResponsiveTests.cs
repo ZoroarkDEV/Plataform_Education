@@ -139,4 +139,25 @@ public sealed class LessonMarkupResponsiveTests
         css.Should().Contain(".list-decimal{").And.Contain(".pl-5{").And.Contain(@".hover\:bg-emerald-100:hover{")
             .And.Contain(@".sm\:flex-wrap{");
     }
+
+    [Fact]
+    public void Completion_swap_skips_live_announce_when_focusing_the_message()
+    {
+        // QA #42: "Seguir sem pontos" / "Concluí" na última aula foca [data-completion-message];
+        // escrever a mesma frase no #lesson-live ~50ms depois anuncia duas vezes. O pass do
+        // Executar (só data-announce) continua anunciando sem mover o foco.
+        var js = File.ReadAllText(Path.Combine(Root(), "wwwroot", "js", "site.js"));
+        var start = js.IndexOf("htmx:afterSwap", StringComparison.Ordinal);
+        start.Should().BePositive();
+        var handler = js[start..js.IndexOf("resetCompletionButtons", start, StringComparison.Ordinal)];
+        handler.Should().Contain("dataset.justCompleted === \"true\"");
+        handler.Should().Contain("focusAfterComplete");
+        handler.Should().Contain("document.activeElement !== msg",
+            "com foco na mensagem, não anunciar de novo no #lesson-live");
+        handler.Should().Contain("dataset.announce === \"true\"");
+        // O caminho do Executar (só announce) chama announce sem checar activeElement.
+        var announceOnly = handler[handler.IndexOf("dataset.announce === \"true\"", StringComparison.Ordinal)..];
+        announceOnly.Should().Contain("announce(msg.textContent.trim())")
+            .And.NotContain("activeElement", "Executar não move o foco e sempre anuncia");
+    }
 }
