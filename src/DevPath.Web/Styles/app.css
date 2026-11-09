@@ -11,7 +11,7 @@
 /* Estilos de texto longo (aulas). O plugin já vem no Tailwind standalone. */
 @plugin "@tailwindcss/typography";
 
-/* Tema escuro por classe (.dark no <html>), definida pelo script do _Layout e pelo botão da aula. */
+/* Tema escuro por classe (.dark no <html>), definida pelo script do _Layout e pelo botão de tema do header. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {

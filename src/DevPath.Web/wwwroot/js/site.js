@@ -141,7 +141,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("htmx:load", (event) => setup(event.target));
 })();
 
-// Tema em todo o app (#11, R7): o botão do header e o da aula (#12) ficam em sincronia.
+// Tema em todo o app (#11, R7): mantém aria-pressed de todo [data-theme-toggle] em sincronia (hoje só o do header, #37 I).
 // Roda depois do handler de cada botão (o clique sobe até o document).
 document.addEventListener("click", (event) => {
   if (!event.target.closest?.("[data-theme-toggle]")) return;
