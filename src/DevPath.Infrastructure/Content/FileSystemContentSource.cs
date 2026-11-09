@@ -187,6 +187,7 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
         {
             Objectives = (file.Objectives ?? []).Select(o => (o ?? string.Empty).Trim()).ToList(),
             IsDraft = file.Draft ?? false,
+            CompletionSummary = string.IsNullOrWhiteSpace(file.CompletionSummary) ? null : file.CompletionSummary.Trim(),
             Exercise = ReadExercise(lessonFile[..^".md".Length] + ExerciseSuffix, errors)
         };
     }
@@ -527,5 +528,6 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
         public string? Difficulty { get; set; }
         public List<string?>? Objectives { get; set; }
         public bool? Draft { get; set; }
+        public string? CompletionSummary { get; set; }
     }
 }

@@ -62,12 +62,13 @@ public class RepositoryContentTests
 
         sql.Modules.OrderBy(m => m.Order).Select(m => (m.Order, m.Slug)).Should().Equal(
             (1, "primeiros-passos-com-sql"),
-            (2, "ambiente"),
-            (3, "estruturas"),
-            (4, "crud"),
-            (5, "consultas"),
-            (6, "performance-e-confiabilidade"),
-            (7, "conectando-csharp"));
+            (2, "mais-consultas-com-sql"),
+            (3, "ambiente"),
+            (4, "estruturas"),
+            (5, "crud"),
+            (6, "consultas"),
+            (7, "performance-e-confiabilidade"),
+            (8, "conectando-csharp"));
     }
 
     [Fact]
@@ -102,6 +103,34 @@ public class RepositoryContentTests
             "ordenando-e-limitando-com-order-by-e-limit",
             "juntando-tabelas-com-join",
             "resumindo-dados-com-group-by");
+    }
+
+    [Fact]
+    public void SqlDados_MaisConsultas_TemAsCincoAulasDaIssue41NaOrdemDoRoteiro()
+    {
+        // #41: o módulo 2 continua no navegador, cada aula com exercício.
+        var module = LoadPaths().Single(p => p.Slug == "sql-dados").Modules.Single(m => m.Slug == "mais-consultas-com-sql");
+
+        module.Title.Should().Be("Mais consultas com SQL");
+        module.Lessons.OrderBy(l => l.Order).Select(l => l.Slug).Should().Equal(
+            "buscando-parte-do-texto-com-like",
+            "listas-e-faixas-com-in-e-between",
+            "sem-repeticoes-com-distinct",
+            "filtrando-grupos-com-having",
+            "quem-ficou-sem-par-com-left-join");
+        module.Lessons.Should().OnlyContain(l => !l.IsDraft && l.Exercise != null && l.Exercise.Dataset == "livraria");
+    }
+
+    [Fact]
+    public void AulasComExercicio_TemFraseDeOQueVoceAprendeu()
+    {
+        // #41/#42: a tela de módulo concluído lista uma frase por aula. Toda aula pronta com exercício tem a sua.
+        foreach (var lesson in AllLessons().Where(l => !l.IsDraft && l.Exercise != null))
+        {
+            lesson.CompletionSummary.Should().NotBeNullOrWhiteSpace($"{lesson.SourceFile} precisa de completion_summary");
+            lesson.CompletionSummary!.Length.Should().BeLessThanOrEqualTo(200, lesson.SourceFile);
+            lesson.CompletionSummary.Should().EndWith(".", lesson.SourceFile);
+        }
     }
 
     [Fact]

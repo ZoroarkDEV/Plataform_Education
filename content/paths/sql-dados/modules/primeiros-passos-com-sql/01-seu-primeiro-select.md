@@ -9,6 +9,7 @@ objectives:
   - "Entender que um banco de dados guarda informações em tabelas, com linhas e colunas"
   - "Ler dados de uma tabela com SELECT ... FROM ..."
   - "Escolher quais colunas aparecem no resultado"
+completion_summary: "Pedir dados a uma tabela com SELECT e FROM e ler o resultado como uma planilha."
 ---
 
 # Seu primeiro SELECT

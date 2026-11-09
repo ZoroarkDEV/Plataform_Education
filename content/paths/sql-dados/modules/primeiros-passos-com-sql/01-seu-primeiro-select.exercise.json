@@ -8,7 +8,7 @@
   "solution": "SELECT titulo, preco FROM livros;",
   "hints": [
     "Você precisa de duas colunas da tabela de livros. Lembre do formato: SELECT colunas FROM tabela.",
-    "Complete as lacunas: SELECT ___, ___ FROM ___; Os nomes exatos estão na tabela de livros, no começo da aula. Atenção: eles são escritos sem acento."
+    "As duas colunas que você quer estão na tabela de livros, no começo da aula. Como elas se chamam ali, sem acento? E elas estão separadas por vírgula?"
   ],
   "test_cases": [
     {

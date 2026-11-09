@@ -42,7 +42,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
 
         paths.Select(p => p.Slug).Should().Equal("backend-net", "sql-dados");
         paths[0].Modules.Should().HaveCount(7).And.OnlyContain(m => m.IsPublished && m.Lessons.Count > 0);
-        paths[1].Modules.Should().HaveCount(7);
+        paths[1].Modules.Should().HaveCount(8);
         paths.SelectMany(p => p.Modules).SelectMany(m => m.Lessons)
             .Should().OnlyContain(l => l.Content.Length > 0 && !l.Content.StartsWith("---"));
     }
@@ -175,20 +175,20 @@ public sealed class ContentSeederTests : IAsyncLifetime
     {
         await WithContentCopy(async copy =>
         {
-            // Banco semeado antes do #23: "primeiros-passos-com-sql" em 7 e os demais em 1..6.
+            // Banco semeado antes do #23: "primeiros-passos-com-sql" em último e os demais uma posição acima.
             EditPathYaml(copy, "sql-dados", ToOldModuleOrder);
             await SeedAsync(copy);
             var ids = await ModuleIdsBySlugAsync("sql-dados");
             (await ModuleSlugsInOrderAsync("sql-dados")).Should().Equal(
-                "ambiente", "estruturas", "crud", "consultas", "performance-e-confiabilidade", "conectando-csharp",
-                "primeiros-passos-com-sql");
+                "mais-consultas-com-sql", "ambiente", "estruturas", "crud", "consultas", "performance-e-confiabilidade",
+                "conectando-csharp", "primeiros-passos-com-sql");
 
-            // Conteúdo atual: todos os 7 módulos mudam de ordem (passa pelo índice único sem conflito).
+            // Conteúdo atual: todos os 8 módulos mudam de ordem (passa pelo índice único sem conflito).
             var result = await SeedAsync(_repoContent);
 
-            result.Should().Be(new ContentSeedResult(Inserted: 0, Updated: 7));
+            result.Should().Be(new ContentSeedResult(Inserted: 0, Updated: 8));
             (await ModuleSlugsInOrderAsync("sql-dados")).Should().Equal(
-                "primeiros-passos-com-sql", "ambiente", "estruturas", "crud", "consultas",
+                "primeiros-passos-com-sql", "mais-consultas-com-sql", "ambiente", "estruturas", "crud", "consultas",
                 "performance-e-confiabilidade", "conectando-csharp");
             (await ModuleIdsBySlugAsync("sql-dados")).Should().BeEquivalentTo(ids, "o módulo é a mesma linha, só muda a ordem");
             (await SeedAsync(_repoContent)).NothingChanged.Should().BeTrue();
@@ -204,10 +204,10 @@ public sealed class ContentSeederTests : IAsyncLifetime
             var ids = await ModuleIdsBySlugAsync("sql-dados");
 
             EditPathYaml(copy, "sql-dados", yaml => yaml
-                .Replace("description: \"CREATE DATABASE, CREATE TABLE e constraints.\"\n    order: 3",
-                         "description: \"CREATE DATABASE, CREATE TABLE e constraints.\"\n    order: 4")
-                .Replace("description: \"INSERT, SELECT, UPDATE e DELETE.\"\n    order: 4",
-                         "description: \"INSERT, SELECT, UPDATE e DELETE.\"\n    order: 3"));
+                .Replace("description: \"CREATE DATABASE, CREATE TABLE e constraints.\"\n    order: 4",
+                         "description: \"CREATE DATABASE, CREATE TABLE e constraints.\"\n    order: 5")
+                .Replace("description: \"INSERT, SELECT, UPDATE e DELETE.\"\n    order: 5",
+                         "description: \"INSERT, SELECT, UPDATE e DELETE.\"\n    order: 4"));
 
             var result = await SeedAsync(copy);
 
@@ -296,9 +296,9 @@ public sealed class ContentSeederTests : IAsyncLifetime
 
                 var modules = await db.Modules.Where(m => db.CareerPaths.Any(p => p.Id == m.CareerPathId && p.Slug == "sql-dados")).OrderBy(m => m.Order).ToListAsync();
                 modules.Select(m => (m.Slug, m.Order, m.IsPublished)).Should().Equal(
-                    ("primeiros-passos-com-sql", 1, true), ("ambiente", 2, true), ("estruturas", 3, true),
-                    ("consultas", 4, true), ("performance-e-confiabilidade", 5, true),
-                    ("conectando-csharp", 6, true), ("crud", 7, false));
+                    ("primeiros-passos-com-sql", 1, true), ("mais-consultas-com-sql", 2, true), ("ambiente", 3, true),
+                    ("estruturas", 4, true), ("consultas", 5, true), ("performance-e-confiabilidade", 6, true),
+                    ("conectando-csharp", 7, true), ("crud", 8, false));
             }
 
             (await LessonSlugsInOrderAsync("consultas")).Should().Equal("joins", "subqueries-e-ctes", "agregacoes-group-by-having");
@@ -313,7 +313,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
             await using var after = CreateDbContext();
             (await after.CareerPaths.CountAsync(p => p.IsActive)).Should().Be(2);
             (await after.Modules.CountAsync(m => !m.IsPublished)).Should().Be(0);
-            (await after.Modules.SingleAsync(m => m.Slug == "crud")).Order.Should().Be(4);
+            (await after.Modules.SingleAsync(m => m.Slug == "crud")).Order.Should().Be(5);
             (await LessonSlugsInOrderAsync("consultas")).Should().Equal("joins", "agregacoes-group-by-having", "subqueries-e-ctes");
             (await after.Lessons.CountAsync(l => !l.IsPublished)).Should().Be(0);
         });
@@ -515,6 +515,73 @@ public sealed class ContentSeederTests : IAsyncLifetime
         });
     }
 
+    // ---- #41: "o que você aprendeu" (completion_summary) por aula ----
+
+    [Fact]
+    public async Task SeedAsync_GravaCompletionSummaryDoFrontmatter_StubFicaSemFrase()
+    {
+        await SeedAsync(_repoContent);
+
+        await using var db = CreateDbContext();
+        (await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select")).CompletionSummary
+            .Should().Be("Pedir dados a uma tabela com SELECT e FROM e ler o resultado como uma planilha.");
+        (await LessonAsync(db, "mais-consultas-com-sql", "quem-ficou-sem-par-com-left-join")).CompletionSummary
+            .Should().Be("Juntar tabelas sem perder quem não tem par, com LEFT JOIN, e achar quem ficou de fora com IS NULL.");
+        (await LessonAsync(db, "ambiente", "instalando-docker-desktop")).CompletionSummary.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SeedAsync_CompletionSummaryTrocadoERemovido_AtualizaAMesmaAula()
+    {
+        await WithContentCopy(async copy =>
+        {
+            await SeedAsync(copy);
+            var lessonFile = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.md");
+            var original = File.ReadAllText(lessonFile).ReplaceLineEndings("\n");
+            var line = Regex.Match(original, @"(?m)^completion_summary: .*\n").Value;
+            line.Should().NotBeEmpty();
+            var id = await LessonIdAsync("primeiros-passos-com-sql", "seu-primeiro-select");
+
+            // Troca a frase (espaços nas pontas são removidos).
+            File.WriteAllText(lessonFile, original.Replace(line, "completion_summary: \"  Ler uma tabela.  \"\n"));
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                var lesson = await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select");
+                lesson.Id.Should().Be(id);
+                lesson.CompletionSummary.Should().Be("Ler uma tabela.");
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue("mesma frase não conta como mudança");
+
+            // Tira a chave: a frase some.
+            File.WriteAllText(lessonFile, original.Replace(line, string.Empty));
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                (await LessonAsync(db, "primeiros-passos-com-sql", "seu-primeiro-select")).CompletionSummary.Should().BeNull();
+            }
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_CompletionSummaryComMaisDe200Caracteres_FalhaAntesDoBanco()
+    {
+        await WithContentCopy(async copy =>
+        {
+            var lessonFile = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.md");
+            var original = File.ReadAllText(lessonFile).ReplaceLineEndings("\n");
+            var line = Regex.Match(original, @"(?m)^completion_summary: .*\n").Value;
+            File.WriteAllText(lessonFile, original.Replace(line, $"completion_summary: \"{new string('a', 201)}\"\n"));
+
+            var act = () => SeedAsync(copy);
+
+            (await act.Should().ThrowAsync<ContentValidationException>())
+                .Which.Message.Should().Contain("01-seu-primeiro-select.md").And.Contain("completion_summary");
+            (await CountRowsAsync()).Should().Be((0, 0, 0));
+        });
+    }
+
     [Fact]
     public async Task SeedAsync_GravaOExercicioDaAulaComDatasetDicasEPontos()
     {
@@ -532,8 +599,8 @@ public sealed class ContentSeederTests : IAsyncLifetime
         exercise.Hints[0].Should().StartWith("Você precisa de duas colunas", "as dicas mantêm a ordem do arquivo (mais geral primeiro)");
         exercise.TestCases.Should().Contain("Dom Casmurro");
 
-        // Os 5 exercícios do módulo "Primeiros passos com SQL"; nenhum duplicado.
-        (await db.Exercises.CountAsync()).Should().Be(5);
+        // Os 5 exercícios de cada módulo de SQL no navegador (#22 e #41); nenhum duplicado.
+        (await db.Exercises.CountAsync()).Should().Be(10);
     }
 
     [Fact]
@@ -716,7 +783,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
                 """UPDATE "Exercises" SET "TestCases" = '[{{"name":"x","columns":["a"],"rows":[[1]],"order_matters":false}}]'::jsonb""");
         }
 
-        (await SeedAsync(_repoContent)).Updated.Should().Be(5);
+        (await SeedAsync(_repoContent)).Updated.Should().Be(10);
 
         await using (var db = CreateDbContext())
         {
@@ -830,7 +897,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
         var act = () => new ContentSeeder(db, source, NullLogger<ContentSeeder>.Instance).SeedAsync();
 
         var errors = (await act.Should().ThrowAsync<ContentValidationException>()).Which.Errors;
-        errors.Should().HaveCount(5).And.OnlyContain(e => e.Contains(".exercise.json: o dataset 'livraria' não existe"));
+        errors.Should().HaveCount(10).And.OnlyContain(e => e.Contains(".exercise.json: o dataset 'livraria' não existe"));
         (await SnapshotAsync()).Should().Equal(before);
     }
 
@@ -872,7 +939,7 @@ public sealed class ContentSeederTests : IAsyncLifetime
             {
                 var exercise = await db.Exercises.AsNoTracking().SingleAsync(e => e.Id == exerciseId);
                 exercise.IsPublished.Should().BeFalse();
-                (await db.Exercises.CountAsync(e => e.IsPublished)).Should().Be(4);
+                (await db.Exercises.CountAsync(e => e.IsPublished)).Should().Be(9);
                 (await new DevPath.Infrastructure.CodeExecution.ExerciseCatalog(db).GetVisibilityAsync(exerciseId))
                     .Should().NotBeNull().And.Match<DevPath.Application.CodeExecution.ExerciseVisibility>(v => !v.ExercisePublished);
             }
@@ -985,7 +1052,8 @@ public sealed class ContentSeederTests : IAsyncLifetime
         var others = entries.Where(e => e != first).Select(e => e.Contains("- slug: ")
             ? Regex.Replace(e, @"order: (\d+)", m => $"order: {int.Parse(m.Groups[1].Value) - 1}")
             : e);
-        return string.Concat(others) + first.Replace("order: 1", "order: 7");
+        var last = entries.Count(e => e.Contains("- slug: "));
+        return string.Concat(others) + first.Replace("order: 1", $"order: {last}");
     }
 
     private async Task<List<string>> ModuleSlugsInOrderAsync(string path)

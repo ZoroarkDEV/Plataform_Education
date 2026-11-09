@@ -80,7 +80,7 @@ public sealed class MigrationsTests : IAsyncLifetime
             Id = userId, UserName = $"{userId:N}@t", NormalizedUserName = $"{userId:N}@T", Email = $"{userId:N}@t",
             NormalizedEmail = $"{userId:N}@T", DisplayName = "A", SecurityStamp = Guid.NewGuid().ToString()
         });
-        await db.SaveChangesAsync();
+        await SaveOnOldSchemaAsync(db);
 
         Guid keepA = Guid.NewGuid(), keepB = Guid.NewGuid(), keepC = Guid.NewGuid(), keepD = Guid.NewGuid();
         var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -141,6 +141,18 @@ public sealed class MigrationsTests : IAsyncLifetime
         var duplicate = () => db.SaveChangesAsync();
         (await duplicate.Should().ThrowAsync<DbUpdateException>())
             .WithInnerException<PostgresException>().Which.ConstraintName.Should().Be("IX_UserProgress_UserId_LessonId");
+    }
+
+    /// <summary>
+    /// Salva o grafo com o modelo atual num banco parado numa migration antiga. O modelo já tem colunas de
+    /// migrations posteriores (Lessons.CompletionSummary, #41), que o INSERT do EF manda mesmo nulas. A coluna
+    /// entra só durante o SaveChanges e sai logo depois, para o banco continuar no esquema da migration antiga.
+    /// </summary>
+    private static async Task SaveOnOldSchemaAsync(DevPathDbContext db)
+    {
+        await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "Lessons" ADD COLUMN "CompletionSummary" character varying(200)""");
+        await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "Lessons" DROP COLUMN "CompletionSummary" """);
     }
 
     private sealed class DedupeRow
@@ -206,7 +218,7 @@ public sealed class MigrationsTests : IAsyncLifetime
             Id = userId, UserName = $"{userId:N}@t", NormalizedUserName = $"{userId:N}@T", Email = $"{userId:N}@t",
             NormalizedEmail = $"{userId:N}@T", DisplayName = "A", SecurityStamp = Guid.NewGuid().ToString()
         });
-        await db.SaveChangesAsync();
+        await SaveOnOldSchemaAsync(db);
 
         // Índice não-único: duas linhas (aluno, aula) passam.
         await db.Database.ExecuteSqlRawAsync("""

@@ -48,6 +48,12 @@ public sealed record LessonContent(
     /// <summary>Rascunho (<c>draft: true</c>): aparece como "Em breve", não conta no progresso.</summary>
     public bool IsDraft { get; init; }
 
+    /// <summary>
+    /// "O que você aprendeu" (<c>completion_summary:</c>): uma frase para a tela de módulo concluído.
+    /// O seed grava em <c>Lesson.CompletionSummary</c>; <c>null</c> quando a aula não define.
+    /// </summary>
+    public string? CompletionSummary { get; init; }
+
     /// <summary>Exercício da aula (<c>NN-slug.exercise.json</c> ao lado do .md), se houver.</summary>
     public ExerciseContent? Exercise { get; init; }
 }

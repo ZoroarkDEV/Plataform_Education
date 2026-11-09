@@ -24,6 +24,9 @@ public static partial class ContentValidator
     /// <summary>Cada item de <c>objectives</c> (combinado com o Backend para <c>Lesson.LearningObjectives</c>).</summary>
     public const int MaxObjectiveLength = 200;
 
+    /// <summary><c>completion_summary</c> da aula: mesmo limite de <c>Lesson.CompletionSummary</c>.</summary>
+    public const int MaxCompletionSummaryLength = 200;
+
     /// <summary>Slug de dataset: mesmo limite de <c>Datasets.Slug</c> e <c>Exercises.Dataset</c>.</summary>
     public const int MaxDatasetSlugLength = 100;
 
@@ -117,6 +120,11 @@ public static partial class ContentValidator
                         {
                             errors.Add($"{lesson.SourceFile}: o item {index} de 'objectives' tem {objective.Length} caracteres (máximo {MaxObjectiveLength}).");
                         }
+                    }
+
+                    if (lesson.CompletionSummary is { Length: > MaxCompletionSummaryLength } summary)
+                    {
+                        errors.Add($"{lesson.SourceFile}: 'completion_summary' tem {summary.Length} caracteres (máximo {MaxCompletionSummaryLength}).");
                     }
 
                     if (lesson.Exercise is { } exercise)

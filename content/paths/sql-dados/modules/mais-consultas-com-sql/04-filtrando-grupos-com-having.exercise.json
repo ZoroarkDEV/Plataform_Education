@@ -1,0 +1,56 @@
+{
+  "title": "Gêneros com 3 livros ou mais",
+  "statement": "Quais gêneros têm **3 livros ou mais**? Mostre o **gênero** e a **quantidade de livros**.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Gêneros com 3 livros ou mais\nSELECT genero, COUNT(*) AS total_livros\nFROM livros\nGROUP BY genero\n",
+  "solution": "SELECT genero, COUNT(*) AS total_livros FROM livros GROUP BY genero HAVING COUNT(*) >= 3;",
+  "hints": [
+    "O filtro aqui não é sobre um livro, é sobre o grupo inteiro: quantos livros o gênero tem. Qual palavra-chave filtra grupos, depois do GROUP BY?",
+    "\"3 ou mais\" inclui o 3. Qual sinal quer dizer \"maior ou igual\"? E a sua condição usa a mesma contagem que está no SELECT?"
+  ],
+  "test_cases": [
+    {
+      "name": "Gêneros com 3 livros ou mais",
+      "columns": [
+        "genero",
+        "total_livros"
+      ],
+      "rows": [
+        [
+          "Romance",
+          4
+        ],
+        [
+          "Fantasia",
+          3
+        ]
+      ],
+      "order_matters": false,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT genero, COUNT(*) FROM livros WHERE COUNT(*) >= 3 GROUP BY genero;",
+      "message": "O WHERE filtra livro por livro, antes de agrupar, então ainda não existe contagem. Para filtrar pela contagem do grupo, use HAVING depois do GROUP BY."
+    },
+    {
+      "example": "SELECT genero, COUNT(*) FROM livros GROUP BY genero HAVING COUNT(*) > 3;",
+      "message": "Veio só Romance. Com >, o 3 fica de fora. \"3 ou mais\" inclui o 3: use >=."
+    },
+    {
+      "example": "SELECT genero, COUNT(*) FROM livros HAVING COUNT(*) >= 3 GROUP BY genero;",
+      "message": "A ordem das partes importa: primeiro GROUP BY (formar os grupos), depois HAVING (filtrar os grupos)."
+    },
+    {
+      "example": "SELECT genero, COUNT(*) AS total_livros FROM livros GROUP BY genero HAVING total_livros >= 3;",
+      "message": "No HAVING, repita a conta em vez de usar o apelido: HAVING COUNT(*) >= 3. O apelido criado com AS só vale para o nome da coluna no resultado."
+    },
+    {
+      "example": "SELECT genero, COUNT(*) AS total_livros FROM livros GROUP BY genero;",
+      "message": "Vieram os 4 gêneros. Falta o filtro dos grupos: só os que têm 3 livros ou mais."
+    }
+  ]
+}

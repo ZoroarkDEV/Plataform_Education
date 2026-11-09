@@ -33,6 +33,8 @@ internal sealed class LessonConfiguration : IEntityTypeConfiguration<Lesson>
         // despublicada nasceria publicada. O default true fica só na migration, para as aulas existentes.
         builder.Property(l => l.IsPublished).IsRequired();
 
+        builder.Property(l => l.CompletionSummary).HasMaxLength(Lesson.MaxCompletionSummaryLength);
+
         // Objetivos de aprendizagem: lista de textos gravada como jsonb (ex.: ["Usar SELECT", "Filtrar com WHERE"]).
         // O conversor faz lista <-> JSON; o comparador compara o CONTEÚDO da lista, para o EF perceber
         // mudanças (por padrão ele só compararia a referência).

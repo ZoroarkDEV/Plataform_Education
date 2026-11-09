@@ -1,0 +1,50 @@
+{
+  "title": "Autores sem livros na loja",
+  "statement": "A livraria quer encomendar livros de quem ainda não tem nada na loja. Mostre o **nome** dos **autores que não têm nenhum livro** cadastrado.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Autores sem nenhum livro cadastrado\nSELECT autores.nome\nFROM autores\n",
+  "solution": "SELECT autores.nome FROM autores LEFT JOIN livros ON livros.autor_id = autores.id WHERE livros.id IS NULL;",
+  "hints": [
+    "Com INNER JOIN, quem não tem livro some do resultado. Qual JOIN mantém todos os autores, mesmo os que não encontraram nenhum livro?",
+    "Depois do LEFT JOIN, o autor sem livros aparece com as colunas do livro vazias (null). Como você fica só com essas linhas? Para vazio se usa = ou IS NULL?"
+  ],
+  "test_cases": [
+    {
+      "name": "Autores sem nenhum livro",
+      "columns": [
+        "nome"
+      ],
+      "rows": [
+        [
+          "Conceição Evaristo"
+        ]
+      ],
+      "order_matters": false,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT autores.nome FROM autores INNER JOIN livros ON livros.autor_id = autores.id WHERE livros.id IS NULL;",
+      "message": "Sua consulta não trouxe nenhuma linha. O INNER JOIN já tira quem não tem livro, então não sobra ninguém para o filtro. Use LEFT JOIN para manter todos os autores."
+    },
+    {
+      "example": "SELECT autores.nome FROM autores LEFT JOIN livros ON livros.autor_id = autores.id WHERE livros.id = NULL;",
+      "message": "Sua consulta não trouxe nenhuma linha. Vazio (null) não é um valor, então = NULL nunca dá certo. Para perguntar se está vazio, use IS NULL."
+    },
+    {
+      "example": "SELECT autores.nome FROM livros LEFT JOIN autores ON livros.autor_id = autores.id WHERE livros.id IS NULL;",
+      "message": "Sua consulta não trouxe nenhuma linha. O LEFT JOIN mantém todas as linhas da tabela que vem no FROM. Aqui queremos manter todos os autores: comece com FROM autores."
+    },
+    {
+      "example": "SELECT autores.nome FROM autores LEFT JOIN livros ON livros.autor_id = autores.id;",
+      "message": "Vieram 11 linhas: todos os autores, um por livro. O LEFT JOIN está certo; agora fique só com quem não tem livro (as colunas do livro vazias)."
+    },
+    {
+      "example": "SELECT autores.nome FROM autores LEFT JOIN livros ON livros.autor_id = autores.id WHERE autores.id IS NULL;",
+      "message": "Sua consulta não trouxe nenhuma linha. Todo autor tem id. O que fica vazio é o lado do livro: teste uma coluna de livros."
+    }
+  ]
+}

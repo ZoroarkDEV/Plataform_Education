@@ -1,0 +1,64 @@
+{
+  "title": "Romances e contos de R$ 29,90 a R$ 39,90",
+  "statement": "Uma cliente quer um **Romance** ou um livro de **Contos** que custe **de R$ 29,90 a R$ 39,90**, incluindo esses dois valores. Mostre o **título** e o **preço**.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Romance ou Contos, preço de 29.90 a 39.90 (incluindo os dois)\nSELECT titulo, preco\nFROM livros\nWHERE ",
+  "solution": "SELECT titulo, preco FROM livros WHERE genero IN ('Romance', 'Contos') AND preco BETWEEN 29.90 AND 39.90;",
+  "hints": [
+    "São dois gêneros aceitos e uma faixa de preço. Qual palavra-chave aceita uma lista de valores, e qual aceita \"de um valor até outro\"?",
+    "Dom Casmurro custa exatamente R$ 29,90. Ele apareceu no seu resultado? Se não, será que você usou > e < no lugar de uma palavra que inclui as duas pontas da faixa?"
+  ],
+  "test_cases": [
+    {
+      "name": "Romance ou Contos com preço de 29.90 a 39.90",
+      "columns": [
+        "titulo",
+        "preco"
+      ],
+      "rows": [
+        [
+          "Dom Casmurro",
+          29.9
+        ],
+        [
+          "Memórias Póstumas de Brás Cubas",
+          34.9
+        ],
+        [
+          "A Hora da Estrela",
+          39.9
+        ]
+      ],
+      "order_matters": false,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero IN ('Romance', 'Contos') AND preco > 29.90 AND preco < 39.90;",
+      "message": "Veio só 1 livro, esperávamos 3. Com > e <, os preços 29.90 e 39.90 ficam de fora. O enunciado pede incluindo esses valores: o BETWEEN inclui as duas pontas."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero IN 'Romance', 'Contos' AND preco BETWEEN 29.90 AND 39.90;",
+      "message": "A lista do IN vai entre parênteses: IN ('Romance', 'Contos')."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero IN ('Romance', 'Contos') AND preco BETWEEN 29.90, 39.90;",
+      "message": "No BETWEEN, os dois valores são ligados por AND, não por vírgula: BETWEEN 29.90 AND 39.90."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero IN ('Romance', 'Contos') AND preco BETWEEN 39.90 AND 29.90;",
+      "message": "Sua consulta não trouxe nenhuma linha. No BETWEEN, o menor valor vem primeiro: BETWEEN 29.90 AND 39.90."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE genero IN ('Romance, Contos') AND preco BETWEEN 29.90 AND 39.90;",
+      "message": "Sua consulta não trouxe nenhuma linha. Cada gênero precisa das suas próprias aspas: ('Romance', 'Contos'). Do jeito que está, o banco procura um gênero chamado \"Romance, Contos\"."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE preco BETWEEN 29.90 AND 39.90;",
+      "message": "Vieram 5 livros, esperávamos 3. A faixa de preço está certa, mas faltou o filtro de gênero (Romance ou Contos)."
+    }
+  ]
+}

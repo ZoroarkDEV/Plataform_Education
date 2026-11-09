@@ -9,6 +9,7 @@ objectives:
   - "Entender por que os dados ficam em tabelas separadas, ligadas por um número"
   - "Combinar duas tabelas com INNER JOIN ... ON ..."
   - "Usar tabela.coluna e apelidos quando as duas tabelas têm uma coluna com o mesmo nome"
+completion_summary: "Juntar duas tabelas com INNER JOIN, como cada livro com o nome do seu autor."
 ---
 
 # Juntando tabelas com JOIN

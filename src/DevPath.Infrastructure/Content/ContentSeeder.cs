@@ -314,6 +314,7 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
                 module.Id, content.Title, ContentType.Markdown, content.Body, content.Order,
                 content.EstimatedMinutes, content.Language, content.Difficulty,
                 learningObjectives: content.Objectives, isDraft: content.IsDraft);
+            lesson.SetCompletionSummary(content.CompletionSummary);
             ApplySlug(lesson.Slug, content.Slug, lesson.ChangeSlug);
             if (content.Exercise is { } newExercise)
             {
@@ -329,6 +330,10 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
             content.Title, ContentType.Markdown, content.Body, content.Order,
             content.EstimatedMinutes, content.Language, content.Difficulty,
             learningObjectives: content.Objectives, isDraft: content.IsDraft);
+        if (lesson.CompletionSummary != content.CompletionSummary)
+        {
+            lesson.SetCompletionSummary(content.CompletionSummary); // tirar a chave do frontmatter limpa a frase
+        }
 
         // Conteúdo que está versionado em /content é conteúdo publicado (a aula pode ter voltado depois de removida).
         if (!lesson.IsPublished)

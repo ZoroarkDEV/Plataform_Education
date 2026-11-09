@@ -1,0 +1,60 @@
+{
+  "title": "Títulos que começam com O",
+  "statement": "Um cliente lembra só que o título do livro **começa com a letra O**. Mostre o **título** e o **preço** desses livros.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Livros cujo título começa com O\nSELECT titulo, preco\nFROM livros\nWHERE ",
+  "solution": "SELECT titulo, preco FROM livros WHERE titulo LIKE 'O%';",
+  "hints": [
+    "Você não sabe o título inteiro, só como ele começa. Qual palavra-chave procura um pedaço do texto, em vez de comparar o texto todo com o sinal de igual?",
+    "O % quer dizer \"qualquer coisa aqui\". Se o título começa com O e depois pode vir qualquer coisa, de que lado da letra O o % precisa ficar? E a letra está maiúscula, como nos títulos da tabela?"
+  ],
+  "test_cases": [
+    {
+      "name": "Livros cujo título começa com O",
+      "columns": [
+        "titulo",
+        "preco"
+      ],
+      "rows": [
+        [
+          "O Hobbit",
+          49.9
+        ],
+        [
+          "O Senhor dos Anéis: A Sociedade do Anel",
+          69.9
+        ],
+        [
+          "O Silmarillion",
+          59.9
+        ]
+      ],
+      "order_matters": false,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE titulo LIKE '%O%';",
+      "message": "Vieram 4 livros, esperávamos 3. Com % antes e depois, o O pode estar em qualquer parte do título (como em \"Oriente\"). O exercício pede títulos que COMEÇAM com O: o % vai só depois da letra."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE titulo LIKE 'o%';",
+      "message": "Sua consulta não trouxe nenhuma linha. No LIKE, maiúsculas e minúsculas fazem diferença: os títulos começam com O maiúsculo."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE titulo = 'O%';",
+      "message": "Com o sinal de igual, o banco procura um título escrito exatamente \"O%\", que não existe. Para buscar um pedaço do texto, troque o = por LIKE."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE titulo LIKE 'O';",
+      "message": "Sem o %, o LIKE procura um título que seja só a letra O. Coloque o % depois da letra para dizer \"e depois qualquer coisa\"."
+    },
+    {
+      "example": "SELECT titulo, preco FROM livros WHERE titulo LIKE \"O%\";",
+      "message": "O texto procurado vai entre aspas simples: 'O%'. Aspas duplas são para nomes de colunas."
+    }
+  ]
+}

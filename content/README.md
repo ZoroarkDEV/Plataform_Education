@@ -49,6 +49,7 @@ objectives:                         # opcional: o que o aluno vai aprender (mesm
   - "Entender o que é uma tabela"
   - "Diferenciar linha e coluna"
 draft: true                         # opcional (padrão false): rascunho, aparece como "Em breve"
+completion_summary: "Dizer o que é uma tabela, com linhas e colunas."  # opcional: "o que você aprendeu"
 ---
 
 # O que é um banco relacional
@@ -71,6 +72,15 @@ draft: true                         # opcional (padrão false): rascunho, aparec
 
 O seed grava as duas chaves a cada execução (migration `AddLessonObjectivesAndDraft`): tirar
 `objectives` do frontmatter deixa a lista vazia, e tirar `draft` (ou `draft: false`) publica a aula como pronta.
+
+#### Chave opcional `completion_summary`
+
+- **`completion_summary`**: uma frase de "o que você aprendeu" com a aula, para a tela de módulo
+  concluído (#41, usada pelo #42). Até 200 caracteres; espaços nas pontas são removidos, e vazio vale
+  como sem frase. Escreva como algo que o aluno já sabe fazer, no infinitivo e com ponto final
+  (ex.: "Achar um livro lembrando só de um pedaço do nome, com LIKE e %.").
+  O seed grava em `Lesson.CompletionSummary` (migration `AddLessonCompletionSummary`) a cada execução:
+  tirar a chave do frontmatter apaga a frase.
 
 ### Exercício (`modules/<modulo>/NN-<aula>.exercise.json`)
 
@@ -204,6 +214,7 @@ consultas de verdade (`SELECT colunas FROM tabela;`) começam com a linha
 - Tamanhos máximos (os mesmos do banco): `title` 200, `description` 2000, `icon` 100, `language` 50
   e slug 200 caracteres.
 - Cada item de `objectives` tem de 1 a 200 caracteres. Aula pronta tem `objectives`; stub tem `draft: true`.
+- `completion_summary`, quando existe, tem até 200 caracteres.
 - Exercício: JSON válido, sem chave desconhecida, com `solution` e ao menos um caso de teste; cada
   linha de `rows` tem um valor por coluna; o `dataset` existe em `content/datasets/`; não há
   `.exercise.json` sem a aula; títulos do `statement` só até `###`.

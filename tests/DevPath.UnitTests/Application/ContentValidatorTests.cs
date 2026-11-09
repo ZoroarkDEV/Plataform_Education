@@ -255,4 +255,29 @@ public class ContentValidatorTests
         // O validador barra no /content o que o Domain (Lesson.UpdateContent) recusaria no seed.
         ContentValidator.MaxObjectiveLength.Should().Be(DevPath.Domain.CareerPaths.Lesson.MaxObjectiveLength);
     }
+
+    // ---- #41: completion_summary ----
+
+    [Fact]
+    public void Validate_CompletionSummaryCom200Caracteres_NaoRetornaErros()
+    {
+        var lesson = Lesson("ambiente", 1) with { CompletionSummary = new string('a', ContentValidator.MaxCompletionSummaryLength) };
+
+        ContentValidator.Validate([Path("sql-dados", "SQL", 1, Module("ambiente", 1, lesson))]).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_CompletionSummaryComMaisDe200Caracteres_RetornaErro()
+    {
+        var lesson = Lesson("ambiente", 1) with { CompletionSummary = new string('a', ContentValidator.MaxCompletionSummaryLength + 1) };
+
+        ContentValidator.Validate([Path("sql-dados", "SQL", 1, Module("ambiente", 1, lesson))])
+            .Should().ContainSingle(e => e.Contains("'completion_summary' tem 201 caracteres (máximo 200)"));
+    }
+
+    [Fact]
+    public void MaxCompletionSummaryLength_EhOMesmoLimiteDoDominio()
+    {
+        ContentValidator.MaxCompletionSummaryLength.Should().Be(DevPath.Domain.CareerPaths.Lesson.MaxCompletionSummaryLength);
+    }
 }

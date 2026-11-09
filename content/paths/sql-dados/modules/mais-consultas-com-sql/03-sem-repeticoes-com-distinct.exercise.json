@@ -1,0 +1,52 @@
+{
+  "title": "Gêneros com livros baratos",
+  "statement": "A livraria vai fazer uma estante de livros **abaixo de R$ 40**. Em quais **gêneros** há livros nessa faixa? Mostre **cada gênero uma vez só**.",
+  "language": "sql",
+  "dataset": "livraria",
+  "points": 10,
+  "starter_code": "-- Gêneros que têm livros com preço abaixo de 40, sem repetir\nSELECT \nFROM livros\nWHERE preco < 40\n",
+  "solution": "SELECT DISTINCT genero FROM livros WHERE preco < 40;",
+  "hints": [
+    "Cada livro barato trouxe o seu gênero, por isso Romance aparece repetido. Qual palavra, logo depois do SELECT, tira as linhas repetidas?",
+    "O DISTINCT compara a linha inteira. Se o seu SELECT mostra outra coluna além do gênero, as linhas ainda são iguais entre si?"
+  ],
+  "test_cases": [
+    {
+      "name": "Gêneros com livros abaixo de 40, sem repetir",
+      "columns": [
+        "genero"
+      ],
+      "rows": [
+        [
+          "Romance"
+        ],
+        [
+          "Contos"
+        ],
+        [
+          "Mistério"
+        ]
+      ],
+      "order_matters": false,
+      "check_column_names": false
+    }
+  ],
+  "common_errors": [
+    {
+      "example": "SELECT genero FROM livros WHERE preco < 40;",
+      "message": "Vieram 6 linhas, com Romance 3 vezes. A estante quer cada gênero uma vez só: use DISTINCT logo depois do SELECT."
+    },
+    {
+      "example": "SELECT DISTINCT genero, titulo FROM livros WHERE preco < 40;",
+      "message": "Você trouxe 2 colunas. Com o título junto, nenhuma linha fica igual a outra, e o DISTINCT não tem o que juntar. Mostre só o gênero."
+    },
+    {
+      "example": "SELECT genero DISTINCT FROM livros WHERE preco < 40;",
+      "message": "O DISTINCT vem logo depois do SELECT, antes das colunas: SELECT DISTINCT genero. Escrito depois, o banco entende DISTINCT como o nome da coluna."
+    },
+    {
+      "example": "SELECT DISTINCT genero FROM livros;",
+      "message": "Vieram 4 gêneros, esperávamos 3. Faltou o filtro de preço abaixo de 40."
+    }
+  ]
+}

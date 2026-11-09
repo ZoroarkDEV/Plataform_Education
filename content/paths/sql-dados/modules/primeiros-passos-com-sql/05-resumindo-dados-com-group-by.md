@@ -9,6 +9,7 @@ objectives:
   - "Resumir uma tabela com COUNT, SUM e AVG"
   - "Calcular um resumo por grupo com GROUP BY"
   - "Aplicar a regra: toda coluna do SELECT que não é resumo precisa estar no GROUP BY"
+completion_summary: "Resumir dados com COUNT, SUM e AVG e fazer um resumo por grupo com GROUP BY."
 ---
 
 # Resumindo dados com COUNT, SUM, AVG e GROUP BY

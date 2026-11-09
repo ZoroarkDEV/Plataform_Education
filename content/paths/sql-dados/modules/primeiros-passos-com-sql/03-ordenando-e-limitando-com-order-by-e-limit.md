@@ -9,6 +9,7 @@ objectives:
   - "Ordenar o resultado com ORDER BY, do menor para o maior (ASC) e do maior para o menor (DESC)"
   - "Pegar só as primeiras linhas com LIMIT"
   - "Saber por que, sem ORDER BY, o banco não garante ordem nenhuma"
+completion_summary: "Colocar o resultado em ordem com ORDER BY e pegar só as primeiras linhas com LIMIT."
 ---
 
 # Ordenando e limitando com ORDER BY e LIMIT

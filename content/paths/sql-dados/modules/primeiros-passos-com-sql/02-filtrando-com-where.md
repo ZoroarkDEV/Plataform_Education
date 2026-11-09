@@ -9,6 +9,7 @@ objectives:
   - "Filtrar linhas com WHERE usando =, < e >"
   - "Escrever textos entre aspas simples e números sem aspas"
   - "Combinar condições com AND e entender a diferença para OR"
+completion_summary: "Ficar só com as linhas que interessam, com WHERE, e juntar condições com AND."
 ---
 
 # Filtrando com WHERE

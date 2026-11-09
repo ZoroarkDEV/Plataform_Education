@@ -58,7 +58,7 @@ public sealed class SeededExercisesEndToEndTests(SeededContentFixture fixture) :
     }
 
     [Fact]
-    public void ModuloSqlTemOs5Exercicios() => SqlLessonSlugs().Should().HaveCount(5);
+    public void ModulosSqlTemOs10Exercicios() => SqlLessonSlugs().Should().HaveCount(10);
 
     [Theory]
     [MemberData(nameof(SqlLessonSlugs))]
@@ -137,6 +137,30 @@ public sealed class SeededExercisesEndToEndTests(SeededContentFixture fixture) :
             }
 
             passesAll.Should().BeFalse($"o erro comum '{commonError.Example}' de '{lessonSlug}' não pode passar");
+        }
+    }
+
+    // #41: o roteiro do PO lista outras consultas certas para o módulo 2. A correção olha o resultado,
+    // então elas também passam (inclusive o WHERE id = 6 da aula 5, aceito pelo PO).
+    [Theory]
+    [InlineData("buscando-parte-do-texto-com-like", "SELECT titulo, preco FROM livros WHERE titulo LIKE 'O %';")]
+    [InlineData("listas-e-faixas-com-in-e-between", "SELECT titulo, preco FROM livros WHERE genero IN ('Romance', 'Contos') AND preco >= 29.90 AND preco <= 39.90;")]
+    [InlineData("listas-e-faixas-com-in-e-between", "SELECT titulo, preco FROM livros WHERE (genero = 'Romance' OR genero = 'Contos') AND preco BETWEEN 29.90 AND 39.90;")]
+    [InlineData("sem-repeticoes-com-distinct", "SELECT genero FROM livros WHERE preco < 40 GROUP BY genero;")]
+    [InlineData("sem-repeticoes-com-distinct", "SELECT DISTINCT genero FROM livros WHERE preco <= 40;")]
+    [InlineData("filtrando-grupos-com-having", "SELECT genero, COUNT(*) FROM livros GROUP BY genero HAVING COUNT(*) > 2;")]
+    [InlineData("quem-ficou-sem-par-com-left-join", "SELECT a.nome FROM autores a LEFT JOIN livros l ON l.autor_id = a.id WHERE l.titulo IS NULL;")]
+    [InlineData("quem-ficou-sem-par-com-left-join", "SELECT nome FROM autores WHERE id = 6;")]
+    [InlineData("quem-ficou-sem-par-com-left-join", "SELECT nome FROM autores WHERE id NOT IN (SELECT autor_id FROM livros);")]
+    public async Task Modulo2_AlternativasDoRoteiro_TambemPassam(string lessonSlug, string code)
+    {
+        var exercise = await ExerciseAsync(lessonSlug);
+
+        foreach (var testCase in TestCaseSpec.ParseList(exercise.TestCases))
+        {
+            var actual = await RunLikeTheRunnerAsync(testCase.Dataset ?? exercise.Dataset, testCase.Setup, code);
+            var comparison = ResultComparer.Compare(testCase, actual);
+            comparison.Passed.Should().BeTrue($"'{code}' deveria passar em '{testCase.Name}': {comparison.Feedback}");
         }
     }
 

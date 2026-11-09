@@ -43,6 +43,15 @@ public sealed class Lesson
     /// <summary>Tamanho máximo de cada objetivo de aprendizagem.</summary>
     public const int MaxObjectiveLength = 200;
 
+    /// <summary>
+    /// "O que você aprendeu": uma frase sobre a aula para a tela de módulo concluído (#41/#42).
+    /// Vem de <c>completion_summary</c> no frontmatter. <c>null</c> quando a aula não define.
+    /// </summary>
+    public string? CompletionSummary { get; private set; }
+
+    /// <summary>Tamanho máximo de <see cref="CompletionSummary"/>.</summary>
+    public const int MaxCompletionSummaryLength = 200;
+
     public IReadOnlyCollection<Exercise> Exercises => _exercises;
 
     private Lesson() { }
@@ -105,6 +114,25 @@ public sealed class Lesson
         Difficulty = difficulty;
         LearningObjectives = objectives ?? LearningObjectives;
         IsDraft = isDraft ?? IsDraft;
+    }
+
+    /// <summary>Define a frase de "o que você aprendeu". Vazio ou só espaços limpa (<c>null</c>).</summary>
+    public void SetCompletionSummary(string? summary)
+    {
+        var trimmed = summary?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            CompletionSummary = null;
+            return;
+        }
+
+        if (trimmed.Length > MaxCompletionSummaryLength)
+        {
+            throw new ArgumentException(
+                $"A frase de \"o que você aprendeu\" deve ter no máximo {MaxCompletionSummaryLength} caracteres.", nameof(summary));
+        }
+
+        CompletionSummary = trimmed;
     }
 
     public void MarkAsDraft() => IsDraft = true;
