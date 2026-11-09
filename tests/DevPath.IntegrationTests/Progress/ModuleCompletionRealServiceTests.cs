@@ -92,7 +92,7 @@ public sealed class ModuleCompletionRealServiceTests(ModuleCompletionWebFactory 
         html.Should().Contain("Módulo concluído: Fundamentos");
         html.Should().MatchRegex(@"\+0 pontos neste módulo · Trilha Trilha com próximo [0-9a-f]+: 50%", "aula de leitura não vale pontos; % do servidor");
         html.Should().Contain($"href=\"{Url(path, m2, l2)}\"").And.Contain("Começar o módulo 2: Segundo módulo");
-        html.Should().NotContain("O que você aprendeu", "o seed ainda não grava completion_summary");
+        html.Should().NotContain("O que você aprendeu", "as aulas deste teste não têm completion_summary");
 
         var again = await client.SubmitFormAsync(lesson, lesson + "/concluir", new Dictionary<string, string>());
         again.Headers.Location!.ToString().Should().Be(lesson, "refazer a aula não mostra a tela de novo");

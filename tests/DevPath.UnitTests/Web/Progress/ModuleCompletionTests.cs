@@ -1,3 +1,4 @@
+using DevPath.Application.Progress;
 using DevPath.Web.Models.Lessons;
 using DevPath.Web.Progress;
 using DevPath.Web.ViewModels.Onboarding;
@@ -154,15 +155,71 @@ public sealed class ModuleCompletionTests
     public async Task Reader_SoDevolveConcluido_DaTrilhaAtual()
     {
         var dashboard = Dashboard(L(M2, "like"), 60, Module1(true, 10, 10, 10), Module2());
-        var reader = new ModuleCompletionReader(new StubJourney(dashboard), new PendingModuleCompletionContentSource());
+        var reader = new ModuleCompletionReader(new StubJourney(dashboard), new StubContentService(null).AsSource());
 
         (await reader.LookupAsync(Guid.NewGuid(), PathSlug, M1, default)).Status.Should().Be(ModuleCompletionLookupStatus.Completed);
         (await reader.LookupAsync(Guid.NewGuid(), PathSlug, M2, default)).Status.Should().Be(ModuleCompletionLookupStatus.NotCompleted);
         (await reader.LookupAsync(Guid.NewGuid(), "outra-trilha", M1, default)).Status.Should().Be(ModuleCompletionLookupStatus.NotFound);
         (await reader.LookupAsync(Guid.NewGuid(), PathSlug, "nao-existe", default)).Status.Should().Be(ModuleCompletionLookupStatus.NotFound);
 
-        var noPath = new ModuleCompletionReader(new StubJourney(null), new PendingModuleCompletionContentSource());
+        var noPath = new ModuleCompletionReader(new StubJourney(null), new StubContentService(null).AsSource());
         (await noPath.LookupAsync(Guid.NewGuid(), PathSlug, M1, default)).Status.Should().Be(ModuleCompletionLookupStatus.NoPath);
+    }
+
+    [Fact]
+    public async Task Adapter_NullDoServico_ViraEmpty()
+    {
+        var content = await new StubContentService(null).AsSource().GetAsync(PathSlug, "nao-existe", default);
+
+        content.Subtitle.Should().BeNull();
+        content.LearnedByLessonSlug.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Adapter_MapeiaSubtituloEFrases_NaOrdemDoServico()
+    {
+        var dto = new ModuleCompletionContentDto("Subtítulo.", new Dictionary<string, string>
+        {
+            ["c"] = "Frase C.",
+            ["a"] = "Frase A.",
+        });
+        var service = new StubContentService(dto);
+
+        var content = await service.AsSource().GetAsync(PathSlug, M1, default);
+
+        service.Calls.Should().Equal((PathSlug, M1));
+        content.Subtitle.Should().Be("Subtítulo.");
+        content.LearnedByLessonSlug.Keys.Should().Equal("c", "a");
+        content.LearnedByLessonSlug["a"].Should().Be("Frase A.");
+    }
+
+    [Fact]
+    public async Task Adapter_AulaSemFrase_NaoEntraNaLista_EAOrdemFinalEhADasAulas()
+    {
+        // O serviço só manda as aulas com frase ("b" não tem); a tela lista na ordem das aulas do dashboard.
+        var dto = new ModuleCompletionContentDto(null, new Dictionary<string, string>
+        {
+            ["c"] = "Frase C.",
+            ["a"] = "Frase A.",
+        });
+
+        var content = await new StubContentService(dto).AsSource().GetAsync(PathSlug, M1, default);
+        var vm = ModuleCompletionViewModel.TryBuild(Dashboard(null, 100, Module1(true)), M1, content)!;
+
+        content.LearnedByLessonSlug.Should().NotContainKey("b");
+        vm.Learned.Should().Equal("Frase A.", "Frase C.");
+        vm.Subtitle.Should().BeNull();
+    }
+
+    private sealed class StubContentService(ModuleCompletionContentDto? dto) : IModuleCompletionContentService
+    {
+        public List<(string, string)> Calls { get; } = [];
+        public ModuleCompletionContentSource AsSource() => new(this);
+        public Task<ModuleCompletionContentDto?> GetAsync(string pathSlug, string moduleSlug, CancellationToken cancellationToken = default)
+        {
+            Calls.Add((pathSlug, moduleSlug));
+            return Task.FromResult(dto);
+        }
     }
 
     private sealed class StubJourney(DashboardViewModel? dashboard) : DevPath.Web.Onboarding.IStudentJourneyGateway

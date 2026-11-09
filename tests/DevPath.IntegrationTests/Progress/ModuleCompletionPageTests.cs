@@ -68,6 +68,12 @@ public sealed class ModuleCompletionPageTests(DevPathWebApplicationFactory facto
                 new Dictionary<string, string> { [Lesson] = Learned }));
     }
 
+    private sealed class EmptyContent : IModuleCompletionContentSource
+    {
+        public Task<ModuleCompletionContent> GetAsync(string pathSlug, string moduleSlug, CancellationToken cancellationToken) =>
+            Task.FromResult(ModuleCompletionContent.Empty);
+    }
+
     private static InMemoryLessonContentService Lessons() => new(
         new InMemoryLessonContentService.FakePath(Path, "SQL & Dados",
         [
@@ -91,8 +97,8 @@ public sealed class ModuleCompletionPageTests(DevPathWebApplicationFactory facto
             services.Replace(ServiceDescriptor.Scoped<ILessonContentService>(_ => Lessons()));
             services.Replace(ServiceDescriptor.Scoped<ILessonProgressGateway>(_ => fake));
             services.Replace(ServiceDescriptor.Scoped<IStudentJourneyGateway>(_ => new FixedJourney(dashboard)));
-            if (withContent)
-                services.Replace(ServiceDescriptor.Singleton<IModuleCompletionContentSource>(new FixedContent()));
+            services.Replace(ServiceDescriptor.Singleton<IModuleCompletionContentSource>(
+                withContent ? new FixedContent() : new EmptyContent()));
         }));
 
     private static LessonProgressView ReadingBefore() => Samples.ReadingAvailable(new LessonItemViewModel(Like, LessonStatus.Locked, Samples.Select));

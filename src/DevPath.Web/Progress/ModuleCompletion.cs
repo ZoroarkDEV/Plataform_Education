@@ -1,3 +1,4 @@
+using DevPath.Application.Progress;
 using DevPath.Web.Models.Lessons;
 using DevPath.Web.Onboarding;
 using DevPath.Web.ViewModels.Onboarding;
@@ -5,8 +6,8 @@ using DevPath.Web.ViewModels.Onboarding;
 namespace DevPath.Web.Progress;
 
 /// <summary>
-/// Textos de conteúdo da tela "Módulo concluído" (#42): o subtítulo do módulo e, por aula, a frase de
-/// "O que você aprendeu" (chave proposta pelo PO: <c>completion_summary</c> no frontmatter, #41).
+/// Textos de conteúdo da tela "Módulo concluído" (#42): o subtítulo do módulo (<c>completion_subtitle</c> no
+/// path.yaml) e, por aula, a frase de "O que você aprendeu" (<c>completion_summary</c> no frontmatter).
 /// </summary>
 /// <param name="LearnedByLessonSlug">Frase por slug de aula. Aula sem frase não aparece na lista.</param>
 public sealed record ModuleCompletionContent(string? Subtitle, IReadOnlyDictionary<string, string> LearnedByLessonSlug)
@@ -14,23 +15,27 @@ public sealed record ModuleCompletionContent(string? Subtitle, IReadOnlyDictiona
     public static readonly ModuleCompletionContent Empty = new(null, new Dictionary<string, string>());
 }
 
-/// <summary>
-/// De onde vêm os textos de <see cref="ModuleCompletionContent"/>. O conteúdo é gravado no banco pelo seed
-/// (ADR-003), então a implementação real é do Backend (coluna nova + seed + migration).
-/// </summary>
+/// <summary>De onde vêm os textos de <see cref="ModuleCompletionContent"/> (porta da Web).</summary>
 public interface IModuleCompletionContentSource
 {
     Task<ModuleCompletionContent> GetAsync(string pathSlug, string moduleSlug, CancellationToken cancellationToken);
 }
 
 /// <summary>
-/// Até o Backend gravar <c>completion_summary</c>: sem textos. A tela mostra título, pontos, % e o próximo passo,
-/// e esconde "O que você aprendeu" e o subtítulo (nada de texto inventado fora do /content).
+/// Adapter para o serviço do Backend (<see cref="IModuleCompletionContentService"/>, #42): só mapeia o DTO.
+/// null (trilha/módulo inexistente) vira <see cref="ModuleCompletionContent.Empty"/>; a tela esconde
+/// subtítulo e "O que você aprendeu". A ordem das frases é a das aulas no dashboard.
 /// </summary>
-public sealed class PendingModuleCompletionContentSource : IModuleCompletionContentSource
+public sealed class ModuleCompletionContentSource(IModuleCompletionContentService service) : IModuleCompletionContentSource
 {
-    public Task<ModuleCompletionContent> GetAsync(string pathSlug, string moduleSlug, CancellationToken cancellationToken) =>
-        Task.FromResult(ModuleCompletionContent.Empty);
+    public async Task<ModuleCompletionContent> GetAsync(string pathSlug, string moduleSlug, CancellationToken cancellationToken)
+    {
+        var dto = await service.GetAsync(pathSlug, moduleSlug, cancellationToken);
+        return dto is null ? ModuleCompletionContent.Empty : ToContent(dto);
+    }
+
+    public static ModuleCompletionContent ToContent(ModuleCompletionContentDto dto) =>
+        new(dto.Subtitle, new Dictionary<string, string>(dto.LearnedByLessonSlug, StringComparer.Ordinal));
 }
 
 /// <summary>O botão principal da tela: 1ª aula que abre no próximo módulo com aula pronta.</summary>
