@@ -22,6 +22,11 @@ internal sealed class PasswordResetEmailWorker(
                     await scope.ServiceProvider.GetRequiredService<PasswordResetService>()
                         .SendResetEmailAsync(email, stoppingToken);
                 }
+                catch (DevPath.Infrastructure.Email.EmailDeliveryException ex)
+                {
+                    // O sender já registrou o motivo (status/resposta do provedor). O aluno pode pedir de novo.
+                    logger.LogWarning("E-mail de recuperação de senha não entregue: {Reason}", ex.Message);
+                }
                 catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
                 {
                     // O e-mail do aluno não vai para o log (dado pessoal); o erro sim.

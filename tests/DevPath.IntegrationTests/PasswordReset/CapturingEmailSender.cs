@@ -11,8 +11,18 @@ public sealed class CapturingEmailSender : IEmailSender
     /// <summary>Atraso simulado do SMTP (para provar que o POST não espera o envio).</summary>
     public TimeSpan Delay { get; set; } = TimeSpan.Zero;
 
+    /// <summary>Próximo envio falha com esta exceção (simula o provedor recusando), uma vez.</summary>
+    public Exception? FailNext { get => _failNextSlot; set => _failNextSlot = value; }
+
+    private Exception? _failNextSlot;
+
     public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
+        if (Interlocked.Exchange(ref _failNextSlot, null) is { } failure)
+        {
+            throw failure;
+        }
+
         if (Delay > TimeSpan.Zero)
         {
             await Task.Delay(Delay, cancellationToken);

@@ -284,6 +284,21 @@ public sealed partial class PasswordResetFlowTests(PasswordResetWebApplicationFa
     }
 
     [Fact]
+    public async Task Worker_ProvedorRecusa_NaoDerrubaAFilaEOProximoEmailSai()
+    {
+        var first = await CreateUserAsync();
+        var second = await CreateUserAsync();
+        factory.Emails.FailNext = new DevPath.Infrastructure.Email.EmailDeliveryException("Resend respondeu HTTP 500.");
+
+        await RequestResetAsync(factory.CreateClientFromNewIp(), first);
+        await RequestResetAsync(factory.CreateClientFromNewIp(), second);
+
+        await factory.Emails.WaitForAsync(second);
+        factory.Emails.SentTo(first).Should().BeEmpty();
+        factory.Emails.FailNext.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Forgot_SemAntiforgery_400ENadaEnviado()
     {
         var known = await CreateUserAsync();

@@ -27,10 +27,30 @@ Fluxo (US-AUTH.1): **Entrar → "Esqueci minha senha" → e-mail com link → no
   Sem essa chave, o e-mail não é enviado (erro no log). A página do link manda `Referrer-Policy: no-referrer`
   e `Cache-Control: no-store`. Nem o link nem o e-mail do aluno vão para o log.
 
+## Quem envia: `Email:Provider`
+
+O envio fica atrás de `IEmailSender` (`DevPath.Application.Email`). A implementação sai da configuração:
+
+| `Email:Provider` | Implementação | Onde |
+|---|---|---|
+| `Smtp` | `SmtpEmailSender` (MailKit) | Development (`appsettings.Development.json`) e o compose (dev e staging): Mailpit |
+| `Resend` | `ResendEmailSender` (`POST https://api.resend.com/emails`, HttpClient tipado) | **Produção** (decisão do dono, 2026-11-09) |
+| `None` | só registra um aviso no log, não envia | padrão do `appsettings.json` (testes, produção antes da chave) |
+| vazio | `Smtp` se `Email:Smtp:Host` existir, senão `None` | compatibilidade |
+
+Configuração incompleta **derruba o startup** com mensagem clara: `Resend` sem chave, `Smtp` sem
+`Email:Smtp:Host` ou um provider desconhecido. Uma recusa do provedor (4xx/5xx, timeout, rede) é
+registrada no log (status e resposta do Resend, nunca a chave) e o worker segue para o próximo e-mail;
+o aluno vê a mesma tela e pode pedir de novo.
+
 ## Configuração
 
 | Chave (variável de ambiente) | Padrão | Uso |
 |---|---|---|
+| `Email:Provider` (`Email__Provider`) | `None`; Development e compose: `Smtp` | `Smtp`, `Resend` ou `None` |
+| `Email:Resend:ApiKey` (`Email__Resend__ApiKey` ou `RESEND_API_KEY`) | **nunca no repositório** | Chave da API do Resend, só por secret |
+| `Email:Resend:BaseUrl` | `https://api.resend.com` | |
+| `Email:Resend:TimeoutSeconds` | `15` | Timeout do HttpClient |
 | `App:PublicBaseUrl` (`App__PublicBaseUrl`) | vazio; Development: `http://localhost:5055`; compose: `${PUBLIC_BASE_URL:-http://localhost:8080}` | Base dos links dos e-mails |
 | `Email:FromAddress` / `Email:FromName` | `nao-responda@devpath.local` / `DevPath` | Remetente |
 | `Email:Smtp:Host` | vazio (= não envia, só avisa no log); Development: `localhost`; compose: `mailpit` | Servidor SMTP |
@@ -60,24 +80,32 @@ entrega nada de verdade**. A Web envia para `mailpit:1025` pela rede interna do 
 Para testar: abra `/Account/Login` → "Esqueci minha senha", informe o e-mail de uma conta e abra o e-mail
 "DevPath: crie sua nova senha" na interface do Mailpit.
 
-## Produção: pendente (decisão do dono)
+## Produção: Resend
 
-O provedor de envio de produção ainda **não foi escolhido** (decisão pendente nº 7 do roteiro do PO).
-Enquanto isso, em produção `Email:Smtp:Host` fica vazio: o "Esqueci a senha" responde normalmente, mas
-nenhum e-mail sai (aviso "E-mail … NÃO enviado" no log). **Não convide pessoas reais antes de configurar.**
+Decisão do dono (#44, 2026-11-09): produção envia pelo **Resend**; dev e staging continuam no Mailpit.
 
-Quando o dono decidir, se o provedor aceitar SMTP (ex.: Amazon SES, SendGrid, Mailgun, Postmark, Brevo),
-basta configurar por variável de ambiente, sem mudar código:
+1. **Domínio verificado.** No painel do Resend (Domains), adicione o domínio público do DevPath e crie
+   os registros DNS que ele pede (SPF e DKIM; DMARC recomendado). Enquanto o domínio não estiver
+   *Verified*, o Resend recusa o envio com 403/422 e o log mostra a mensagem dele.
+2. **Remetente.** `Email__FromAddress` precisa ser um endereço desse domínio verificado
+   (ex.: `nao-responda@<domínio>`). `Email__FromName` = `DevPath`.
+3. **Chave.** Crie uma API key com permissão **Sending access**, restrita ao domínio. **O dono envia a
+   chave por um canal seguro** (gerenciador de segredos/cofre, nunca chat, issue ou e-mail) e ela entra só
+   no secret do deploy, como `Email__Resend__ApiKey` (ou `RESEND_API_KEY`). Ela nunca vai para o
+   repositório, para o `appsettings*.json` nem para o `.env.example` (um teste garante que os appsettings
+   versionados não têm valor em `ApiKey`). Para trocar a chave, gere outra no Resend, atualize o secret,
+   reinicie a Web e revogue a antiga.
+4. **Variáveis da Web em produção:**
 
 ```
+Email__Provider=Resend
+Email__Resend__ApiKey=<secret do deploy>
+Email__FromAddress=nao-responda@<domínio verificado>
+Email__FromName=DevPath
 App__PublicBaseUrl=https://<domínio público>
-Email__FromAddress=nao-responda@<domínio verificado no provedor>
-Email__Smtp__Host=<host SMTP do provedor>
-Email__Smtp__Port=587
-Email__Smtp__Security=StartTls
-Email__Smtp__Username=<usuário>
-Email__Smtp__Password=<segredo>   # só no gerenciador de segredos do deploy
 ```
 
-Também é preciso configurar SPF/DKIM do domínio no provedor. Um provedor só por API HTTP pede uma nova
-implementação de `IEmailSender` (`DevPath.Application.Email`).
+Sem a chave, a Web **não sobe** (mensagem "Email:Provider=Resend, mas a chave do Resend não foi
+informada…"), para o problema aparecer no deploy e não no primeiro aluno que esqueceu a senha.
+**Não convide pessoas reais antes de configurar.** O texto do e-mail é o mesmo em todos os provedores:
+PT-BR, assunto "DevPath: crie sua nova senha", HTML + texto.

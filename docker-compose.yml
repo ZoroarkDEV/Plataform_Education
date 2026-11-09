@@ -73,6 +73,8 @@ services:
       Content__RootPath: /app/content
       # E-mail (#44): SMTP do Mailpit (nome do serviço e porta interna). Links dos e-mails usam a URL
       # pública, nunca o header Host. Em staging, PUBLIC_BASE_URL = endereço do staging.
+      # Dev/staging: Smtp (Mailpit). Produção não usa este compose: Email__Provider=Resend + chave por secret.
+      Email__Provider: Smtp
       Email__Smtp__Host: mailpit
       Email__Smtp__Port: "1025"
       Email__Smtp__Security: None

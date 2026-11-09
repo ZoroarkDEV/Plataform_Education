@@ -44,7 +44,7 @@ public static class DependencyInjection
     {
         services.AddPersistence(configuration);
         services.AddIdentityServices(configuration);
-        services.AddEmail(configuration);
+        services.AddEmailSender(configuration);
 
         // Leitura das aulas para a página /trilhas/{trilha}/{módulo}/{aula}. Scoped = um por requisição,
         // o mesmo tempo de vida do DbContext que ele usa.
@@ -128,20 +128,69 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// E-mail (issue #44): SMTP quando <c>Email:Smtp:Host</c> está configurado (Mailpit em dev/staging);
-    /// senão, um sender que só avisa no log (produção, até o dono escolher o provedor).
+    /// E-mail (issue #44). <c>Email:Provider</c> escolhe a implementação de <see cref="IEmailSender"/>:
+    /// <c>Smtp</c> (dev/staging: Mailpit), <c>Resend</c> (produção) ou <c>None</c> (só avisa no log).
+    /// Vazio = <c>Smtp</c> se <c>Email:Smtp:Host</c> existir, senão <c>None</c>.
+    /// Configuração incompleta falha AQUI, no startup, com mensagem clara (não no primeiro e-mail).
     /// </summary>
-    private static void AddEmail(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddEmailSender(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
-        if (string.IsNullOrWhiteSpace(configuration[$"{EmailOptions.SectionName}:Smtp:Host"]))
+        var section = configuration.GetSection(EmailOptions.SectionName);
+        // A chave só vem do ambiente/secret: Email__Resend__ApiKey ou RESEND_API_KEY (nome do Resend).
+        var resendApiKey = section["Resend:ApiKey"];
+        if (string.IsNullOrWhiteSpace(resendApiKey))
+        {
+            resendApiKey = configuration[ResendOptions.ApiKeyEnvironmentVariable];
+        }
+
+        services.Configure<EmailOptions>(section);
+        services.PostConfigure<EmailOptions>(options => options.Resend.ApiKey = resendApiKey);
+
+        var provider = section["Provider"]?.Trim();
+        if (string.IsNullOrEmpty(provider))
+        {
+            provider = string.IsNullOrWhiteSpace(section["Smtp:Host"]) ? EmailProviders.None : EmailProviders.Smtp;
+        }
+
+        if (provider.Equals(EmailProviders.Smtp, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(section["Smtp:Host"]))
+            {
+                throw new InvalidOperationException(
+                    "Email:Provider=Smtp, mas Email:Smtp:Host não está configurado. Defina Email__Smtp__Host " +
+                    "(ex.: mailpit no compose) ou use Email:Provider=None. Veja docs/email-e-recuperacao-de-senha.md.");
+            }
+
+            services.TryAddSingleton<IEmailSender, SmtpEmailSender>();
+        }
+        else if (provider.Equals(EmailProviders.Resend, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(resendApiKey))
+            {
+                throw new InvalidOperationException(
+                    "Email:Provider=Resend, mas a chave do Resend não foi informada. Defina a variável de ambiente " +
+                    "Email__Resend__ApiKey (ou RESEND_API_KEY) pelo secret do deploy; nunca no appsettings. " +
+                    "Veja docs/email-e-recuperacao-de-senha.md.");
+            }
+
+            var resend = section.GetSection("Resend").Get<ResendOptions>() ?? new ResendOptions();
+            services.AddHttpClient<IEmailSender, ResendEmailSender>(client =>
+            {
+                client.BaseAddress = new Uri(resend.BaseUrl.TrimEnd('/') + "/");
+                client.Timeout = TimeSpan.FromSeconds(Math.Max(1, resend.TimeoutSeconds));
+            });
+        }
+        else if (provider.Equals(EmailProviders.None, StringComparison.OrdinalIgnoreCase))
         {
             services.TryAddSingleton<IEmailSender, UnconfiguredEmailSender>();
         }
         else
         {
-            services.TryAddSingleton<IEmailSender, SmtpEmailSender>();
+            throw new InvalidOperationException(
+                $"Email:Provider inválido: \"{provider}\". Use Smtp, Resend ou None.");
         }
+
+        return services;
     }
 
     private static void AddIdentityServices(this IServiceCollection services, IConfiguration configuration)
