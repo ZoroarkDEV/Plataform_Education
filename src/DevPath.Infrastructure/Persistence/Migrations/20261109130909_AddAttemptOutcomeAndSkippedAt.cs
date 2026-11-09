@@ -43,7 +43,7 @@ namespace DevPath.Infrastructure.Persistence.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "CK_CodeSubmissions_Outcome_MatchesResult",
                 table: "CodeSubmissions",
-                sql: "\"Outcome\" IS NULL OR ((\"Outcome\" = 'Pass') = (\"Result\" = 'Pass'))");
+                sql: "(\"Result\" = 'Pass' AND COALESCE(\"Outcome\", '') = 'Pass') OR (\"Result\" = 'Fail' AND COALESCE(\"Outcome\", 'Fail') IN ('Fail', 'Error', 'Timeout'))");
         }
 
         /// <inheritdoc />

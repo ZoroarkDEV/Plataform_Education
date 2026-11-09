@@ -404,7 +404,7 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_CodeSubmissions_ExecutionTimeMs_NonNegative", "\"ExecutionTimeMs\" >= 0");
 
-                            t.HasCheckConstraint("CK_CodeSubmissions_Outcome_MatchesResult", "\"Outcome\" IS NULL OR ((\"Outcome\" = 'Pass') = (\"Result\" = 'Pass'))");
+                            t.HasCheckConstraint("CK_CodeSubmissions_Outcome_MatchesResult", "(\"Result\" = 'Pass' AND COALESCE(\"Outcome\", '') = 'Pass') OR (\"Result\" = 'Fail' AND COALESCE(\"Outcome\", 'Fail') IN ('Fail', 'Error', 'Timeout'))");
                         });
                 });
 

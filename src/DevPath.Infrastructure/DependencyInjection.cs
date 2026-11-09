@@ -16,8 +16,8 @@ using DevPath.Infrastructure.Progress;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using StackExchange.Redis;
 
 namespace DevPath.Infrastructure;
@@ -60,9 +60,6 @@ public static class DependencyInjection
         services.AddScoped<LessonProgressWriter>();
         services.AddScoped<ILessonProgressService, LessonProgressService>();
 
-        // Relatório de tentativas para o dono (#43, /admin/tentativas).
-        services.AddScoped<IAttemptAnalyticsService, AttemptAnalyticsService>();
-
         // Execução de código: a Web só ENFILEIRA (Redis) e decide quem pode executar. Quem executa é o Worker.
         services.AddRedis(configuration);
         services.Configure<ExecutionQueueOptions>(configuration.GetSection(ExecutionQueueOptions.SectionName));
@@ -70,6 +67,9 @@ public static class DependencyInjection
         services.AddScoped<IExerciseCatalog, ExerciseCatalog>();
         // Scoped: lê o progresso do aluno no banco (trilha atual + desbloqueio), #27.
         services.AddScoped<ILessonAccessPolicy, LessonAccessPolicy>();
+
+        // Relatório de tentativas para o dono (#43, /admin/tentativas).
+        services.AddScoped<IAttemptAnalyticsService, AttemptAnalyticsService>();
 
         return services;
     }

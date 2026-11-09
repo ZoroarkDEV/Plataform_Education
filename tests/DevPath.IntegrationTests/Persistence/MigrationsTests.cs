@@ -242,22 +242,33 @@ public sealed class MigrationsTests : IAsyncLifetime
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync(Previous);
 
-        var path = Domain.CareerPaths.CareerPath.Create("Trilha tentativas");
-        var lesson = path.AddModule("M").AddLesson("A", Domain.CareerPaths.ContentType.Markdown, "# a");
-        var lesson2 = path.Modules.Single().AddLesson("B", Domain.CareerPaths.ContentType.Markdown, "# b");
-        var exercise = lesson.AddExercise("E", "x", "sql", "[]");
-        db.CareerPaths.Add(path);
-        var userId = Guid.NewGuid();
-        db.Users.Add(new ApplicationUser
-        {
-            Id = userId, UserName = $"{userId:N}@t", NormalizedUserName = $"{userId:N}@T", Email = $"{userId:N}@t",
-            NormalizedEmail = $"{userId:N}@T", DisplayName = "A", SecurityStamp = Guid.NewGuid().ToString()
-        });
-        await db.SaveChangesAsync();
+        // Seed em SQL puro, só com as colunas que existiam NESTE passo: o modelo do EF muda com as migrations futuras
+        // (ex.: #41 adiciona colunas) e um SaveChanges aqui tentaria gravar colunas que ainda não existem.
+        Guid userId = Guid.NewGuid(), pathId = Guid.NewGuid(), moduleId = Guid.NewGuid();
+        Guid lessonId = Guid.NewGuid(), lesson2Id = Guid.NewGuid(), exerciseId = Guid.NewGuid();
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "AspNetUsers" ("Id", "UserName", "NormalizedUserName", "Email", "NormalizedEmail", "EmailConfirmed",
+                "SecurityStamp", "PhoneNumberConfirmed", "TwoFactorEnabled", "LockoutEnabled", "AccessFailedCount",
+                "DisplayName", "CreatedAt", "IsAdmin")
+            VALUES (@u, 'a@t', 'A@T', 'a@t', 'A@T', false, 'x', false, false, false, 0, 'A', now(), false);
+            INSERT INTO "CareerPaths" ("Id", "Title", "Slug", "Description", "DifficultyLevel", "EstimatedHours", "IsActive", "Order")
+            VALUES (@p, 'Trilha tentativas', 'trilha-tentativas', '', 'Beginner', 0, true, 0);
+            INSERT INTO "Modules" ("Id", "CareerPathId", "Title", "Slug", "Description", "Order", "EstimatedMinutes", "IsPublished")
+            VALUES (@m, @p, 'M', 'm', '', 1, 0, true);
+            INSERT INTO "Lessons" ("Id", "ModuleId", "Title", "Slug", "ContentType", "Content", "Order", "EstimatedMinutes",
+                "Difficulty", "IsPublished", "IsDraft")
+            VALUES (@l, @m, 'A', 'a', 'Markdown', '# a', 1, 0, 'Beginner', true, false),
+                   (@l2, @m, 'B', 'b', 'Markdown', '# b', 2, 0, 'Beginner', true, false);
+            INSERT INTO "Exercises" ("Id", "LessonId", "Title", "Statement", "StarterCode", "SolutionCode", "TestCases",
+                "Language", "Points", "IsPublished")
+            VALUES (@e, @l, 'E', 'x', '', '', '[]', 'sql', 10, true);
+            """,
+            new NpgsqlParameter("u", userId), new NpgsqlParameter("p", pathId), new NpgsqlParameter("m", moduleId),
+            new NpgsqlParameter("l", lessonId), new NpgsqlParameter("l2", lesson2Id), new NpgsqlParameter("e", exerciseId));
 
         var completedAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
-        var p = new[] { new NpgsqlParameter("u", userId), new NpgsqlParameter("e", exercise.Id), new NpgsqlParameter("l", lesson.Id),
-            new NpgsqlParameter("l2", lesson2.Id), new NpgsqlParameter("at", completedAt) };
+        var p = new[] { new NpgsqlParameter("u", userId), new NpgsqlParameter("e", exerciseId), new NpgsqlParameter("l", lessonId),
+            new NpgsqlParameter("l2", lesson2Id), new NpgsqlParameter("at", completedAt) };
         await db.Database.ExecuteSqlRawAsync("""
             INSERT INTO "CodeSubmissions" ("Id", "UserId", "ExerciseId", "SubmittedCode", "Result", "ExecutionTimeMs", "SubmittedAt")
             VALUES (gen_random_uuid(), @u, @e, 'a', 'Fail', 1, now()), (gen_random_uuid(), @u, @e, 'b', 'Pass', 1, now());
@@ -273,9 +284,10 @@ public sealed class MigrationsTests : IAsyncLifetime
             """, new NpgsqlParameter("u", userId)).ToListAsync();
         outcomes.Should().BeEquivalentTo(["Pass:Pass", "Fail:null"], "falha antiga não diz se foi errado ou erro");
 
-        var progress = await db.UserProgress.AsNoTracking().Where(x => x.UserId == userId).ToListAsync();
-        progress.Single(x => x.LessonId == lesson.Id).SkippedAt.Should().Be(completedAt);
-        progress.Single(x => x.LessonId == lesson2.Id).SkippedAt.Should().BeNull();
+        var skipped = await db.Database.SqlQueryRaw<DateTime?>("""
+            SELECT "SkippedAt" AS "Value" FROM "UserProgress" WHERE "UserId" = @u ORDER BY "LessonId" = @l DESC
+            """, new NpgsqlParameter("u", userId), new NpgsqlParameter("l", lessonId)).ToListAsync();
+        skipped.Should().Equal(completedAt, null); // aula A (skip atual) e depois aula B (ExercisePassed)
 
         await migrator.MigrateAsync(Previous);
 

@@ -270,19 +270,40 @@ public sealed class AttemptAnalyticsServiceTests(AttemptAnalyticsFixture fx) : I
             .SkippedAt.Should().BeNull();
     }
 
-    [Fact]
-    public async Task Banco_RecusaOutcomeQueContradizResult()
+    [Theory]
+    [InlineData("Pass", "Pass", true)]
+    [InlineData("Fail", "Fail", true)]
+    [InlineData("Fail", "Error", true)]
+    [InlineData("Fail", "Timeout", true)]
+    [InlineData("Fail", null, true)]
+    [InlineData("Fail", "Pass", false)]
+    [InlineData("Pass", "Fail", false)]
+    [InlineData("Pass", "Error", false)]
+    [InlineData("Pass", null, false)]
+    [InlineData("Fail", "Banana", false)]
+    public async Task Banco_SoAceitaOutcomeValidoECoerenteComResult(string result, string? outcome, bool accepted)
     {
         await using var db = fx.CreateDbContext();
         var exerciseId = await db.Exercises.Where(e => e.LessonId == fx.Lesson1.Id).Select(e => e.Id).FirstAsync();
 
+        await using var tx = await db.Database.BeginTransactionAsync(); // nada fica no banco do relatório
         var act = () => db.Database.ExecuteSqlRawAsync("""
             INSERT INTO "CodeSubmissions" ("Id", "UserId", "ExerciseId", "SubmittedCode", "Result", "Outcome", "ExecutionTimeMs", "SubmittedAt")
-            VALUES (gen_random_uuid(), @u, @e, 'x', 'Fail', 'Pass', 1, now())
-            """, new NpgsqlParameter("u", fx.Users[0]), new NpgsqlParameter("e", exerciseId));
+            VALUES (gen_random_uuid(), @u, @e, 'x', @r, @o, 1, now())
+            """, new NpgsqlParameter("u", fx.Users[0]), new NpgsqlParameter("e", exerciseId),
+            new NpgsqlParameter("r", result), new NpgsqlParameter("o", (object?)outcome ?? DBNull.Value));
 
-        (await act.Should().ThrowAsync<PostgresException>()).Which.ConstraintName
-            .Should().Be("CK_CodeSubmissions_Outcome_MatchesResult");
+        if (accepted)
+        {
+            await act.Should().NotThrowAsync();
+        }
+        else
+        {
+            (await act.Should().ThrowAsync<PostgresException>()).Which.ConstraintName
+                .Should().Be("CK_CodeSubmissions_Outcome_MatchesResult");
+        }
+
+        await tx.RollbackAsync();
     }
 
     [Fact]
@@ -294,12 +315,17 @@ public sealed class AttemptAnalyticsServiceTests(AttemptAnalyticsFixture fx) : I
             dir = dir.Parent;
         }
         dir.Should().NotBeNull("os testes rodam dentro do repositório");
-        var doc = Normalize(File.ReadAllText(Path.Combine(dir!.FullName, "docs", "analytics", "tentativas.md")));
+        var doc = File.ReadAllText(Path.Combine(dir!.FullName, "docs", "analytics", "tentativas.md"));
 
-        foreach (var sql in new[] { AttemptAnalyticsSql.AttemptsUntilPass, AttemptAnalyticsSql.Skips, AttemptAnalyticsSql.FailureRates })
-        {
-            doc.Should().Contain(Normalize(sql), "docs/analytics/tentativas.md precisa ter a consulta igual à da página");
-        }
+        // Os três primeiros blocos ```sql são as consultas da página, NA ORDEM, iguais (fora espaços) ao código.
+        // Igualdade exata: texto a mais no bloco (ex.: um LIMIT) também falha. O 4º bloco é o "como dar admin".
+        var blocks = Regex.Matches(doc, @"```sql\s*\n(.*?)```", RegexOptions.Singleline)
+            .Select(m => Normalize(m.Groups[1].Value))
+            .ToList();
+        blocks.Should().HaveCount(4);
+        blocks.Take(3).Should().Equal(
+            new[] { AttemptAnalyticsSql.AttemptsUntilPass, AttemptAnalyticsSql.Skips, AttemptAnalyticsSql.FailureRates }
+                .Select(sql => Normalize(sql + ";")));
 
         static string Normalize(string s) => Regex.Replace(s, @"\s+", " ").Trim();
     }

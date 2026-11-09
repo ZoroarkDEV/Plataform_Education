@@ -178,6 +178,9 @@ WHERE u."NormalizedEmail" = UPPER('dono@exemplo.com') AND r."NormalizedName" = '
 ON CONFLICT DO NOTHING;
 ```
 
+**Atenção:** `AspNetUsers` tem uma coluna `IsAdmin` (do modelo de usuário da SPEC, desde o #9), mas **nada a
+usa**: marcar `IsAdmin = true` não dá acesso. Quem vale é o papel `Admin` acima.
+
 O papel vai no cookie de login: a pessoa precisa **sair e entrar de novo** para ganhar (ou perder) o acesso.
 Para tirar: `DELETE FROM "AspNetUserRoles"` com o mesmo `UserId`/`RoleId`.
 

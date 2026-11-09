@@ -24,5 +24,10 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     /// <summary>Trilha que o aluno está seguindo agora (FK para CareerPaths, opcional).</summary>
     public Guid? CurrentPathId { get; set; }
 
+    /// <summary>
+    /// Campo do modelo de usuário da SPEC (§4, desde o #9). Hoje NADA lê esta coluna: o acesso à área
+    /// administrativa (ex.: /admin/tentativas, #43) vem do papel "Admin" do Identity (AspNetUserRoles).
+    /// Marcar IsAdmin = true não dá acesso. Ver docs/analytics/tentativas.md.
+    /// </summary>
     public bool IsAdmin { get; set; }
 }

@@ -13,9 +13,10 @@ internal sealed class CodeSubmissionConfiguration : IEntityTypeConfiguration<Cod
         builder.ToTable("CodeSubmissions", t =>
         {
             t.HasCheckConstraint("CK_CodeSubmissions_ExecutionTimeMs_NonNegative", "\"ExecutionTimeMs\" >= 0");
-            // #43: o detalhe (Outcome) não pode contradizer o Result que as regras de tentativa usam.
+            // #43: Outcome só Pass/Fail/Error/Timeout e sem contradizer o Result que as regras de tentativa usam.
+            // NULL só em Fail (tentativas antigas, de antes do #43). COALESCE porque, sem ele, NULL deixaria a CHECK passar.
             t.HasCheckConstraint("CK_CodeSubmissions_Outcome_MatchesResult",
-                "\"Outcome\" IS NULL OR ((\"Outcome\" = 'Pass') = (\"Result\" = 'Pass'))");
+                "(\"Result\" = 'Pass' AND COALESCE(\"Outcome\", '') = 'Pass') OR (\"Result\" = 'Fail' AND COALESCE(\"Outcome\", 'Fail') IN ('Fail', 'Error', 'Timeout'))");
         });
         builder.HasKey(s => s.Id);
 
