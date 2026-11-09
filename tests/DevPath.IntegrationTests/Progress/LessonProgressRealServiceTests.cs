@@ -237,7 +237,8 @@ public sealed class LessonProgressRealServiceTests(LessonProgressWebFactory fact
         {
             (await ExecuteRawAsync(client, Wrong)).GetProperty("lessonCompleted").GetBoolean().Should().BeFalse();
         }
-        (await (await client.GetAsync(notas)).ReadHtmlAsync()).Should().NotContain("data-skip-form", "antes da 5ª falha não há pulo");
+        (await (await client.GetAsync(notas)).ReadHtmlAsync()).Should().NotContain("data-skip-form", "antes da 5ª falha não há pulo")
+            .And.Contain("data-failures-until-skip=\"1\"", "padrão 5: falta 1 depois de 4 falhas");
 
         await ExecuteRawAsync(client, Wrong);
         (await (await client.GetAsync(notas)).ReadHtmlAsync()).Should().Contain("data-skip-form", "CanSkip na 5ª falha");
@@ -277,6 +278,41 @@ public sealed class LessonProgressRealServiceTests(LessonProgressWebFactory fact
     {
         var token = await client.GetFromJsonAsync<JsonElement>("/api/antiforgery/token");
         client.DefaultRequestHeaders.Add(token.GetProperty("headerName").GetString()!, token.GetProperty("token").GetString());
+    }
+
+    [DockerFact]
+    public async Task LimiteDoExercicio2_PaginaMandaAoJsAsFalhasQueFaltam_ELiberaNa2aFalha()
+    {
+        await SetFailuresBeforeSkipAsync(2);
+        try
+        {
+            var (client, _) = await StudentAsync();
+            await CompleteReadingAsync(client);
+            var notas = factory.Url("notas");
+            (await (await client.GetAsync(notas)).ReadHtmlAsync()).Should().Contain("data-failures-until-skip=\"2\"");
+            await AddAntiforgeryHeaderAsync(client);
+
+            await ExecuteRawAsync(client, Wrong);
+            var page = await (await client.GetAsync(notas)).ReadHtmlAsync();
+            page.Should().Contain("data-failures-until-skip=\"1\"").And.NotContain("data-skip-form");
+
+            await ExecuteRawAsync(client, Wrong);
+            page = await (await client.GetAsync(notas)).ReadHtmlAsync();
+            page.Should().Contain("data-failures-until-skip=\"0\"").And.Contain("data-skip-form", "N=2 libera na 2ª falha, não na 5ª (#29)");
+        }
+        finally
+        {
+            await SetFailuresBeforeSkipAsync(null);
+        }
+    }
+
+    private async Task SetFailuresBeforeSkipAsync(int? value)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DevPathDbContext>();
+        var exercise = await db.Exercises.SingleAsync(e => e.Id == factory.ExerciseId);
+        exercise.SetFailuresBeforeSkip(value);
+        await db.SaveChangesAsync();
     }
 
     private async Task<UserProgress?> ProgressAsync(Guid userId, string lessonSlug)

@@ -64,6 +64,15 @@ public sealed class LessonMarkupResponsiveTests
     }
 
     [Fact]
+    public void Skip_announcement_uses_the_server_limit_not_a_fixed_five()
+    {
+        var js = File.ReadAllText(Path.Combine(Root(), "wwwroot", "js", "site.js"));
+        js.Should().NotMatchRegex(@"nextFailed\s*>=\s*\d", "o limite vem do exercício (failures_before_skip), não do JS (#29)");
+        js.Should().Contain("section.dataset.failuresUntilSkip");
+        View("_LessonExercise.cshtml").Should().Contain("data-failures-until-skip=\"@(Model.FailuresUntilSkip?.ToString() ?? \"\")\"");
+    }
+
+    [Fact]
     public void Execute_results_table_scrolls_in_its_own_region()
     {
         var js = File.ReadAllText(Path.Combine(Root(), "wwwroot", "js", "site.js"));

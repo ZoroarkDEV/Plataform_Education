@@ -50,7 +50,8 @@ public sealed record LessonExerciseViewModel(
     int? RemainingAttempts = null,
     bool CanSkip = false,
     int FailedAttempts = 0,
-    bool Passed = false)
+    bool Passed = false,
+    int? FailuresUntilSkip = null)
 {
     public static LessonExerciseViewModel From(ExerciseDto exercise, LessonMarkdownRenderer renderer) => new(
         exercise.Title,
@@ -72,6 +73,7 @@ public sealed record LessonExerciseViewModel(
         CanSkip = progress.CanSkip,
         FailedAttempts = progress.FailedAttempts,
         Passed = progress.Passed,
+        FailuresUntilSkip = progress.FailuresUntilSkip,
         Points = progress.Points,
     };
 

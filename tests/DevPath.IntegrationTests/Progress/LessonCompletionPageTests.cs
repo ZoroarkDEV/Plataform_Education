@@ -413,6 +413,27 @@ public sealed class LessonCompletionPageTests(DevPathWebApplicationFactory facto
         html.Should().NotContain("Você usou todas as tentativas, então esta aula");
     }
 
+    [Theory]
+    [InlineData(2, 0, "2")]
+    [InlineData(7, 3, "4")]
+    [InlineData(5, 5, "0")]
+    public async Task Pagina_manda_ao_js_as_falhas_que_faltam_do_limite_do_exercicio(int limit, int failed, string expected)
+    {
+        await using var app = App(
+            f =>
+            {
+                f.Open = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(
+                    FakeLessonProgressGateway.Samples.ExerciseNotPassed(failed, canSkip: failed >= limit, failuresBeforeSkip: limit));
+                return f;
+            },
+            SampleExercise());
+        var client = await LoggedInAsync(app);
+        var html = await (await client.GetAsync(LessonUrl)).ReadHtmlAsync();
+
+        html.Should().Contain($"data-failures-until-skip=\"{expected}\"", "o site.js anuncia o pulo pelo limite real (#29)");
+        html.Should().NotContain("faltam", "a contagem não aparece na tela (UX)");
+    }
+
     [Fact]
     public async Task Skip_post_conclui_sem_pontos()
     {

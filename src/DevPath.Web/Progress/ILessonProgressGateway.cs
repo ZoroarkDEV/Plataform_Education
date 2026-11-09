@@ -96,8 +96,8 @@ public enum LessonCompletionBlocker
 /// <param name="ExerciseId">Id para <c>POST /api/exercicios/{id}/executar</c> (até o <c>ExerciseDto.Id</c> chegar na dev, vem só por aqui).</param>
 /// <param name="Points">Pontos que o exercício vale (para "+{N} pontos"; a tela nunca supõe 10).</param>
 /// <param name="FailedAttempts">Envios sem <c>pass</c>.</param>
-/// <param name="CanSkip">"Seguir sem pontos" disponível (a partir da 5ª falha, regra do Backend).</param>
-/// <param name="FailuresUntilSkip">Falhas que faltam para o "Seguir sem pontos". A tela NÃO mostra contagem (UX).</param>
+/// <param name="CanSkip">"Seguir sem pontos" disponível (a partir de <c>FailuresBeforeSkip</c> falhas, padrão 5; regra do Backend).</param>
+/// <param name="FailuresUntilSkip">Falhas que faltam para o "Seguir sem pontos". A tela NÃO mostra contagem (UX); vai só em <c>data-failures-until-skip</c> para o site.js anunciar o pulo.</param>
 public sealed record LessonExerciseProgressView(
     Guid ExerciseId,
     int Points,

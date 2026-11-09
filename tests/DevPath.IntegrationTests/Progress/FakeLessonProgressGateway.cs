@@ -60,11 +60,11 @@ public sealed class FakeLessonProgressGateway : ILessonProgressGateway
             LessonCompletionKind.Read, null, CanComplete: false, Blocker: null, Exercise: null,
             Previous: null, Next: Available(Where), PathProgressPercentage: 20);
 
-        public static LessonProgressView ExerciseNotPassed(int failed = 0, bool canSkip = false, int? maxAttempts = null, int? remaining = null) => new(
+        public static LessonProgressView ExerciseNotPassed(int failed = 0, bool canSkip = false, int? maxAttempts = null, int? remaining = null, int failuresBeforeSkip = 5) => new(
             Select, LessonStatus.Available, null, null, null, null,
             CanComplete: false, Blocker: LessonCompletionBlocker.ExerciseNotPassed,
             Exercise: new LessonExerciseProgressView(ExerciseId, 10, false, failed, maxAttempts, remaining, failed, canSkip,
-                canSkip ? 0 : Math.Max(0, 5 - failed)),
+                canSkip ? 0 : Math.Max(0, failuresBeforeSkip - failed)),
             Previous: null, Next: Locked(Where, Select), PathProgressPercentage: 0);
 
         public static LessonProgressView ExercisePassedCompleted(int points = 10) => new(

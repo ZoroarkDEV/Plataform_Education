@@ -18,7 +18,8 @@
          data-max-attempts="@(Model.MaxAttempts?.ToString() ?? "")"
          data-remaining-attempts="@(Model.RemainingAttempts?.ToString() ?? "")"
          data-can-skip="@(Model.CanSkip ? "true" : "false")"
-         data-failed-attempts="@Model.FailedAttempts">
+         data-failed-attempts="@Model.FailedAttempts"
+         data-failures-until-skip="@(Model.FailuresUntilSkip?.ToString() ?? "")">
     <h2 id="sec-exercicio" class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Exercício: @Model.Title</h2>
     <dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-700 dark:text-slate-300">
         <div class="flex gap-1"><dt>Linguagem:</dt><dd class="font-semibold">@Model.LanguageLabel</dd></div>
