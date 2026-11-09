@@ -203,8 +203,8 @@ public class RepositoryContentTests
 
     /// <summary>
     /// #41: a dica de erro comum compara texto, então os exemplos precisam ser o que o aluno escreve a partir do
-    /// código inicial (com o apelido <c>AS total_livros</c> que já vem nele). A linha de comentário do código
-    /// inicial fica de fora aqui: ignorá-la no matcher é outro issue.
+    /// código inicial (com o apelido <c>AS total_livros</c> que já vem nele). #46: a tentativa mantém a linha de
+    /// comentário do código inicial, como faz quem só completa o que já veio no editor.
     /// </summary>
     [Theory]
     [InlineData("WHERE COUNT(*) >= 3\nGROUP BY genero\n", "O WHERE filtra livro por livro")]
@@ -215,14 +215,40 @@ public class RepositoryContentTests
     public void Having_ErrosComunsCasamComOQueOAlunoEscreveAPartirDoCodigoInicial(string tail, string expectedStart)
     {
         var exercise = AllLessons().Single(l => l.Slug == "filtrando-grupos-com-having").Exercise!;
-        var starterWithoutComment = string.Join('\n', exercise.StarterCode.Split('\n').Where(line => !line.TrimStart().StartsWith("--")));
-        starterWithoutComment.Should().Contain("AS total_livros").And.EndWith("GROUP BY genero\n");
-        var attempt = starterWithoutComment[..^"GROUP BY genero\n".Length] + tail;
+        exercise.StarterCode.Should().StartWith("--").And.Contain("AS total_livros").And.EndWith("GROUP BY genero\n");
+        var attempt = exercise.StarterCode[..^"GROUP BY genero\n".Length] + tail;
 
         var message = DevPath.Application.CodeExecution.CommonErrorMatcher.Match(attempt,
             exercise.CommonErrors.Select(e => new DevPath.Domain.CareerPaths.CommonError(e.Example, e.Message)).ToList());
 
         message.Should().NotBeNull($"a tentativa '{attempt}' deveria receber a dica").And.StartWith(expectedStart);
+    }
+
+    /// <summary>
+    /// #46: em todo exercício, cada erro comum continua recebendo a sua dica quando o aluno mantém as linhas de
+    /// comentário (<c>--</c>) do código inicial acima da consulta.
+    /// </summary>
+    [Fact]
+    public void ErrosComuns_CasamMesmoComOComentarioDoCodigoInicial()
+    {
+        var exercises = AllLessons().Where(l => l.Exercise is not null).Select(l => l.Exercise!).ToList();
+        exercises.Should().NotBeEmpty();
+
+        foreach (var exercise in exercises)
+        {
+            var commentLines = exercise.StarterCode.Split('\n').Where(line => line.TrimStart().StartsWith("--")).ToList();
+            commentLines.Should().NotBeEmpty($"o código inicial de {exercise.SourceFile} deveria ter a linha de comentário");
+            var commonErrors = exercise.CommonErrors
+                .Select(e => new DevPath.Domain.CareerPaths.CommonError(e.Example, e.Message)).ToList();
+
+            foreach (var error in exercise.CommonErrors)
+            {
+                var attempt = string.Join('\n', commentLines) + "\n" + error.Example;
+
+                DevPath.Application.CodeExecution.CommonErrorMatcher.Match(attempt, commonErrors).Should().Be(error.Message,
+                    $"em {exercise.SourceFile}, '{error.Example}' com o comentário do código inicial deveria receber a sua dica");
+            }
+        }
     }
 
     /// <summary>

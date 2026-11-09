@@ -86,4 +86,59 @@ public class CommonErrorMatcherTests
     [InlineData("SELECT título , preço FROM livros ;", "SELECT título , preço FROM livros")]
     public void Normalize_EspacosEPontoEVirgula(string input, string expected) =>
         CommonErrorMatcher.Normalize(input).Should().Be(expected);
+
+    // #46: comentários SQL não contam para a dica.
+    [Theory]
+    [InlineData("-- Escreva sua consulta abaixo\nSELECT 1;", "SELECT 1")]
+    [InlineData("SELECT 1; -- fim", "SELECT 1")]
+    [InlineData("/* bloco */ SELECT 1", "SELECT 1")]
+    [InlineData("SELECT /* várias\nlinhas */ titulo FROM livros", "SELECT titulo FROM livros")]
+    [InlineData("SELECT/**/1", "SELECT 1")]
+    [InlineData("SELECT 1 /* externo /* interno */ ainda comentário */ ;", "SELECT 1")]
+    [InlineData("SELECT titulo -- comentário no meio\nFROM livros\n-- outra linha\nWHERE preco < 40;", "SELECT titulo FROM livros WHERE preco < 40")]
+    [InlineData("SELECT 1 /* sem fechar", "SELECT 1")]
+    [InlineData("-- só comentário", "")]
+    public void Normalize_TiraComentarios(string input, string expected) =>
+        CommonErrorMatcher.Normalize(input).Should().Be(expected);
+
+    [Theory]
+    [InlineData("SELECT '--não é comentário' FROM livros", "SELECT '--não é comentário' FROM livros")]
+    [InlineData("SELECT '/* nem isto */' FROM livros", "SELECT '/* nem isto */' FROM livros")]
+    [InlineData("SELECT 'it''s -- dentro' -- fora\nFROM livros", "SELECT 'it''s -- dentro' FROM livros")]
+    [InlineData("SELECT \"col--x\" FROM livros", "SELECT \"col--x\" FROM livros")]
+    [InlineData("SELECT 'a  b' FROM livros", "SELECT 'a b' FROM livros")] // comportamento antigo: espaço colapsa até no literal
+    public void Normalize_MantemComentarioDentroDeAspas(string input, string expected) =>
+        CommonErrorMatcher.Normalize(input).Should().Be(expected);
+
+    [Fact]
+    public void Casa_QuandoOAlunoMantemALinhaDeComentarioDoCodigoInicial()
+    {
+        var code = "-- Escreva sua consulta abaixo\nSELECT título, preço\nFROM livros;";
+
+        CommonErrorMatcher.Match(code, [TituloComAcento]).Should().Be(TituloComAcento.Message);
+    }
+
+    [Fact]
+    public void Casa_ComComentarioNoMeioDaConsulta()
+    {
+        var code = "SELECT titulo, preco /* as duas colunas */\nFROM livros -- tabela\nWHERE genero = \"Fantasia\" AND preco < 60;";
+
+        CommonErrorMatcher.Match(code, [AspasDuplas]).Should().Be(AspasDuplas.Message);
+    }
+
+    [Fact]
+    public void NaoCasa_QuandoODashDashEstaDentroDoTexto()
+    {
+        // Se o '--' dentro do literal fosse tratado como comentário, sobraria "WHERE genero = '" e o resto sumiria.
+        var withLiteral = new CommonError("SELECT titulo FROM livros WHERE genero = '--';", "mensagem");
+
+        CommonErrorMatcher.Match("SELECT titulo FROM livros WHERE genero = '--';", [withLiteral]).Should().Be("mensagem");
+        CommonErrorMatcher.Match("SELECT titulo FROM livros WHERE genero = '';", [withLiteral]).Should().BeNull();
+    }
+
+    [Fact]
+    public void SoComentario_NaoCasa()
+    {
+        CommonErrorMatcher.Match("-- Escreva sua consulta abaixo\n", [TituloComAcento]).Should().BeNull();
+    }
 }

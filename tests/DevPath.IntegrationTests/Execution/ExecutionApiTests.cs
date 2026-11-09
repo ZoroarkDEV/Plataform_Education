@@ -259,6 +259,17 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
     }
 
     [DockerFact]
+    public async Task ErroComumSemeado_ComALinhaDeComentarioDoCodigoInicial_DevolveADica() // #46
+    {
+        var client = await LoggedInClientAsync();
+
+        var outcome = await ExecuteAsync(client, factory.ExerciseId, "-- Escreva sua consulta abaixo\nSELECT nme /* coluna */ FROM alunos;");
+
+        outcome.Status.Should().Be(ExecutionStatus.Error);
+        outcome.CommonErrorMessage.Should().Be("A coluna se chama nome, não nme. Confira a lista de colunas.");
+    }
+
+    [DockerFact]
     public async Task SolucaoCorreta_CommonErrorMessageNulo()
     {
         var client = await LoggedInClientAsync();
