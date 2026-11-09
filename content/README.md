@@ -107,6 +107,7 @@ Fica ao lado da aula, com o mesmo nome (`01-seu-primeiro-select.md` →
 | `title`, `statement`, `language` | sim | título (até 200), enunciado em Markdown e linguagem (até 50). No `statement`, títulos só até `###` (veja abaixo) |
 | `dataset` | não | nome de um arquivo em `content/datasets/` (sem `.sql`); o banco onde a consulta roda |
 | `points` | não | pontos do exercício (padrão 10). **Usar dica não reduz os pontos.** |
+| `failures_before_skip` | não | quantos erros liberam o "Seguir sem pontos" (inteiro maior que zero). Sem o campo vale o padrão 5 |
 | `starter_code` | não | código que já aparece no editor |
 | `solution` | sim | **solução protegida**: nunca é mostrada ao aluno e **nunca** pode aparecer no texto da aula (ADR-003, teste de conteúdo) |
 | `hints` | não | dicas em ordem, da mais geral para a mais direta |
@@ -132,6 +133,7 @@ ficam só no servidor.
 | `common_errors` | coluna `CommonErrors` (jsonb): `[{ "example", "message" }]`. Nunca vai para a página nem para a API do aluno |
 | `hints` | coluna `Hints` (jsonb), na ordem do arquivo |
 | `points` | `Points` (padrão 10) |
+| `failures_before_skip` | `FailuresBeforeSkip` (vazio = padrão 5) |
 | — | `MaxAttempts` fica vazio (sem limite de tentativas) |
 
 Cada caso de teste é gravado assim (todas as chaves sempre presentes):
@@ -163,6 +165,8 @@ O seed também grava cada `.sql` de `content/datasets/` na tabela `Datasets`, na
 resto: o nome do arquivo sem `.sql` é o slug (só minúsculas, números e hífens; até 100 caracteres),
 `Sql` é o conteúdo do arquivo e `ContentHash` é o SHA-256 dele. O corretor carrega o dataset do
 banco por esse slug.
+`Name` (o nome que aparece na tela) é o slug humanizado (`livraria` → "Livraria"); o seed só
+preenche quando está vazio, então um nome ajustado no banco não é sobrescrito.
 
 - Arquivo novo: linha nova.
 - Arquivo editado: a mesma linha recebe o `Sql` e o hash novos. Arquivo igual (mesmo hash): nada é

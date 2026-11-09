@@ -71,7 +71,14 @@ public sealed record ExerciseContent(
     string Solution,
     IReadOnlyList<string> Hints,
     IReadOnlyList<ExerciseTestCase> TestCases,
-    IReadOnlyList<ExerciseCommonError> CommonErrors);
+    IReadOnlyList<ExerciseCommonError> CommonErrors)
+{
+    /// <summary>
+    /// Erros que liberam o "Seguir sem pontos" (<c>failures_before_skip</c> no JSON, #27).
+    /// Ausente = <c>null</c> no banco, que usa o padrão (<c>LessonCompletionRule.DefaultFailuresBeforeSkip</c>).
+    /// </summary>
+    public int? FailuresBeforeSkip { get; init; }
+}
 
 /// <summary>
 /// Resultado esperado de uma consulta. Compara-se o resultado, não o texto da consulta:

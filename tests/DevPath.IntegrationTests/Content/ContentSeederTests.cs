@@ -578,6 +578,97 @@ public sealed class ContentSeederTests : IAsyncLifetime
         });
     }
 
+    // ---- #27: FailuresBeforeSkip e Dataset.Name vindos do conteúdo ----
+
+    [Fact]
+    public async Task SeedAsync_SemFailuresBeforeSkipNoArquivo_GravaNullEONomeDoDatasetHumanizado()
+    {
+        await SeedAsync(_repoContent);
+
+        await using var db = CreateDbContext();
+        (await db.Exercises.AsNoTracking().Select(e => e.FailuresBeforeSkip).ToListAsync())
+            .Should().NotBeEmpty().And.OnlyContain(f => f == null, "sem o campo, vale o padrão 5");
+        (await db.Datasets.AsNoTracking().SingleAsync()).Name.Should().Be("Livraria");
+
+        (await SeedAsync(_repoContent)).NothingChanged.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SeedAsync_FailuresBeforeSkipNoArquivo_GravaAtualizaEVoltaAoPadrao()
+    {
+        await WithContentCopy(async copy =>
+        {
+            var file = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.exercise.json");
+            var original = File.ReadAllText(file);
+            File.WriteAllText(file, original.Replace("\"points\": 10", "\"points\": 10,\n  \"failures_before_skip\": 3"));
+
+            await SeedAsync(copy);
+            var lessonId = await LessonIdAsync("primeiros-passos-com-sql", "seu-primeiro-select");
+            await using (var db = CreateDbContext())
+            {
+                (await db.Exercises.AsNoTracking().SingleAsync(e => e.LessonId == lessonId)).FailuresBeforeSkip.Should().Be(3);
+            }
+
+            (await SeedAsync(copy)).NothingChanged.Should().BeTrue();
+
+            File.WriteAllText(file, original.Replace("\"points\": 10", "\"points\": 10,\n  \"failures_before_skip\": 2"));
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                (await db.Exercises.AsNoTracking().SingleAsync(e => e.LessonId == lessonId)).FailuresBeforeSkip.Should().Be(2);
+            }
+
+            File.WriteAllText(file, original);
+            (await SeedAsync(copy)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+            await using (var db = CreateDbContext())
+            {
+                (await db.Exercises.AsNoTracking().SingleAsync(e => e.LessonId == lessonId)).FailuresBeforeSkip
+                    .Should().BeNull("tirar o campo volta ao padrão");
+            }
+        });
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task SeedAsync_FailuresBeforeSkipInvalido_FalhaAntesDoBanco(int value)
+    {
+        await WithContentCopy(async copy =>
+        {
+            var file = Path.Combine(ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"), "01-seu-primeiro-select.exercise.json");
+            File.WriteAllText(file, File.ReadAllText(file).Replace("\"points\": 10", $"\"points\": 10,\n  \"failures_before_skip\": {value}"));
+
+            var act = () => SeedAsync(copy);
+
+            (await act.Should().ThrowAsync<ContentValidationException>())
+                .Which.Message.Should().Contain("failures_before_skip");
+            (await CountRowsAsync()).Should().Be((0, 0, 0));
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_DatasetSemNome_EhPreenchido_NomeAjustadoNaoEhSobrescrito()
+    {
+        await SeedAsync(_repoContent);
+        await using (var db = CreateDbContext())
+        {
+            await db.Database.ExecuteSqlRawAsync("""UPDATE "Datasets" SET "Name" = NULL""");
+        }
+
+        (await SeedAsync(_repoContent)).Should().Be(new ContentSeedResult(Inserted: 0, Updated: 1));
+        await using (var db = CreateDbContext())
+        {
+            (await db.Datasets.AsNoTracking().SingleAsync()).Name.Should().Be("Livraria");
+            await db.Database.ExecuteSqlRawAsync("""UPDATE "Datasets" SET "Name" = 'Livraria do Bairro'""");
+        }
+
+        (await SeedAsync(_repoContent)).NothingChanged.Should().BeTrue();
+        await using (var db = CreateDbContext())
+        {
+            (await db.Datasets.AsNoTracking().SingleAsync()).Name.Should().Be("Livraria do Bairro");
+        }
+    }
+
     // ---- #24: formato dos casos, erros comuns, datasets e exercícios órfãos ----
 
     [Fact]

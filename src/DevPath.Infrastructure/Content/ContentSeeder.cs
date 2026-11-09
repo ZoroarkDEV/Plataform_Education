@@ -1,4 +1,5 @@
 using DevPath.Application.Content;
+using DevPath.Application.Lessons;
 using DevPath.Domain.CareerPaths;
 using DevPath.Domain.Datasets;
 using DevPath.Infrastructure.Persistence;
@@ -130,8 +131,17 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         {
             if (!existing.TryGetValue(content.Slug, out var dataset))
             {
-                db.Datasets.Add(Dataset.Create(content.Slug, content.Sql));
+                var created = Dataset.Create(content.Slug, content.Sql);
+                created.SetName(DatasetDisplayNames.HumanizeSlug(created.Slug));
+                db.Datasets.Add(created);
                 continue;
+            }
+
+            // O conteúdo não traz nome próprio: preenche com o slug humanizado só quando está vazio,
+            // para não sobrescrever um nome escolhido depois (#27).
+            if (dataset.Name is null)
+            {
+                dataset.SetName(DatasetDisplayNames.HumanizeSlug(dataset.Slug));
             }
 
             if (dataset.ContentHash != Dataset.ComputeHash(content.Sql))
@@ -368,6 +378,10 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
             exercise.Title, exercise.Statement, exercise.Language, testCases, exercise.Points,
             exercise.StarterCode, exercise.Solution, existing.MaxAttempts, exercise.Dataset, exercise.Hints,
             ToCommonErrors(exercise));
+        if (existing.FailuresBeforeSkip != exercise.FailuresBeforeSkip)
+        {
+            existing.SetFailuresBeforeSkip(exercise.FailuresBeforeSkip);
+        }
 
         if (!existing.IsPublished)
         {
@@ -389,11 +403,15 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         System.Text.Json.Nodes.JsonNode.DeepEquals(
             System.Text.Json.Nodes.JsonNode.Parse(a), System.Text.Json.Nodes.JsonNode.Parse(b));
 
-    private static Exercise AddExercise(Lesson lesson, ExerciseContent exercise) =>
-        lesson.AddExercise(
+    private static Exercise AddExercise(Lesson lesson, ExerciseContent exercise)
+    {
+        var created = lesson.AddExercise(
             exercise.Title, exercise.Statement, exercise.Language, ExerciseTestCaseFormat.ToStoredJson(exercise), exercise.Points,
             exercise.StarterCode, exercise.Solution, maxAttempts: null, exercise.Dataset, exercise.Hints,
             ToCommonErrors(exercise));
+        created.SetFailuresBeforeSkip(exercise.FailuresBeforeSkip);
+        return created;
+    }
 
     private static IEnumerable<CommonError> ToCommonErrors(ExerciseContent exercise) =>
         exercise.CommonErrors.Select(e => new CommonError(e.Example, e.Message));

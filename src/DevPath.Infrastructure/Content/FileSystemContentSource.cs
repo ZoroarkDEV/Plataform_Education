@@ -276,6 +276,11 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
             errors.Add($"{where}: 'points' precisa ser maior que zero.");
         }
 
+        if (file.FailuresBeforeSkip is <= 0)
+        {
+            errors.Add($"{where}: 'failures_before_skip' precisa ser maior que zero (ou ficar de fora para usar o padrão).");
+        }
+
         var commonErrors = (file.CommonErrors ?? [])
             .Select((e, i) => new ExerciseCommonError(
                 Required(e.Example, "example", $"{where} (common_errors[{i}])", errors),
@@ -293,7 +298,10 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
             Solution: Required(file.Solution, "solution", where, errors),
             Hints: (file.Hints ?? []).Select(h => (h ?? string.Empty).Trim()).Where(h => h.Length > 0).ToList(),
             TestCases: testCases,
-            CommonErrors: commonErrors);
+            CommonErrors: commonErrors)
+        {
+            FailuresBeforeSkip = file.FailuresBeforeSkip is > 0 ? file.FailuresBeforeSkip : null,
+        };
     }
 
     /// <summary>
@@ -342,6 +350,7 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
         public string? Language { get; set; }
         public string? Dataset { get; set; }
         public int? Points { get; set; }
+        public int? FailuresBeforeSkip { get; set; }
         public string? StarterCode { get; set; }
         public string? Solution { get; set; }
         public List<string?>? Hints { get; set; }
