@@ -127,6 +127,12 @@ public sealed record LessonCompletionViewModel(
                 && state.CompletionKind == LessonCompletionKind.ExercisePassed,
         };
 
+    /// <summary>
+    /// Esta conclusão terminou o módulo (#42): o bloco mostra "Módulo concluído" no lugar da mensagem e da
+    /// "Próxima aula →". Só na hora da conclusão (POST que concluiu agora ou 1º pass); revisitar a aula não mostra.
+    /// </summary>
+    public ModuleCompletionViewModel? ModuleCompleted { get; init; }
+
     /// <summary>Só o clique em "Concluí esta aula" ou "Seguir sem pontos" leva o foco para a "Próxima".</summary>
     public bool MovesFocus => JustCompleted || JustSkipped;
 

@@ -28,6 +28,7 @@ public sealed partial class LessonsController(
     LessonMarkdownRenderer renderer,
     ILessonProgressGateway progress,
     IAuthService auth,
+    IModuleCompletionReader modules,
     IHostEnvironment environment,
     ILogger<LessonsController> logger) : Controller
 {
@@ -35,6 +36,7 @@ public sealed partial class LessonsController(
     public const string FlashKey = "LessonFlash";
     public const string CompletionPartial = "_LessonCompletion";
     public const string PagerPartial = "_LessonPager";
+    public const string ModuleCompletedView = "ModuleCompleted";
 
     [HttpGet("/trilhas/{pathSlug}/{moduleSlug}/{lessonSlug}")]
     public async Task<IActionResult> Show(string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct)
@@ -197,6 +199,9 @@ public sealed partial class LessonsController(
         var justSkipped = skipWithoutPoints && outcome.Status == LessonCompletionStatus.Completed;
         var justCompleted = outcome.Status == LessonCompletionStatus.Completed;
         var completion = LessonCompletionViewModel.From(outcome.State, load.Lesson, justCompleted: justCompleted, justSkipped: justSkipped);
+        // #42: concluiu agora a última aula pronta do módulo? (AlreadyCompleted = refazer: não mostra de novo.)
+        var moduleDone = justCompleted ? await CompletedModuleAsync(userId, pathSlug, moduleSlug, ct) : null;
+        completion = completion with { ModuleCompleted = moduleDone };
         var page = new LessonPageViewModel(load.Lesson, renderer.Render(load.Lesson.MarkdownBody), Progress: outcome.State);
 
         if (IsHtmx)
@@ -215,7 +220,10 @@ public sealed partial class LessonsController(
             return PartialView(CompletionPartial, completion);
         }
 
-        // PRG sem HTMX.
+        // PRG sem HTMX. Módulo concluído agora: vai para a tela "Módulo concluído" (#42).
+        if (moduleDone is not null)
+            return Redirect(moduleDone.SummaryUrl);
+
         if (outcome.Status == LessonCompletionStatus.Completed)
             TempData[FlashKey] = completion.SuccessMessage;
         else if (outcome.Status == LessonCompletionStatus.RequirementNotMet)
@@ -253,10 +261,72 @@ public sealed partial class LessonsController(
         var completion = access.State.IsCompleted
             ? LessonCompletionViewModel.AfterPass(access.State, load.Lesson, before)
             : LessonCompletionViewModel.From(access.State, load.Lesson);
+        // #42: o pass concluiu agora (antes = sem conclusão) a última aula pronta do módulo.
+        if (access.State.IsCompleted && before is null)
+            completion = completion with { ModuleCompleted = await CompletedModuleAsync(userId, pathSlug, moduleSlug, ct) };
         ViewData["PagerOob"] = true;
         // Page model for OOB pager (rendered inside completion partial footer).
         ViewData["LessonPage"] = new LessonPageViewModel(load.Lesson, renderer.Render(load.Lesson.MarkdownBody), Progress: access.State);
         return PartialView(CompletionPartial, completion);
+    }
+
+    /// <summary>
+    /// Tela "Módulo concluído" (#42, US-M.1): aberta pelo PRG da conclusão e pelo "Concluído ✓" do dashboard.
+    /// Sem trilha = escolha de trilha; módulo de outra trilha ou inexistente = 404 amigável; ainda não concluído =
+    /// dashboard. Falha = 503 amigável (nunca 500).
+    /// </summary>
+    [HttpGet("/trilhas/{pathSlug}/modulos/{moduleSlug}/concluido")]
+    public async Task<IActionResult> ModuleCompleted(string pathSlug, string moduleSlug, CancellationToken ct)
+    {
+        pathSlug = pathSlug.ToLowerInvariant();
+        moduleSlug = moduleSlug.ToLowerInvariant();
+        if (!IsSlug(pathSlug) || !IsSlug(moduleSlug))
+            return Unavailable(LessonUnavailableReason.NotFound, "Slug inválido no endereço.");
+
+        if (!User.TryGetUserId(out var userId))
+            return RedirectToAction(nameof(AccountController.Login), "Account");
+
+        ModuleCompletionLookup lookup;
+        try
+        {
+            lookup = await modules.LookupAsync(userId, pathSlug, moduleSlug, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Falha ao montar o resumo do módulo {Path}/{Module}.", pathSlug, moduleSlug);
+            return Unavailable(LessonUnavailableReason.Malformed, ex.Message);
+        }
+
+        switch (lookup.Status)
+        {
+            case ModuleCompletionLookupStatus.NoPath:
+                return RedirectToAction(nameof(OnboardingController.ChoosePath), "Onboarding");
+            case ModuleCompletionLookupStatus.NotCompleted:
+                return RedirectToAction(nameof(DashboardController.Index), "Dashboard");
+            case ModuleCompletionLookupStatus.Completed when lookup.Module is not null:
+                break;
+            default:
+                return Unavailable(LessonUnavailableReason.NotFound, "Módulo fora da trilha atual ou inexistente.");
+        }
+
+        var model = lookup.Module!;
+        ViewData["Title"] = model.Title;
+        return View(ModuleCompletedView, model);
+    }
+
+    // Só para o bloco/tela do #42: se falhar, a conclusão continua valendo e a tela cai na mensagem normal.
+    private async Task<ModuleCompletionViewModel?> CompletedModuleAsync(Guid userId, string pathSlug, string moduleSlug, CancellationToken ct)
+    {
+        try
+        {
+            var lookup = await modules.LookupAsync(userId, pathSlug, moduleSlug, ct);
+            return lookup.Status == ModuleCompletionLookupStatus.Completed ? lookup.Module : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Falha ao ver se o módulo {Path}/{Module} foi concluído.", pathSlug, moduleSlug);
+            return null;
+        }
     }
 
     private async Task<IActionResult?> GateAccessAsync(LessonAccessOutcome access, CancellationToken ct)

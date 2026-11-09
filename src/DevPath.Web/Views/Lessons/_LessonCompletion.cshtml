@@ -25,7 +25,14 @@
             <partial name="_CompletedBadge" />
         </div>
 
-        @if (Model.SuccessMessage is { } msg)
+        @if (Model.ModuleCompleted is { } moduleDone)
+        {
+            @* #42: no lugar da mensagem e do "Próxima aula →" (o pager OOB vem sem a próxima). *@
+            <div class="mt-4">
+                <partial name="_ModuleCompletion" model="moduleDone" view-data='new ViewDataDictionary(ViewData) { ["ModuleHeadingLevel"] = 2, ["ModuleInLesson"] = true }' />
+            </div>
+        }
+        else if (Model.SuccessMessage is { } msg)
         {
             var isInfo = !Model.JustPassed && state.CompletionKind is LessonCompletionKind.SkippedAfterFailures or LessonCompletionKind.AttemptsExhausted;
             <p id="@successId"
@@ -108,6 +115,6 @@
 @if (ViewData["PagerOob"] as bool? == true && ViewData["LessonPage"] is LessonPageViewModel page)
 {
     <div id="lesson-pager-end" hx-swap-oob="true">
-        <partial name="_LessonPager" model="page" view-data='new ViewDataDictionary(ViewData) { ["PagerLabel"] = "Navegação entre aulas (fim da página)", ["PagerFocus"] = Model.MovesFocus }' />
+        <partial name="_LessonPager" model="page" view-data='new ViewDataDictionary(ViewData) { ["PagerLabel"] = "Navegação entre aulas (fim da página)", ["PagerFocus"] = Model.MovesFocus, ["PagerHideNext"] = Model.ModuleCompleted is not null }' />
     </div>
 }

@@ -72,10 +72,22 @@ public sealed class LessonsControllerTests
             Task.FromResult(OpenResult);
         public Task<LessonAccessOutcome> OpenAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
             Task.FromResult(OpenResult);
+        public LessonCompletionOutcome CompleteResult { get; set; } = new(LessonCompletionStatus.Unavailable);
         public Task<LessonCompletionOutcome> CompleteAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
-            Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.Unavailable));
+            Task.FromResult(CompleteResult);
         public Task<LessonCompletionOutcome> SkipAsync(Guid userId, string pathSlug, string moduleSlug, string lessonSlug, CancellationToken cancellationToken) =>
             Task.FromResult(new LessonCompletionOutcome(LessonCompletionStatus.Unavailable));
+    }
+
+    private sealed class StubModules : IModuleCompletionReader
+    {
+        public Func<ModuleCompletionLookup> Result { get; set; } = () => new(ModuleCompletionLookupStatus.NotCompleted);
+        public int Calls { get; private set; }
+        public Task<ModuleCompletionLookup> LookupAsync(Guid userId, string pathSlug, string moduleSlug, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(Result());
+        }
     }
 
     private sealed class NullTempDataProvider : ITempDataProvider
@@ -86,7 +98,7 @@ public sealed class LessonsControllerTests
 
     private LessonsController CreateController(
         ILessonContentService? service = null, string environment = "Testing", ExerciseDto? exercise = null,
-        ILessonProgressGateway? progress = null)
+        ILessonProgressGateway? progress = null, IModuleCompletionReader? modules = null)
     {
         var http = new DefaultHttpContext
         {
@@ -98,7 +110,7 @@ public sealed class LessonsControllerTests
         };
         var controller = new LessonsController(
             service ?? new StubLessonService(exercise), new LessonMarkdownRenderer(),
-            progress ?? new StubProgress(), new StubAuth(), new StubEnvironment(environment), _logger)
+            progress ?? new StubProgress(), new StubAuth(), modules ?? new StubModules(), new StubEnvironment(environment), _logger)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new NullTempDataProvider()),
@@ -362,6 +374,99 @@ public sealed class LessonsControllerTests
     {
         public Task<LessonLoadResult> GetLessonAsync(string pathSlug, string moduleSlug, string lessonSlug, CancellationToken ct = default) =>
             Task.FromResult(result);
+    }
+
+    // ---- #42: "Módulo concluído" ----
+
+    private static LessonProgressView CompletedState() => new(
+        new LessonRef(Path, Module, FullSlug, "Seu primeiro SELECT"), LessonStatus.Completed, null, DateTimeOffset.UtcNow,
+        LessonCompletionKind.Read, null, false, null, null, null, null, 100);
+
+    private static ModuleCompletionViewModel DoneModule(NextModuleStep? next = null) => new(
+        Path, "SQL & Dados", Module, "Primeiros passos", null, [], 40, 100, next);
+
+    [Fact]
+    public async Task Complete_SemHtmx_UltimaAulaDoModulo_VaiParaATelaModuloConcluido()
+    {
+        var progress = new StubProgress { CompleteResult = new(LessonCompletionStatus.Completed, CompletedState()) };
+        var modules = new StubModules { Result = () => new(ModuleCompletionLookupStatus.Completed, DoneModule()) };
+        var controller = CreateController(progress: progress, modules: modules);
+
+        var result = await controller.Complete(Path, Module, FullSlug);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be($"/trilhas/{Path}/modulos/{Module}/concluido");
+    }
+
+    [Fact]
+    public async Task Complete_JaConcluida_NaoConsultaOModulo_NemMostraATelaDeNovo()
+    {
+        var progress = new StubProgress { CompleteResult = new(LessonCompletionStatus.AlreadyCompleted, CompletedState()) };
+        var modules = new StubModules { Result = () => new(ModuleCompletionLookupStatus.Completed, DoneModule()) };
+        var controller = CreateController(progress: progress, modules: modules);
+
+        var result = await controller.Complete(Path, Module, FullSlug);
+
+        modules.Calls.Should().Be(0);
+        result.Should().BeOfType<RedirectToActionResult>().Which.ActionName.Should().Be(nameof(LessonsController.Show));
+    }
+
+    [Fact]
+    public async Task Complete_FalhaAoLerOModulo_ConclusaoSegueNormal_SemErro()
+    {
+        var progress = new StubProgress { CompleteResult = new(LessonCompletionStatus.Completed, CompletedState()) };
+        var modules = new StubModules { Result = () => throw new InvalidOperationException("banco fora") };
+        var controller = CreateController(progress: progress, modules: modules);
+
+        var result = await controller.Complete(Path, Module, FullSlug);
+
+        result.Should().BeOfType<RedirectToActionResult>().Which.ActionName.Should().Be(nameof(LessonsController.Show));
+    }
+
+    [Fact]
+    public async Task ModuleCompleted_Concluido_MostraATela()
+    {
+        var modules = new StubModules { Result = () => new(ModuleCompletionLookupStatus.Completed, DoneModule()) };
+        var controller = CreateController(modules: modules);
+
+        var result = await controller.ModuleCompleted(Path, Module, CancellationToken.None);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        view.ViewName.Should().Be(LessonsController.ModuleCompletedView);
+        view.Model.Should().BeOfType<ModuleCompletionViewModel>().Which.Title.Should().Be("Módulo concluído: Primeiros passos");
+    }
+
+    [Theory]
+    [InlineData(ModuleCompletionLookupStatus.NoPath, "ChoosePath")]
+    [InlineData(ModuleCompletionLookupStatus.NotCompleted, "Index")]
+    public async Task ModuleCompleted_SemTrilhaOuNaoConcluido_Redireciona(ModuleCompletionLookupStatus status, string action)
+    {
+        var controller = CreateController(modules: new StubModules { Result = () => new(status) });
+
+        var result = await controller.ModuleCompleted(Path, Module, CancellationToken.None);
+
+        result.Should().BeOfType<RedirectToActionResult>().Which.ActionName.Should().Be(action);
+    }
+
+    [Fact]
+    public async Task ModuleCompleted_ModuloDeOutraTrilha_404Amigavel()
+    {
+        var controller = CreateController(modules: new StubModules { Result = () => new(ModuleCompletionLookupStatus.NotFound) });
+
+        var result = await controller.ModuleCompleted(Path, "outro-modulo", CancellationToken.None);
+
+        result.Should().BeOfType<ViewResult>().Which.ViewName.Should().Be(LessonsController.UnavailableView);
+        controller.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Fact]
+    public async Task ModuleCompleted_Falha_503Amigavel_Nunca500()
+    {
+        var controller = CreateController(modules: new StubModules { Result = () => throw new InvalidOperationException("x") });
+
+        var result = await controller.ModuleCompleted(Path, Module, CancellationToken.None);
+
+        result.Should().BeOfType<ViewResult>().Which.ViewName.Should().Be(LessonsController.UnavailableView);
+        controller.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
     }
 
     private sealed class StubEnvironment(string name) : IHostEnvironment

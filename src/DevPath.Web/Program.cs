@@ -98,6 +98,11 @@ if (builder.Environment.IsDevelopment() && builder.Configuration["Demo:FakeLesso
 else
     builder.Services.AddScoped<DevPath.Web.Progress.ILessonProgressGateway, DevPath.Web.Progress.LessonProgressGateway>();
 
+// Tela "Módulo concluído" (#42): dashboard do servidor + textos do conteúdo. Os textos ("O que você aprendeu",
+// completion_summary) ainda não são gravados pelo seed: até lá, a fonte devolve vazio e a seção fica escondida.
+builder.Services.AddSingleton<DevPath.Web.Progress.IModuleCompletionContentSource, DevPath.Web.Progress.PendingModuleCompletionContentSource>();
+builder.Services.AddScoped<DevPath.Web.Progress.IModuleCompletionReader, DevPath.Web.Progress.ModuleCompletionReader>();
+
 // GET /health (usado pelo healthcheck do serviço web no docker-compose).
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database");

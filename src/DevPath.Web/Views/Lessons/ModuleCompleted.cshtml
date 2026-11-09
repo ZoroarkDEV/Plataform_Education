@@ -1,0 +1,10 @@
+@model DevPath.Web.Progress.ModuleCompletionViewModel
+@*
+    Tela "Módulo concluído" (#42): depois do PRG da conclusão (sem JS) e pelo "Concluído ✓" do dashboard.
+*@
+@{
+    ViewData["SupportsDarkMode"] = true;
+}
+<div class="mx-auto max-w-2xl">
+    <partial name="_ModuleCompletion" model="Model" view-data='new ViewDataDictionary(ViewData) { ["ModuleHeadingLevel"] = 1 }' />
+</div>

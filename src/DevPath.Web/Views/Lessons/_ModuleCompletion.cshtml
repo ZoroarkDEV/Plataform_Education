@@ -1,0 +1,61 @@
+@using DevPath.Web.Progress
+@model ModuleCompletionViewModel
+@*
+    "Módulo concluído" (#42, US-M.1). Mesmo bloco na página da aula (dentro do #lesson-completion, h2) e na
+    tela /trilhas/{trilha}/modulos/{modulo}/concluido (h1). Pontos e % vêm do servidor.
+    Sem módulo seguinte com aula pronta: texto, sem botão (nada de link para rascunho ou aula bloqueada).
+*@
+@{
+    var level = ViewData["ModuleHeadingLevel"] as int? ?? 2;
+    var inLesson = ViewData["ModuleInLesson"] as bool? == true;
+    var titleTag = $"h{level}";
+    var subTag = $"h{level + 1}";
+    var titleId = "modulo-concluido-titulo";
+}
+<section class="min-w-0 rounded-xl border border-emerald-600/40 bg-emerald-50 p-5 dark:border-emerald-400/40 dark:bg-emerald-950 sm:p-6"
+         aria-labelledby="@titleId"
+         data-module-completed="@Model.ModuleSlug">
+    @* data-completion-message só no texto do título: o JS anuncia e foca isso, sem ler o emoji. *@
+    @Html.Raw($"<{titleTag} id=\"{titleId}\" class=\"break-words text-xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-2xl\">")
+        <span @(inLesson ? Html.Raw("data-completion-message tabindex=\"-1\"") : null)>@Model.Title</span>
+        <span aria-hidden="true">@ModuleCompletionTexts.TitleEmoji</span>
+    @Html.Raw($"</{titleTag}>")
+
+    @if (Model.Subtitle is { } subtitle)
+    {
+        <p class="mt-2 break-words text-base text-slate-800 dark:text-slate-200" data-module-subtitle>@subtitle</p>
+    }
+
+    @if (Model.Learned.Count > 0)
+    {
+        @Html.Raw($"<{subTag} class=\"mt-5 text-base font-semibold text-slate-900 dark:text-white\">")@(ModuleCompletionTexts.LearnedHeading)@Html.Raw($"</{subTag}>")
+        <ol class="mt-2 list-decimal space-y-2 pl-5 text-base text-slate-800 dark:text-slate-200" data-module-learned>
+            @foreach (var sentence in Model.Learned)
+            {
+                <li class="break-words">@sentence</li>
+            }
+        </ol>
+    }
+
+    <p class="mt-5 break-words text-sm font-semibold text-slate-900 dark:text-white" data-module-footer>@Model.Footer</p>
+
+    <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        @if (Model.Next is { } next)
+        {
+            <a href="@next.FirstLesson.Url"
+               class="btn-primary px-6 py-3 text-base sm:w-auto dark:focus-visible:outline-brand-300"
+               data-next-module>@next.ButtonLabel</a>
+        }
+        else
+        {
+            <p class="break-words text-base text-slate-800 dark:text-slate-200" data-everything-done>@ModuleCompletionTexts.EverythingDone</p>
+        }
+
+        @if (!inLesson || Model.Next is null)
+        {
+            <a asp-controller="Dashboard" asp-action="Index"
+               class="btn-secondary w-full sm:w-auto dark:focus-visible:outline-brand-300"
+               data-back-to-path>@LessonCompletionTexts.BackToPath</a>
+        }
+    </div>
+</section>

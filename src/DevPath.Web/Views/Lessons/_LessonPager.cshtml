@@ -12,6 +12,8 @@
     var crumbs = lesson.Breadcrumb;
     var label = ViewData["PagerLabel"] as string ?? "Navegação entre aulas";
     var moveFocus = ViewData["PagerFocus"] as bool? == true;
+    // #42: com "Módulo concluído" na tela, o botão do bloco é o próximo passo (sem "Próxima aula →").
+    var hideNext = ViewData["PagerHideNext"] as bool? == true;
 
     string UrlFor(LessonLink link) =>
         Url.Action("Show", "Lessons", new { pathSlug = crumbs.PathSlug, moduleSlug = crumbs.ModuleSlug, lessonSlug = link.Slug })!;
@@ -26,7 +28,7 @@
     {
         var direction = isNext ? LessonCompletionTexts.NextLabel : LessonCompletionTexts.PrevLabel;
         var align = isNext ? "items-end text-right sm:col-start-2" : "items-start text-left sm:col-start-1";
-        if (item is null) { continue; }
+        if (item is null || (isNext && hideNext)) { continue; }
 
         if (item.Status == LessonStatus.ComingSoon)
         {

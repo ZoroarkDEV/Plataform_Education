@@ -75,7 +75,8 @@ public sealed class StudentJourneyGateway(IStudentJourneyService service, ILogge
     public static LessonItemViewModel ToViewModel(DashboardLessonDto dto) =>
         new(ToViewModel(dto.Lesson),
             ToViewModel(dto.Status),
-            dto.UnlockRequirement is null ? null : ToViewModel(dto.UnlockRequirement));
+            dto.UnlockRequirement is null ? null : ToViewModel(dto.UnlockRequirement),
+            dto.Points);
 
     public static ModuleProgressViewModel ToViewModel(DashboardModuleDto dto) =>
         new(dto.Slug, dto.Title, dto.CompletedLessons, dto.AvailableLessons, dto.ProgressPercentage,

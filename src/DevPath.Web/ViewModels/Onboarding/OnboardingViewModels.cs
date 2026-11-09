@@ -62,7 +62,8 @@ public enum LessonStatus
     ComingSoon
 }
 
-public sealed record LessonItemViewModel(LessonRef Lesson, LessonStatus Status, LessonRef? UnlockRequirement = null)
+/// <param name="Points">Pontos da conclusão (<c>DashboardLessonDto.Points</c>); null se não concluída ou só de leitura.</param>
+public sealed record LessonItemViewModel(LessonRef Lesson, LessonStatus Status, LessonRef? UnlockRequirement = null, int? Points = null)
 {
     public string StatusLabel => Labels.Status(Status);
 
@@ -80,6 +81,9 @@ public sealed record ModuleProgressViewModel(
 {
     /// <summary>Módulo sem nenhuma aula disponível (todas em rascunho).</summary>
     public bool IsComingSoon => AvailableLessons == 0;
+
+    /// <summary>Todas as aulas prontas concluídas (#42). Rascunho não conta (R4); módulo só com rascunhos nunca conclui.</summary>
+    public bool IsCompleted => AvailableLessons > 0 && CompletedLessons >= AvailableLessons;
 
     public string ProgressLabel => IsComingSoon
         ? "Em breve"
@@ -127,6 +131,24 @@ public sealed record DashboardViewModel(
     /// A aula pode ser aberta agora? Usado no "Conclua 'X' para liberar": se a aula que falta também está
     /// bloqueada (ou não está no roadmap), ela aparece como texto, sem link para uma página que não abre.
     /// </summary>
+    /// <summary>
+    /// "Próximo passo" do #42: o "Continuar" leva ao começo de um módulo novo (nenhuma aula dele concluída ou em
+    /// andamento) depois de um módulo concluído. Number = "Módulo N" pela posição na lista. null nos outros casos.
+    /// </summary>
+    public (int Number, string Title)? NextModule
+    {
+        get
+        {
+            if (NextLesson is null) return null;
+            var index = Modules.ToList().FindIndex(m => m.Lessons.Any(l => l.Lesson == NextLesson));
+            if (index <= 0) return null;
+            var module = Modules[index];
+            if (module.Lessons.Any(l => l.Status is LessonStatus.Completed or LessonStatus.InProgress)) return null;
+            var previous = Modules.Take(index).LastOrDefault(m => !m.IsComingSoon);
+            return previous is { IsCompleted: true } ? (index + 1, module.Title) : null;
+        }
+    }
+
     public bool CanOpen(LessonRef lesson) =>
         Modules.SelectMany(m => m.Lessons).Any(item => item.Lesson == lesson && item.CanOpen);
 }

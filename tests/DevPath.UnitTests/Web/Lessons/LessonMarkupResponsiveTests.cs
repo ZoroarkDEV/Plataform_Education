@@ -22,7 +22,7 @@ public sealed class LessonMarkupResponsiveTests
     public static TheoryData<string> Views => new()
     {
         "Show.cshtml", "_LessonCompletion.cshtml", "_LessonPager.cshtml", "_LessonExercise.cshtml",
-        "_CompletedBadge.cshtml", "Unavailable.cshtml",
+        "_CompletedBadge.cshtml", "Unavailable.cshtml", "_ModuleCompletion.cshtml", "ModuleCompleted.cshtml",
     };
 
     [Theory]
@@ -126,5 +126,17 @@ public sealed class LessonMarkupResponsiveTests
         View("Show.cshtml").Should().NotContain("data-theme-toggle", "o tema fica só no header (#37 I)");
         var compiled = File.ReadAllText(Path.Combine(Root(), "wwwroot", "css", "site.css"));
         compiled.Should().Contain(".min-w-11{").And.Contain(".grid-cols-1{").And.Contain(@".sm\:col-start-2{");
+    }
+
+    [Fact]
+    public void Module_completion_classes_are_in_compiled_css()
+    {
+        // #42: o site.css é commitado; a classe nova precisa estar no compilado (o build pode pular o Tailwind).
+        View("_ModuleCompletion.cshtml").Should().Contain("list-decimal").And.Contain("btn-primary").And.Contain("break-words");
+        var dashboard = File.ReadAllText(Path.Combine(Root(), "Views", "Dashboard", "Index.cshtml"));
+        dashboard.Should().Contain("data-module-completed-link").And.Contain("min-h-11");
+        var css = File.ReadAllText(Path.Combine(Root(), "wwwroot", "css", "site.css"));
+        css.Should().Contain(".list-decimal{").And.Contain(".pl-5{").And.Contain(@".hover\:bg-emerald-100:hover{")
+            .And.Contain(@".sm\:flex-wrap{");
     }
 }

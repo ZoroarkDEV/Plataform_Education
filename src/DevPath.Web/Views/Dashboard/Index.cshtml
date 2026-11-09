@@ -56,9 +56,18 @@
                 <a href="@Model.NextLesson!.Url" class="btn-primary px-6 py-3 text-base sm:w-auto" data-continue>
                     @Model.ContinueLabel<span class="sr-only">: @Model.NextLesson.Title</span>
                 </a>
-                <p class="text-sm text-slate-600 dark:text-slate-300">
-                    Próxima aula: <span class="font-medium text-slate-900 dark:text-white">@Model.NextLesson.Title</span>
-                </p>
+                <div class="min-w-0">
+                    @if (Model.NextModule is { } nextModule)
+                    {
+                        @* #42: depois de um módulo concluído, o próximo passo é o módulo seguinte. *@
+                        <p class="break-words text-sm font-semibold text-slate-900 dark:text-white" data-next-module-step>
+                            @DevPath.Web.Models.Lessons.ModuleCompletionTexts.DashboardNextModule(nextModule.Number, nextModule.Title)
+                        </p>
+                    }
+                    <p class="break-words text-sm text-slate-600 dark:text-slate-300">
+                        Próxima aula: <span class="font-medium text-slate-900 dark:text-white">@Model.NextLesson.Title</span>
+                    </p>
+                </div>
             </div>
         }
         else
@@ -89,6 +98,16 @@
                         </h3>
                         <p class="text-sm text-slate-600 dark:text-slate-300">@module.ProgressLabel</p>
                     </div>
+                    @if (module.IsCompleted)
+                    {
+                        @* #42 / US-M.1: módulo concluído fica marcado; o clique mostra o resumo de novo. *@
+                        <a href="@DevPath.Web.Progress.ModuleCompletionViewModel.SummaryUrlFor(Model.PathSlug, module.Slug)"
+                           class="mt-2 inline-flex min-h-11 items-center rounded-full border border-emerald-600/40 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-emerald-400/40 dark:bg-emerald-950 dark:text-emerald-200 dark:hover:bg-emerald-900 dark:focus-visible:outline-brand-300"
+                           data-module-completed-link>
+                            <span aria-hidden="true">@DevPath.Web.Models.Lessons.ModuleCompletionTexts.DashboardBadge</span>
+                            <span class="sr-only">@DevPath.Web.Models.Lessons.ModuleCompletionTexts.DashboardBadgeSrOnly(module.Title)</span>
+                        </a>
+                    }
                     @if (!module.IsComingSoon)
                     {
                         <div class="progress-track mt-2 h-2" role="progressbar" aria-label="Progresso do módulo @module.Title"
