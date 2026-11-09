@@ -91,6 +91,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Dicas do exercício: sem JS todas aparecem (fechadas, name=dicas-exercicio).
   // Com JS, só a primeira aparece; abrir uma libera a seguinte (ainda fechada),
   // fecha as outras (accordion) e o leitor de tela é avisado. Não persiste.
+  const announceHint = (message) => {
+    const region = document.getElementById("lesson-live") || status();
+    if (!region) return;
+    region.textContent = "";
+    setTimeout(() => { region.textContent = message; }, 50);
+  };
+
   const setupHints = (root) => {
     root.querySelectorAll("[data-hints]").forEach((list) => {
       if (list.dataset.hintsReady) return;
@@ -115,8 +122,8 @@ document.addEventListener("DOMContentLoaded", () => {
           const next = items[index + 1];
           if (next && next.hidden) {
             next.hidden = false;
-            announce(`Dica ${index + 2} de ${items.length} disponível.`);
-            next.querySelector("summary")?.focus();
+            // O foco fica no summary aberto (nativo); só avisamos, sem interromper (UX #35).
+            announceHint(`Dica ${index + 2} liberada logo abaixo.`);
           }
         });
       });

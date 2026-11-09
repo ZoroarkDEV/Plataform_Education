@@ -80,4 +80,24 @@ public sealed class LessonMarkupResponsiveTests
         View("_LessonCompletion.cshtml").Should().NotContain("aria-live");
         View("_CompletedBadge.cshtml").Should().Contain("aria-hidden=\"true\">@LessonCompletionTexts.BadgeVisible");
     }
+
+    [Fact]
+    public void Hints_keep_focus_on_opened_summary_and_announce_next_politely()
+    {
+        var js = File.ReadAllText(Path.Combine(Root(), "wwwroot", "js", "site.js"));
+        var start = js.IndexOf("const setupHints", StringComparison.Ordinal);
+        start.Should().BePositive();
+        var hints = js[start..js.IndexOf("const setup = ", start, StringComparison.Ordinal)];
+        hints.Should().Contain("Dica ${index + 2} liberada logo abaixo.");
+        hints.Should().NotContain(".focus(", "o foco fica no summary que o aluno abriu (UX #35)");
+        js.Should().Contain("document.getElementById(\"lesson-live\") || status()");
+    }
+
+    [Fact]
+    public void Hint_text_padding_is_in_compiled_css()
+    {
+        View("_LessonExercise.cshtml").Should().Contain("pb-2");
+        var css = File.ReadAllText(Path.Combine(Root(), "wwwroot", "css", "site.css"));
+        css.Should().Contain(".pb-2{");
+    }
 }
