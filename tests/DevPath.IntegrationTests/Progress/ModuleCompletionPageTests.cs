@@ -154,11 +154,11 @@ public sealed class ModuleCompletionPageTests(DevPathWebApplicationFactory facto
         body.Should().NotContain("id=\"next-lesson-link\"", "o bloco fica no lugar da \"Próxima aula →\"");
         body.Should().NotContain(LessonCompletionTexts.NextLabel);
         body.Should().NotContain(LessonCompletionTexts.SuccessModule("Primeiros passos"));
-        body.Should().NotContain(ModuleCompletionTexts.EverythingDone);
+        body.Should().NotContain(ModuleCompletionTexts.EverythingDone).And.NotContain(ModuleCompletionTexts.NextModuleComingSoon);
     }
 
     [Fact]
-    public async Task Htmx_SemModuloSeguintePronto_TextoDeTudoPronto_SemBotaoParaRascunho()
+    public async Task Htmx_ModuloSeguinteSoEmBreve_TextoDoProximoChegando_SemBotaoParaRascunho()
     {
         await using var app = App(OnlyDraftsAfter(), Samples.ReadingAvailable(Samples.ComingSoon(Samples.Where)),
             Samples.ReadingCompleted() with { Next = Samples.ComingSoon(Samples.Where), PathProgressPercentage = 100 });
@@ -166,12 +166,28 @@ public sealed class ModuleCompletionPageTests(DevPathWebApplicationFactory facto
 
         var body = await HtmxCompleteAsync(client);
 
-        body.Should().Contain(
-            "Você terminou tudo o que está pronto até agora. Novas aulas estão chegando, e seu progresso fica guardado.");
-        body.Should().NotContain("data-next-module");
+        body.Should().Contain("data-next-module-coming-soon>O próximo módulo está chegando. Seu progresso fica guardado.</p>");
+        body.Should().NotContain(ModuleCompletionTexts.EverythingDone);
+        body.Should().NotContain("data-next-module>");
         body.Should().NotContain("Começar o módulo");
         body.Should().Contain("data-back-to-path").And.Contain(LessonCompletionTexts.BackToPath);
         body.Should().Contain("+10 pontos neste módulo · Trilha SQL & Dados: 100%");
+    }
+
+    [Fact]
+    public async Task Htmx_NenhumModuloDepois_TextoDeTudoPronto_SemBotao()
+    {
+        var onlyModule = new DashboardViewModel(Path, "SQL & Dados", 1, 1, 100, null, false, [Module1(true)], 10);
+        await using var app = App(onlyModule, Samples.ReadingAvailable(), Samples.ReadingCompleted() with { Next = null, PathProgressPercentage = 100 });
+        var client = await LoggedInAsync(app);
+
+        var body = await HtmxCompleteAsync(client);
+
+        body.Should().Contain(
+            "data-everything-done>Você terminou tudo o que está pronto até agora. Novas aulas estão chegando, e seu progresso fica guardado.</p>");
+        body.Should().NotContain(ModuleCompletionTexts.NextModuleComingSoon);
+        body.Should().NotContain("data-next-module>").And.NotContain("Começar o módulo");
+        body.Should().Contain("data-back-to-path");
     }
 
     [Fact]

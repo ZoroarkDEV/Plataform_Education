@@ -79,8 +79,10 @@ public sealed class ModuleCompletionSeededContentTests(SeededContentWebFactory f
             .Select(m => m.Groups[1].Value).ToList();
         items.Should().Equal(Learned);
         html.Should().Contain("+50 pontos neste módulo · Trilha SQL & Dados: 100%", "pontos e % do servidor");
-        html.Should().Contain(ModuleCompletionTexts.EverythingDone, "o módulo 2 (#41) ainda não tem aula pronta");
-        html.Should().NotContain("data-next-module");
+        html.Should().Contain("data-next-module-coming-soon>O próximo módulo está chegando. Seu progresso fica guardado.</p>",
+            "o módulo seguinte (ambiente) só tem aulas Em breve");
+        html.Should().NotContain(ModuleCompletionTexts.EverythingDone);
+        html.Should().NotContain("data-next-module>");
     }
 
     // Conclui as 5 aulas do módulo 1 direto no banco (o fluxo de clique/Executar já tem testes próprios).

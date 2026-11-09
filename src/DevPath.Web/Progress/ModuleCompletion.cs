@@ -51,7 +51,8 @@ public sealed record NextModuleStep(int Number, string Title, LessonRef FirstLes
 /// <summary>Tela/bloco "Módulo concluído" (#42, US-M.1). Tudo calculado do dashboard do servidor.</summary>
 /// <param name="Learned">Uma frase por aula pronta do módulo, na ordem; vazia = seção escondida.</param>
 /// <param name="ModulePoints">Soma dos pontos das aulas do módulo (Score do servidor).</param>
-/// <param name="Next">null = não há módulo seguinte com aula pronta: mostra <see cref="ModuleCompletionTexts.EverythingDone"/>.</param>
+/// <param name="Next">null = não há módulo seguinte com aula que abra: a tela mostra <see cref="NoNextText"/>, sem botão.</param>
+/// <param name="HasLaterModule">Há algum módulo depois deste na trilha (mesmo só com aulas "Em breve").</param>
 public sealed record ModuleCompletionViewModel(
     string PathSlug,
     string PathTitle,
@@ -61,8 +62,17 @@ public sealed record ModuleCompletionViewModel(
     IReadOnlyList<string> Learned,
     int ModulePoints,
     int PathProgressPercentage,
-    NextModuleStep? Next)
+    NextModuleStep? Next,
+    bool HasLaterModule = false)
 {
+    /// <summary>
+    /// Sem botão: módulo seguinte só com "Em breve" = <see cref="ModuleCompletionTexts.NextModuleComingSoon"/>;
+    /// nenhum módulo depois = <see cref="ModuleCompletionTexts.EverythingDone"/>. null quando há botão.
+    /// </summary>
+    public string? NoNextText => Next is not null
+        ? null
+        : HasLaterModule ? ModuleCompletionTexts.NextModuleComingSoon : ModuleCompletionTexts.EverythingDone;
+
     public string Title => ModuleCompletionTexts.Title(ModuleTitle);
 
     public string Footer => ModuleCompletionTexts.Footer(ModulePoints, PathTitle, PathProgressPercentage);
@@ -99,7 +109,8 @@ public sealed record ModuleCompletionViewModel(
         return new ModuleCompletionViewModel(
             dashboard.PathSlug, dashboard.PathTitle, module.Slug, module.Title,
             string.IsNullOrWhiteSpace(content.Subtitle) ? null : content.Subtitle.Trim(),
-            learned, points, dashboard.ProgressPercentage, NextStep(dashboard, index));
+            learned, points, dashboard.ProgressPercentage, NextStep(dashboard, index),
+            HasLaterModule: index + 1 < dashboard.Modules.Count);
     }
 
     // Próximo módulo com aula pronta (módulo só com rascunhos é pulado, R4) e a 1ª aula dele que abre.

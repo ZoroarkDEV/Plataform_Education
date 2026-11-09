@@ -279,7 +279,7 @@ public sealed class OnboardingFlowTests(DevPathWebApplicationFactory factory)
 
         var html = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
 
-        html.Should().Contain("Você concluiu tudo que está disponível").And.Contain("Novas aulas em breve.")
+        html.Should().Contain("Você concluiu tudo o que está disponível <span aria-hidden=\"true\">🎉</span>").And.Contain("Novas aulas estão chegando, e seu progresso fica guardado.")
             .And.NotContain("data-continue");
     }
 

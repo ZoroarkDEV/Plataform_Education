@@ -22,7 +22,10 @@ public static class ModuleCompletionTexts
     /// <summary>Mesmo destino, quando o aluno já começou o próximo módulo (ex.: revendo o resumo depois).</summary>
     public static string GoToNextModule(int number, string title) => $"Ir para o módulo {number}: {title}";
 
-    /// <summary>Depois do último módulo com aula pronta (texto do #42). Sem botão para rascunhos.</summary>
+    /// <summary>Há módulo depois deste, mas só com aulas "Em breve" (US-M.1). Sem botão para rascunhos.</summary>
+    public const string NextModuleComingSoon = "O próximo módulo está chegando. Seu progresso fica guardado.";
+
+    /// <summary>Não há nenhum módulo depois deste na trilha (texto do #42).</summary>
     public const string EverythingDone =
         "Você terminou tudo o que está pronto até agora. Novas aulas estão chegando, e seu progresso fica guardado.";
 

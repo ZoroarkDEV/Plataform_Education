@@ -88,26 +88,48 @@ public sealed class ModuleCompletionTests
     }
 
     [Fact]
-    public void SemModuloSeguinteComAulaPronta_SemBotao_TextoDeTudoPronto()
+    public void ModuloSeguinteSoEmBreve_SemBotao_TextoDoProximoChegando()
     {
         var dashboard = Dashboard(null, 100, Module1(true, 10, 10, 10), DraftsOnly());
 
         var vm = ModuleCompletionViewModel.TryBuild(dashboard, M1, ModuleCompletionContent.Empty)!;
 
         vm.Next.Should().BeNull("não há botão para rascunho");
+        vm.HasLaterModule.Should().BeTrue();
+        vm.NoNextText.Should().Be("O próximo módulo está chegando. Seu progresso fica guardado.");
         vm.Footer.Should().Be("+30 pontos neste módulo · Trilha SQL & Dados: 100%");
-        ModuleCompletionTexts.EverythingDone.Should().Be(
+    }
+
+    [Fact]
+    public void NenhumModuloDepois_SemBotao_TextoDeTudoPronto()
+    {
+        var vm = ModuleCompletionViewModel.TryBuild(Dashboard(null, 100, Module1(true, 10, 10, 10)), M1, ModuleCompletionContent.Empty)!;
+
+        vm.Next.Should().BeNull();
+        vm.HasLaterModule.Should().BeFalse();
+        vm.NoNextText.Should().Be(
             "Você terminou tudo o que está pronto até agora. Novas aulas estão chegando, e seu progresso fica guardado.");
     }
 
     [Fact]
-    public void ProximoModuloSemAulaQueAbra_SemBotao()
+    public void ComBotao_SemTextoDeEspera()
+    {
+        var vm = ModuleCompletionViewModel.TryBuild(Dashboard(L(M2, "like"), 60, Module1(true), Module2()), M1, ModuleCompletionContent.Empty)!;
+
+        vm.Next.Should().NotBeNull();
+        vm.NoNextText.Should().BeNull();
+    }
+
+    [Fact]
+    public void ProximoModuloSemAulaQueAbra_SemBotao_TextoDoProximoChegando()
     {
         var locked = new ModuleProgressViewModel(M2, "Mais consultas com SQL", 0, 1, 0,
             [new(L(M2, "like"), LessonStatus.Locked, L(M1, "c"))]);
 
-        ModuleCompletionViewModel.TryBuild(Dashboard(null, 75, Module1(true), locked), M1, ModuleCompletionContent.Empty)!
-            .Next.Should().BeNull();
+        var vm = ModuleCompletionViewModel.TryBuild(Dashboard(null, 75, Module1(true), locked), M1, ModuleCompletionContent.Empty)!;
+
+        vm.Next.Should().BeNull();
+        vm.NoNextText.Should().Be(ModuleCompletionTexts.NextModuleComingSoon);
     }
 
     [Fact]

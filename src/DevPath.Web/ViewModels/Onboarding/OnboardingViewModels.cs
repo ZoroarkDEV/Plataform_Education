@@ -128,10 +128,6 @@ public sealed record DashboardViewModel(
     public string ContinueLabel => IsFirstAccess ? "Começar pela aula 1" : "Continuar";
 
     /// <summary>
-    /// A aula pode ser aberta agora? Usado no "Conclua 'X' para liberar": se a aula que falta também está
-    /// bloqueada (ou não está no roadmap), ela aparece como texto, sem link para uma página que não abre.
-    /// </summary>
-    /// <summary>
     /// "Próximo passo" do #42: o "Continuar" leva ao começo de um módulo novo (nenhuma aula dele concluída ou em
     /// andamento) depois de um módulo concluído. Number = "Módulo N" pela posição na lista. null nos outros casos.
     /// </summary>
@@ -149,6 +145,10 @@ public sealed record DashboardViewModel(
         }
     }
 
+    /// <summary>
+    /// A aula pode ser aberta agora? Usado no "Conclua 'X' para liberar": se a aula que falta também está
+    /// bloqueada (ou não está no roadmap), ela aparece como texto, sem link para uma página que não abre.
+    /// </summary>
     public bool CanOpen(LessonRef lesson) =>
         Modules.SelectMany(m => m.Lessons).Any(item => item.Lesson == lesson && item.CanOpen);
 }

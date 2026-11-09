@@ -13,8 +13,8 @@ using Testcontainers.PostgreSql;
 namespace DevPath.IntegrationTests.Progress;
 
 /// <summary>
-/// Duas trilhas no PostgreSQL do Testcontainers (#42): "com próximo" (módulo 1 → módulo 2 pronto) e
-/// "sem próximo" (módulo 1 → módulo só com rascunhos, como hoje antes do #41).
+/// Três trilhas no PostgreSQL do Testcontainers (#42): "com próximo" (módulo 1 → módulo 2 pronto),
+/// "sem próximo" (módulo 1 → módulo só com rascunhos, como hoje antes do #41) e "de um módulo" (nada depois).
 /// </summary>
 public sealed class ModuleCompletionWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
@@ -22,6 +22,7 @@ public sealed class ModuleCompletionWebFactory : WebApplicationFactory<Program>,
 
     public (string Path, string Module1, string Lesson1, string Module2, string Lesson2) WithNext { get; private set; }
     public (string Path, string Module1, string Lesson1) WithoutNext { get; private set; }
+    public (string Path, string Module1, string Lesson1) OnlyModule { get; private set; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -53,10 +54,16 @@ public sealed class ModuleCompletionWebFactory : WebApplicationFactory<Program>,
         b2.Publish();
         b2.AddLesson("Rascunho", ContentType.Markdown, "# Rascunho\n\nAula em construção.", isDraft: true);
 
-        db.CareerPaths.AddRange(a, b);
+        var c = CareerPath.Create($"Trilha de um módulo {Guid.NewGuid():N}");
+        var c1 = c.AddModule("Só este");
+        c1.Publish();
+        var c1l = c1.AddLesson("Leitura final", ContentType.Markdown, "# Leitura final\n\nTexto.");
+
+        db.CareerPaths.AddRange(a, b, c);
         await db.SaveChangesAsync();
         WithNext = (a.Slug, a1.Slug, a1l.Slug, a2.Slug, a2l.Slug);
         WithoutNext = (b.Slug, b1.Slug, b1l.Slug);
+        OnlyModule = (c.Slug, c1.Slug, c1l.Slug);
     }
 
     async Task IAsyncLifetime.DisposeAsync()
@@ -103,7 +110,7 @@ public sealed class ModuleCompletionRealServiceTests(ModuleCompletionWebFactory 
     }
 
     [Fact]
-    public async Task SemModuloSeguintePronto_TextoDeTudoPronto_SemBotao()
+    public async Task ModuloSeguinteSoComRascunhos_TextoDoProximoChegando_SemBotao()
     {
         var (path, m1, l1) = factory.WithoutNext;
         var client = await StudentAsync(path);
@@ -113,10 +120,33 @@ public sealed class ModuleCompletionRealServiceTests(ModuleCompletionWebFactory 
         post.Headers.Location!.ToString().Should().Be(Summary(path, m1));
 
         var html = await (await client.GetAsync(Summary(path, m1))).ReadHtmlAsync();
-        html.Should().Contain(ModuleCompletionTexts.EverythingDone);
-        html.Should().NotContain("data-next-module");
+        html.Should().Contain(ModuleCompletionTexts.NextModuleComingSoon);
+        html.Should().NotContain(ModuleCompletionTexts.EverythingDone);
+        html.Should().NotContain("data-next-module>");
         html.Should().NotContain("Começar o módulo");
+        html.Should().Contain("data-back-to-path");
         html.Should().MatchRegex(@"Trilha Trilha sem próximo [0-9a-f]+: 100%");
+    }
+
+    [Fact]
+    public async Task NenhumModuloDepois_TextoDeTudoPronto_SemBotao_EDashboardTudoConcluido()
+    {
+        var (path, m1, l1) = factory.OnlyModule;
+        var client = await StudentAsync(path);
+        var lesson = Url(path, m1, l1);
+
+        var post = await client.SubmitFormAsync(lesson, lesson + "/concluir", new Dictionary<string, string>());
+        post.Headers.Location!.ToString().Should().Be(Summary(path, m1));
+
+        var html = await (await client.GetAsync(Summary(path, m1))).ReadHtmlAsync();
+        html.Should().Contain(ModuleCompletionTexts.EverythingDone);
+        html.Should().NotContain(ModuleCompletionTexts.NextModuleComingSoon);
+        html.Should().NotContain("data-next-module>");
+        html.Should().Contain("data-back-to-path");
+
+        var dashboard = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
+        dashboard.Should().Contain("Você concluiu tudo o que está disponível <span aria-hidden=\"true\">🎉</span>")
+            .And.Contain("Novas aulas estão chegando, e seu progresso fica guardado.");
     }
 
     [Fact]

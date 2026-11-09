@@ -3,7 +3,8 @@
 @*
     "Módulo concluído" (#42, US-M.1). Mesmo bloco na página da aula (dentro do #lesson-completion, h2) e na
     tela /trilhas/{trilha}/modulos/{modulo}/concluido (h1). Pontos e % vêm do servidor.
-    Sem módulo seguinte com aula pronta: texto, sem botão (nada de link para rascunho ou aula bloqueada).
+    Sem botão (nada de link para rascunho ou aula bloqueada): módulo seguinte só "Em breve" = "O próximo módulo está
+    chegando..."; nenhum módulo depois = "Você terminou tudo...".
 *@
 @{
     var level = ViewData["ModuleHeadingLevel"] as int? ?? 2;
@@ -48,7 +49,8 @@
         }
         else
         {
-            <p class="break-words text-base text-slate-800 dark:text-slate-200" data-everything-done>@ModuleCompletionTexts.EverythingDone</p>
+            <p class="break-words text-base text-slate-800 dark:text-slate-200"
+               @(Model.HasLaterModule ? Html.Raw("data-next-module-coming-soon") : Html.Raw("data-everything-done"))>@Model.NoNextText</p>
         }
 
         @if (!inLesson || Model.Next is null)
