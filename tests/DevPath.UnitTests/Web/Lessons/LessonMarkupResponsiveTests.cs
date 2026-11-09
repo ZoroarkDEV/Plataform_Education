@@ -69,6 +69,9 @@ public sealed class LessonMarkupResponsiveTests
         var js = File.ReadAllText(Path.Combine(Root(), "wwwroot", "js", "site.js"));
         js.Should().NotMatchRegex(@"nextFailed\s*>=\s*\d", "o limite vem do exercício (failures_before_skip), não do JS (#29)");
         js.Should().Contain("section.dataset.failuresUntilSkip");
+        js.Should().Contain("window.DevPathSkipRule", "a regra fica em skip-rule.js, testada no Node");
+        File.ReadAllText(Path.Combine(Root(), "Views", "Shared", "_Layout.cshtml"))
+            .Should().MatchRegex(@"skip-rule\.js[^\n]*\n\s*<script src=""~/js/site\.js""", "skip-rule.js carrega antes do site.js");
         View("_LessonExercise.cshtml").Should().Contain("data-failures-until-skip=\"@(Model.FailuresUntilSkip?.ToString() ?? \"\")\"");
     }
 

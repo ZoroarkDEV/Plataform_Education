@@ -428,17 +428,14 @@ document.addEventListener("click", (event) => {
             const nextFailed = failed + 1;
             section.dataset.failedAttempts = String(nextFailed);
             // O servidor manda quantas falhas faltam (FailuresBeforeSkip do exercício, padrão 5).
-            // Sem progresso (vazio) não há "Seguir sem pontos" para anunciar.
-            const untilRaw = section.dataset.failuresUntilSkip;
-            let reachedSkip = false;
-            if (untilRaw != null && untilRaw !== "") {
-              const until = Number(untilRaw);
-              if (until > 0) {
-                section.dataset.failuresUntilSkip = String(until - 1);
-                reachedSkip = until - 1 === 0;
-              }
-            }
-            if (reachedSkip && section.dataset.canSkip !== "true") {
+            // A regra fica em skip-rule.js (testada no Node): sem progresso ou com as tentativas
+            // esgotadas nesta falha, não há "Seguir sem pontos" para anunciar.
+            const rule = window.DevPathSkipRule;
+            const skip = rule
+              ? rule.afterFailure(section.dataset.failuresUntilSkip, outcome.remainingAttempts ?? null)
+              : { until: section.dataset.failuresUntilSkip ?? "", announce: false };
+            section.dataset.failuresUntilSkip = skip.until;
+            if (skip.announce && section.dataset.canSkip !== "true") {
               section.dataset.canSkip = "true";
               extras = `<p class="mt-2 text-sm text-slate-700 dark:text-slate-300">${TEXTS.skipAnnounce}</p>`;
               announce(TEXTS.skipAnnounce);

@@ -360,6 +360,46 @@ public sealed class LessonProgressExhaustedRealServiceTests(LessonProgressExhaus
     private const string Wrong = "SELECT nome FROM alunos;";
 
     [DockerFact]
+    public async Task LimiteIgualAoMaxAttempts_NaoLiberaPulo_ComoATelaTambemNaoAnuncia()
+    {
+        // MaxAttempts = 2 = FailuresBeforeSkip: a 2ª falha esgota as tentativas, então o servidor não deixa pular.
+        // O site.js recebe remainingAttempts 0 e não anuncia (SkipRuleScriptTests). (#29)
+        await SetFailuresBeforeSkipAsync(2);
+        try
+        {
+            var (client, _) = await StudentAsync();
+            var leitura = factory.Url("leitura");
+            var notas = factory.Url("notas");
+            await client.SubmitFormAsync(leitura, leitura + "/concluir", new Dictionary<string, string>());
+            (await (await client.GetAsync(notas)).ReadHtmlAsync()).Should().Contain("data-failures-until-skip=\"2\"");
+
+            await AddAntiforgeryHeaderAsync(client);
+            (await ExecuteRawAsync(client, Wrong)).GetProperty("remainingAttempts").GetInt32().Should().Be(1);
+            var last = await ExecuteRawAsync(client, Wrong);
+            last.GetProperty("status").GetString().Should().Be("fail");
+            last.GetProperty("remainingAttempts").GetInt32().Should().Be(0, "é com este valor que a tela deixa de anunciar o pulo");
+
+            var page = await (await client.GetAsync(notas)).ReadHtmlAsync();
+            page.Should().NotContain("data-skip-form", "esgotou junto com o limite: CanSkip é false no servidor");
+            page.Should().Contain("data-can-skip=\"false\"");
+            page.Should().Contain(LessonCompletionTexts.AttemptsExhaustedReason);
+        }
+        finally
+        {
+            await SetFailuresBeforeSkipAsync(null);
+        }
+    }
+
+    private async Task SetFailuresBeforeSkipAsync(int? value)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DevPathDbContext>();
+        var exercise = await db.Exercises.SingleAsync(e => e.Id == factory.ExerciseId);
+        exercise.SetFailuresBeforeSkip(value);
+        await db.SaveChangesAsync();
+    }
+
+    [DockerFact]
     public async Task Exhaust_MostraConcluir_ConcluiSemPontos_LiberaProxima_EPersisteNoReload()
     {
         var (client, userId) = await StudentAsync();
