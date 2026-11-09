@@ -37,7 +37,15 @@
       "message": "O WHERE filtra livro por livro, antes de agrupar, então ainda não existe contagem. Para filtrar pela contagem do grupo, use HAVING depois do GROUP BY."
     },
     {
+      "example": "SELECT genero, COUNT(*) AS total_livros FROM livros WHERE COUNT(*) >= 3 GROUP BY genero;",
+      "message": "O WHERE filtra livro por livro, antes de agrupar, então ainda não existe contagem. Para filtrar pela contagem do grupo, use HAVING depois do GROUP BY."
+    },
+    {
       "example": "SELECT genero, COUNT(*) FROM livros GROUP BY genero HAVING COUNT(*) > 3;",
+      "message": "Veio só Romance. Com >, o 3 fica de fora. \"3 ou mais\" inclui o 3: use >=."
+    },
+    {
+      "example": "SELECT genero, COUNT(*) AS total_livros FROM livros GROUP BY genero HAVING COUNT(*) > 3;",
       "message": "Veio só Romance. Com >, o 3 fica de fora. \"3 ou mais\" inclui o 3: use >=."
     },
     {
@@ -45,8 +53,12 @@
       "message": "A ordem das partes importa: primeiro GROUP BY (formar os grupos), depois HAVING (filtrar os grupos)."
     },
     {
+      "example": "SELECT genero, COUNT(*) AS total_livros FROM livros HAVING COUNT(*) >= 3 GROUP BY genero;",
+      "message": "A ordem das partes importa: primeiro GROUP BY (formar os grupos), depois HAVING (filtrar os grupos)."
+    },
+    {
       "example": "SELECT genero, COUNT(*) AS total_livros FROM livros GROUP BY genero HAVING total_livros >= 3;",
-      "message": "No HAVING, repita a conta em vez de usar o apelido: HAVING COUNT(*) >= 3. O apelido criado com AS só vale para o nome da coluna no resultado."
+      "message": "No HAVING, repita a conta em vez de usar o apelido: escreva de novo o mesmo COUNT(*) do SELECT. O apelido criado com AS só vale para o nome da coluna no resultado."
     },
     {
       "example": "SELECT genero, COUNT(*) AS total_livros FROM livros GROUP BY genero;",

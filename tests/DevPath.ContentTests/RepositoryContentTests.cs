@@ -191,6 +191,53 @@ public class RepositoryContentTests
         }
     }
 
+    /// <summary>
+    /// #41: a dica de erro comum compara texto, então os exemplos precisam ser o que o aluno escreve a partir do
+    /// código inicial (com o apelido <c>AS total_livros</c> que já vem nele). A linha de comentário do código
+    /// inicial fica de fora aqui: ignorá-la no matcher é outro issue.
+    /// </summary>
+    [Theory]
+    [InlineData("WHERE COUNT(*) >= 3\nGROUP BY genero\n", "O WHERE filtra livro por livro")]
+    [InlineData("GROUP BY genero\nHAVING COUNT(*) > 3;\n", "Veio só Romance")]
+    [InlineData("HAVING COUNT(*) >= 3\nGROUP BY genero;\n", "A ordem das partes importa")]
+    [InlineData("GROUP BY genero\nHAVING total_livros >= 3\n", "No HAVING, repita a conta")]
+    [InlineData("GROUP BY genero\n", "Vieram os 4 gêneros")]
+    public void Having_ErrosComunsCasamComOQueOAlunoEscreveAPartirDoCodigoInicial(string tail, string expectedStart)
+    {
+        var exercise = AllLessons().Single(l => l.Slug == "filtrando-grupos-com-having").Exercise!;
+        var starterWithoutComment = string.Join('\n', exercise.StarterCode.Split('\n').Where(line => !line.TrimStart().StartsWith("--")));
+        starterWithoutComment.Should().Contain("AS total_livros").And.EndWith("GROUP BY genero\n");
+        var attempt = starterWithoutComment[..^"GROUP BY genero\n".Length] + tail;
+
+        var message = DevPath.Application.CodeExecution.CommonErrorMatcher.Match(attempt,
+            exercise.CommonErrors.Select(e => new DevPath.Domain.CareerPaths.CommonError(e.Example, e.Message)).ToList());
+
+        message.Should().NotBeNull($"a tentativa '{attempt}' deveria receber a dica").And.StartWith(expectedStart);
+    }
+
+    /// <summary>
+    /// #41: o Resumo da aula não pode trazer a condição exata que o exercício pede (somada ao código inicial,
+    /// ela vira a resposta pronta).
+    /// </summary>
+    [Fact]
+    public void Resumo_NaoEntregaACondicaoDoExercicio()
+    {
+        foreach (var lesson in AllLessons().Where(l => l.Exercise is not null && l.Body.Contains("## Resumo")))
+        {
+            var solution = lesson.Exercise!.Solution.Trim().TrimEnd(';');
+            var last = Regex.Matches(solution, @"\b(?:WHERE|HAVING)\s+(.+?)(?=\s+(?:GROUP BY|HAVING|ORDER BY|LIMIT)\b|$)",
+                RegexOptions.IgnoreCase).LastOrDefault();
+            if (last is null)
+            {
+                continue;
+            }
+
+            var condition = Regex.Replace(last.Groups[1].Value, @"\s+", " ").Trim();
+            var resumo = Regex.Replace(lesson.Body[lesson.Body.IndexOf("## Resumo", StringComparison.Ordinal)..], @"\s+", " ");
+            resumo.Should().NotContainEquivalentOf(condition, $"o Resumo de {lesson.SourceFile} não pode entregar a condição do exercício");
+        }
+    }
+
     [Fact]
     public void Exercicios_NenhumaDicaContemASolucao()
     {

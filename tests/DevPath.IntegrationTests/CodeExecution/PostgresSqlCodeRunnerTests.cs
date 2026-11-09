@@ -71,6 +71,29 @@ public sealed class PostgresSqlCodeRunnerTests
         error.FriendlyMessage.Should().Contain("erro de sintaxe");
     }
 
+    // #41 (aula de HAVING): COUNT no WHERE é o erro mais comum e não pode cair no conselho do GROUP BY.
+    [DockerFact]
+    public async Task AgregacaoNoWhere_OrientaParaOHaving()
+    {
+        var result = await RunAsync("SELECT ativo, COUNT(*) AS total FROM alunos WHERE COUNT(*) >= 2 GROUP BY ativo;");
+
+        result.ExitCode.Should().Be(PostgresSqlCodeRunner.SqlErrorExitCode, result.Stderr);
+        var error = SqlErrorTranslator.Translate(result.Stderr);
+        error.SqlState.Should().Be("42803");
+        error.FriendlyMessage.Should().Be(SqlErrorTranslator.AggregateInWhereMessage);
+    }
+
+    [DockerFact]
+    public async Task ColunaForaDoGroupBy_ContinuaComOConselhoDoGroupBy()
+    {
+        var result = await RunAsync("SELECT nome, COUNT(*) FROM alunos GROUP BY ativo;");
+
+        result.ExitCode.Should().Be(PostgresSqlCodeRunner.SqlErrorExitCode, result.Stderr);
+        var error = SqlErrorTranslator.Translate(result.Stderr);
+        error.SqlState.Should().Be("42803");
+        error.FriendlyMessage.Should().Contain("GROUP BY").And.NotBe(SqlErrorTranslator.AggregateInWhereMessage);
+    }
+
     [DockerFact]
     public async Task PreparacaoQuebrada_DevolveCodigoProprio()
     {

@@ -140,6 +140,26 @@ public sealed class SeededExercisesEndToEndTests(SeededContentFixture fixture) :
         }
     }
 
+    // #41: na aula de HAVING, o COUNT no WHERE (com ou sem o apelido do código inicial) é erro do banco (42803)
+    // e precisa da orientação para o HAVING, não do conselho do GROUP BY.
+    [Fact]
+    public async Task Having_CountNoWhere_ViraAMensagemDoHaving()
+    {
+        var exercise = await ExerciseAsync("filtrando-grupos-com-having");
+        var noWhere = exercise.CommonErrors.Where(e => e.Example.Contains("WHERE COUNT", StringComparison.Ordinal)).ToList();
+        noWhere.Select(e => e.Example).Should().Contain(e => e.Contains("AS total_livros")).And.HaveCountGreaterThanOrEqualTo(2);
+
+        foreach (var commonError in noWhere)
+        {
+            var act = () => RunLikeTheRunnerAsync(exercise.Dataset, null, commonError.Example);
+
+            var error = (await act.Should().ThrowAsync<PostgresException>()).Which;
+            error.SqlState.Should().Be("42803");
+            SqlErrorTranslator.Translate($"ERROR:  {error.SqlState}: {error.MessageText}").FriendlyMessage
+                .Should().Be(SqlErrorTranslator.AggregateInWhereMessage);
+        }
+    }
+
     // #41: o roteiro do PO lista outras consultas certas para o módulo 2. A correção olha o resultado,
     // então elas também passam (inclusive o WHERE id = 6 da aula 5, aceito pelo PO).
     [Theory]

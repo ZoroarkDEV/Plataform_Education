@@ -303,6 +303,10 @@ public class SqlErrorTranslatorTests
     [InlineData("ERROR:  0A000: COPY is not allowed in a non-volatile function", SqlErrorTranslator.ReadOnlyMessage)]
     [InlineData("ERROR:  57014: canceling statement due to statement timeout", SqlErrorTranslator.TimeoutMessage)]
     [InlineData("algo que não é erro do postgres", SqlErrorTranslator.GenericMessage)]
+    // #41: o mesmo 42803 tem duas causas, e cada uma precisa da sua orientação.
+    [InlineData("psql:/tmp/consulta.psql:4: ERROR:  42803: aggregate functions are not allowed in WHERE", SqlErrorTranslator.AggregateInWhereMessage)]
+    [InlineData("ERROR:  42803: column \"livros.titulo\" must appear in the GROUP BY clause or be used in an aggregate function",
+        "Toda coluna do SELECT que não está dentro de uma função de agregação (COUNT, SUM...) precisa aparecer no GROUP BY.")]
     public void TraduzPeloSqlState(string stderr, string expected) =>
         SqlErrorTranslator.Translate(stderr).FriendlyMessage.Should().Be(expected);
 

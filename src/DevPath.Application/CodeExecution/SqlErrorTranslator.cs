@@ -36,6 +36,12 @@ public static partial class SqlErrorTranslator
         "Sua consulta demorou demais e foi interrompida. Verifique se não falta uma condição no JOIN/WHERE " +
         "ou se há uma recursão sem fim.";
 
+    // #41: 42803 também é "aggregate functions are not allowed in WHERE". O conselho do GROUP BY levaria o aluno
+    // para o lado errado; aqui ele precisa saber que o filtro do grupo vai no HAVING (sem receber a consulta pronta).
+    public const string AggregateInWhereMessage =
+        "Funções de resumo como COUNT e SUM não podem ficar no WHERE, porque ele olha uma linha de cada vez, antes de agrupar. " +
+        "Para filtrar pelo resumo do grupo, use HAVING depois do GROUP BY.";
+
     public const string GenericMessage = "Não foi possível executar o seu SQL. Veja o detalhe técnico.";
 
     // "ERROR:  42P01: relation "x" does not exist" (o psql em modo verbose põe o código depois de ERROR:).
@@ -75,6 +81,7 @@ public static partial class SqlErrorTranslator
                 : $"A tabela \"{name}\" não existe. Confira o nome das tabelas do exercício.",
             "42703" => MissingColumnMessage(name, technical),
             "42702" => $"O nome da coluna{(name is null ? "" : $" \"{name}\"")} é ambíguo: ele existe em mais de uma tabela. Indique a tabela, ex.: alunos.nome.",
+            "42803" when message.Contains("not allowed in WHERE", StringComparison.OrdinalIgnoreCase) => AggregateInWhereMessage,
             "42803" => "Toda coluna do SELECT que não está dentro de uma função de agregação (COUNT, SUM...) precisa aparecer no GROUP BY.",
             "42883" => "Essa função ou operador não existe para esses tipos de dado. Confira o nome da função e os tipos dos valores.",
             "42804" => "Os tipos de dado não combinam (ex.: comparar texto com número).",

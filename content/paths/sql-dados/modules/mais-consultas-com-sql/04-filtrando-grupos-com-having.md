@@ -75,4 +75,4 @@ Quais gêneros têm **3 livros ou mais**? Mostre o **gênero** e a **quantidade 
 
 - `HAVING` filtra grupos e vem depois do `GROUP BY`.
 - `WHERE` filtra linhas antes de agrupar; `HAVING` filtra os grupos já resumidos.
-- No `HAVING`, escreva a conta de novo (`COUNT(*) >= 3`), não o apelido.
+- No `HAVING`, escreva a conta de novo (`COUNT(*) >= 2`), não o apelido.
