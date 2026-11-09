@@ -47,6 +47,7 @@
                  aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Model.ProgressPercentage" aria-valuetext="@Model.ProgressLabel">
                 <div class="progress-fill" style="width: @(Math.Clamp(Model.ProgressPercentage, 0, 100))%"></div>
             </div>
+            <p class="mt-3 text-sm font-semibold text-slate-900 dark:text-white" data-total-points>@Model.TotalPointsText</p>
         </div>
 
         @if (Model.State == DashboardState.Continue)

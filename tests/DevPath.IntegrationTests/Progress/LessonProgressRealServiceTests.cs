@@ -201,6 +201,7 @@ public sealed class LessonProgressRealServiceTests(LessonProgressWebFactory fact
 
         html.Should().MatchRegex(@"data-lesson-status=""Completed""[^>]*>\s*<span[^>]*data-completed-badge");
         html.Should().NotContain("+0");
+        html.Should().MatchRegex(@"data-total-points>Seus pontos: 0</p>", "aula de leitura não vale pontos (#39)");
     }
 
     [DockerFact]
@@ -219,6 +220,9 @@ public sealed class LessonProgressRealServiceTests(LessonProgressWebFactory fact
         var row = await ProgressAsync(userId, "notas");
         row!.CompletionKind.Should().Be(LessonCompletionKind.ExercisePassed);
         row.Score.Should().Be(10);
+
+        var dashboard = await (await client.GetAsync("/dashboard")).ReadHtmlAsync();
+        dashboard.Should().Contain("data-total-points>Seus pontos: 10</p>", "o total vem do TotalPoints do servidor (#39)");
     }
 
     [DockerFact]

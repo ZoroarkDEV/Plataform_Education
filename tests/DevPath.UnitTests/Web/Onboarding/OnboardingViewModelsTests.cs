@@ -155,4 +155,14 @@ public class OnboardingViewModelsTests
         dashboard.CanOpen(where).Should().BeFalse("bloqueada");
         dashboard.CanOpen(foraDoRoadmap).Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData(0, "Seus pontos: 0")]
+    [InlineData(1, "Seus pontos: 1")]
+    [InlineData(40, "Seus pontos: 40")]
+    public void Dashboard_TotalPointsText_UsaOTotalDoServidor(int total, string expected)
+    {
+        var dashboard = new DashboardViewModel("sql-dados", "SQL & Dados", 4, 5, 80, Select, false, [], total);
+        dashboard.TotalPointsText.Should().Be(expected);
+    }
 }

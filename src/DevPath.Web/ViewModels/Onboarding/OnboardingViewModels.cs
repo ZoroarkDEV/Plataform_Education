@@ -117,6 +117,9 @@ public sealed record DashboardViewModel(
     /// <summary>Soma dos pontos das aulas concluídas nesta trilha (UX I6).</summary>
     public string TotalPointsLabel => TotalPoints == 1 ? "1 ponto" : $"{TotalPoints} pontos";
 
+    /// <summary>Total no card de Minha trilha (UX I6 / #39). O número vem do servidor, nunca fixo no Razor.</summary>
+    public string TotalPointsText => $"Seus pontos: {TotalPoints}";
+
     /// <summary>No 1º acesso o botão diz "Começar pela aula 1"; depois, "Continuar".</summary>
     public string ContinueLabel => IsFirstAccess ? "Começar pela aula 1" : "Continuar";
 
