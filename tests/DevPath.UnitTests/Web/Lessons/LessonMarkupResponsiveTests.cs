@@ -40,7 +40,9 @@ public sealed class LessonMarkupResponsiveTests
     public void Pager_items_shrink_and_wrap()
     {
         var pager = View("_LessonPager.cshtml");
-        pager.Should().Contain("grid-cols-2");
+        pager.Should().Contain("grid grid-cols-1 gap-3 sm:grid-cols-2", "uma coluna no celular (#37 H)");
+        pager.Should().Contain("sm:col-start-2").And.Contain("sm:col-start-1");
+        pager.Should().NotMatchRegex(@"[\s""]col-start-");
         pager.Should().Contain("min-w-0 break-words");
     }
 
@@ -99,5 +101,18 @@ public sealed class LessonMarkupResponsiveTests
         View("_LessonExercise.cshtml").Should().Contain("pb-2");
         var css = File.ReadAllText(Path.Combine(Root(), "wwwroot", "css", "site.css"));
         css.Should().Contain(".pb-2{");
+    }
+
+    [Fact]
+    public void Touch_targets_are_at_least_44px()
+    {
+        var layout = File.ReadAllText(Path.Combine(Root(), "Views", "Shared", "_Layout.cshtml"));
+        Regex.Matches(layout, @"<button type=""button"" data-(menu|theme)-toggle[^>]*class=""[^""]*min-h-11 min-w-11")
+            .Count.Should().Be(2, "menu e tema do header com 44×44 (#37 H)");
+        var css = File.ReadAllText(Path.Combine(Root(), "Styles", "app.css"));
+        css.Should().Contain("@apply inline-flex min-h-11 items-center rounded-md border border-slate-500 px-3");
+        View("Show.cshtml").Should().NotContain("data-theme-toggle", "o tema fica só no header (#37 I)");
+        var compiled = File.ReadAllText(Path.Combine(Root(), "wwwroot", "css", "site.css"));
+        compiled.Should().Contain(".min-w-11{").And.Contain(".grid-cols-1{").And.Contain(@".sm\:col-start-2{");
     }
 }

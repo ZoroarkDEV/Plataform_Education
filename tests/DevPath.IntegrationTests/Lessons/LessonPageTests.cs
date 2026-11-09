@@ -110,6 +110,9 @@ public sealed class LessonPageTests(DevPathWebApplicationFactory factory)
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var raw = await response.Content.ReadAsStringAsync();
         raw.Should().NotContain("<script>alert", "HTML cru do Markdown sai escapado");
+        System.Text.RegularExpressions.Regex.Matches(raw, "data-theme-toggle").Count
+            .Should().Be(1, "só o controle de tema do header (#37 I)");
+        raw.Should().NotContain("Tema escuro: ").And.NotContain("data-theme-state");
         raw.Should().Contain("&lt;script&gt;alert");
         var html = WebUtility.HtmlDecode(raw);
 

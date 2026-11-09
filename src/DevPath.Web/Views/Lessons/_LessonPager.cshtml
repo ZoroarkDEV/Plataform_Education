@@ -19,13 +19,13 @@
     const string box = "flex min-h-14 min-w-0 break-words flex-col justify-center rounded-lg border px-4 py-2 text-sm";
 }
 
-<nav aria-label="@label" class="grid grid-cols-2 gap-3" data-lesson-pager>
+<nav aria-label="@label" class="grid grid-cols-1 gap-3 sm:grid-cols-2" data-lesson-pager>
 @if (Model.Progress is { } progress)
 {
     @foreach (var (item, isNext) in new[] { (progress.Previous, false), (progress.Next, true) })
     {
         var direction = isNext ? LessonCompletionTexts.NextLabel : LessonCompletionTexts.PrevLabel;
-        var align = isNext ? "items-end text-right col-start-2" : "items-start text-left col-start-1";
+        var align = isNext ? "items-end text-right sm:col-start-2" : "items-start text-left sm:col-start-1";
         if (item is null) { continue; }
 
         if (item.Status == LessonStatus.ComingSoon)
@@ -72,7 +72,7 @@ else
     @foreach (var (link, isNext) in new[] { (lesson.PreviousLesson, false), (lesson.NextLesson, true) })
     {
         var direction = isNext ? LessonCompletionTexts.NextLabel : LessonCompletionTexts.PrevLabel;
-        var align = isNext ? "items-end text-right col-start-2" : "items-start text-left col-start-1";
+        var align = isNext ? "items-end text-right sm:col-start-2" : "items-start text-left sm:col-start-1";
         if (link is null) { continue; }
 
         if (link.IsDraft)
