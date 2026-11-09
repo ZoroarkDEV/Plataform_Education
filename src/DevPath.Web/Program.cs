@@ -4,6 +4,7 @@ using DevPath.Infrastructure;
 using DevPath.Infrastructure.Content;
 using DevPath.Infrastructure.Persistence;
 using DevPath.Web.Api;
+using DevPath.Web.Auth;
 using DevPath.Web.Health;
 using DevPath.Web.Lessons;
 using DevPath.Web.Onboarding;
@@ -44,6 +45,9 @@ builder.Services.ConfigureApplicationCookie(options =>
 // API de execução de exercícios (issue #25, ADR-006): antiforgery por header, rate limit por aluno e 401 em /api.
 // A Web NÃO executa código nem fala com o Docker: só enfileira no Redis (o DevPath.Worker executa).
 builder.Services.AddExerciseExecutionApi(builder.Configuration);
+
+// "Esqueci a senha" (#44): rate limit por IP e por e-mail (o e-mail vem do formulário, então é no controller).
+builder.Services.AddPasswordResetRateLimiting(builder.Configuration);
 
 // Atrás de um proxy reverso (nginx, Traefik, load balancer) o HTTPS termina no proxy e a app recebe HTTP.
 // Os cabeçalhos X-Forwarded-Proto/For contam o esquema e o IP originais. Só confiamos neles quando

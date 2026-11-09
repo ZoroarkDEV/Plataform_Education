@@ -1,9 +1,11 @@
 using DevPath.Application.Auth;
 using DevPath.Application.CodeExecution;
+using DevPath.Application.Email;
 using DevPath.Application.Journey;
 using DevPath.Application.Lessons;
 using DevPath.Application.Progress;
 using DevPath.Infrastructure.CodeExecution;
+using DevPath.Infrastructure.Email;
 using DevPath.Infrastructure.Identity;
 using DevPath.Infrastructure.Journey;
 using DevPath.Infrastructure.Lessons;
@@ -41,7 +43,8 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddPersistence(configuration);
-        services.AddIdentityServices();
+        services.AddIdentityServices(configuration);
+        services.AddEmail(configuration);
 
         // Leitura das aulas para a página /trilhas/{trilha}/{módulo}/{aula}. Scoped = um por requisição,
         // o mesmo tempo de vida do DbContext que ele usa.
@@ -124,7 +127,24 @@ public static class DependencyInjection
         });
     }
 
-    private static void AddIdentityServices(this IServiceCollection services)
+    /// <summary>
+    /// E-mail (issue #44): SMTP quando <c>Email:Smtp:Host</c> está configurado (Mailpit em dev/staging);
+    /// senão, um sender que só avisa no log (produção, até o dono escolher o provedor).
+    /// </summary>
+    private static void AddEmail(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
+        if (string.IsNullOrWhiteSpace(configuration[$"{EmailOptions.SectionName}:Smtp:Host"]))
+        {
+            services.TryAddSingleton<IEmailSender, UnconfiguredEmailSender>();
+        }
+        else
+        {
+            services.TryAddSingleton<IEmailSender, SmtpEmailSender>();
+        }
+    }
+
+    private static void AddIdentityServices(this IServiceCollection services, IConfiguration configuration)
     {
         // AddIdentity registra UserManager, SignInManager e o esquema de cookie "Identity.Application".
         services
@@ -153,5 +173,18 @@ public static class DependencyInjection
             .AddClaimsPrincipalFactory<DevPathUserClaimsPrincipalFactory>();
 
         services.AddScoped<IAuthService, AuthService>();
+
+        // Recuperação de senha (#44): link de 1 h e uma vez só; sessões antigas caem em até 1 min.
+        var timing = configuration.GetSection(IdentityTimingOptions.SectionName).Get<IdentityTimingOptions>()
+                     ?? new IdentityTimingOptions();
+        services.Configure<DataProtectionTokenProviderOptions>(options =>
+            options.TokenLifespan = timing.PasswordResetTokenLifespan);
+        services.Configure<SecurityStampValidatorOptions>(options =>
+            options.ValidationInterval = timing.SecurityStampValidationInterval);
+        services.Configure<AppUrlOptions>(configuration.GetSection(AppUrlOptions.SectionName));
+        services.AddSingleton<PasswordResetQueue>();
+        services.AddScoped<PasswordResetService>();
+        services.AddScoped<IPasswordResetService>(sp => sp.GetRequiredService<PasswordResetService>());
+        services.AddHostedService<PasswordResetEmailWorker>();
     }
 }

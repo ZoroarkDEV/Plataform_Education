@@ -1,5 +1,5 @@
-# Ambiente local do DevPath: aplicação (web), PostgreSQL (dados), Redis (cache/sessões e fila de execução)
-# e o Worker que executa o código dos alunos (ADR-006).
+# Ambiente local do DevPath: aplicação (web), PostgreSQL (dados), Redis (cache/sessões e fila de execução),
+# o Worker que executa o código dos alunos (ADR-006) e o Mailpit, a caixa de e-mail local de dev/staging (#44).
 # Uso: cp .env.example .env && docker compose up --build
 # Só a infraestrutura (para rodar a app com `dotnet run`): docker compose up -d postgres redis
 services:
@@ -34,6 +34,20 @@ services:
       timeout: 3s
       retries: 10
 
+  # Caixa de e-mail local (dev e staging, #44): a Web envia por SMTP (mailpit:1025 na rede interna) e
+  # os e-mails aparecem em http://localhost:${MAILPIT_UI_PORT:-8025}. NÃO entrega nada de verdade.
+  # Portas presas a 127.0.0.1: a interface não tem login. Staging no mesmo host: mude
+  # MAILPIT_CONTAINER_NAME e as portas no .env. Produção: veja docs/email-e-recuperacao-de-senha.md.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: ${MAILPIT_CONTAINER_NAME:-devpath-mailpit}
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: "500"
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+
   web:
     build:
       context: .
@@ -45,6 +59,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
       # Development: aplica as migrations e faz o seed de /content no startup (issue #21).
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
@@ -55,6 +71,13 @@ services:
       # Fila de execução de exercícios: a Web enfileira, o Worker executa (#25).
       ConnectionStrings__Redis: "redis:6379"
       Content__RootPath: /app/content
+      # E-mail (#44): SMTP do Mailpit (nome do serviço e porta interna). Links dos e-mails usam a URL
+      # pública, nunca o header Host. Em staging, PUBLIC_BASE_URL = endereço do staging.
+      Email__Smtp__Host: mailpit
+      Email__Smtp__Port: "1025"
+      Email__Smtp__Security: None
+      Email__FromAddress: ${EMAIL_FROM_ADDRESS:-nao-responda@devpath.local}
+      App__PublicBaseUrl: ${PUBLIC_BASE_URL:-http://localhost:8080}
     ports:
       - "${WEB_PORT:-8080}:8080"
     volumes:

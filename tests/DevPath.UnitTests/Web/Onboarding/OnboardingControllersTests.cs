@@ -187,7 +187,11 @@ public class OnboardingControllersTests
     [Fact]
     public async Task Cadastro_ComSucesso_VaiParaEscolhaDeTrilha()
     {
-        var controller = WithContext(new AccountController(new SucceedingAuth()));
+        var controller = WithContext(new AccountController(
+            new SucceedingAuth(),
+            new UnusedPasswordReset(),
+            new DevPath.Web.Auth.PasswordResetRateLimiter(
+                Microsoft.Extensions.Options.Options.Create(new DevPath.Web.Auth.PasswordResetRateLimitOptions()))));
 
         var result = await controller.Register(new RegisterViewModel
         {
@@ -251,5 +255,18 @@ public class OnboardingControllersTests
             LogoutCalls++;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class UnusedPasswordReset : DevPath.Application.Auth.IPasswordResetService
+    {
+        public ValueTask RequestResetAsync(string email, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> IsLinkValidAsync(string userId, string token, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<DevPath.Application.Auth.ResetPasswordResult> ResetPasswordAsync(
+            DevPath.Application.Auth.ResetPasswordRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

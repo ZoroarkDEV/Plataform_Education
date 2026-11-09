@@ -45,6 +45,8 @@ public class AccountViewModelsTests
     [Theory]
     [InlineData(typeof(RegisterViewModel))]
     [InlineData(typeof(LoginViewModel))]
+    [InlineData(typeof(ForgotPasswordViewModel))]
+    [InlineData(typeof(ResetPasswordViewModel))]
     public void TodaRegraDeValidacao_TemMensagemEmPortugues(Type viewModel)
     {
         // [DataType(Password)] só descreve o campo (não valida), então fica de fora.
