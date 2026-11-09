@@ -29,9 +29,9 @@
                 <span asp-validation-for="Password" id="Password-error"></span>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex min-h-11 items-center gap-3">
                 <input asp-for="RememberMe" class="form-checkbox" />
-                <label asp-for="RememberMe" class="text-sm text-slate-700 dark:text-slate-200"></label>
+                <label asp-for="RememberMe" class="flex min-h-11 flex-1 cursor-pointer items-center text-sm text-slate-700 dark:text-slate-200"></label>
             </div>
 
             <button type="submit" class="btn-primary">Entrar</button>
@@ -40,7 +40,7 @@
 
     <p class="mt-6 text-center text-sm text-slate-600 dark:text-slate-300">
         Ainda não tem conta?
-        <a asp-controller="Account" asp-action="Register" class="link">Criar conta</a>
+        <a asp-controller="Account" asp-action="Register" class="link inline-flex min-h-11 items-center">Criar conta</a>
     </p>
 </div>
 
