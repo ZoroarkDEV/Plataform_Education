@@ -33,6 +33,17 @@ public static class AttemptCounting
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Este status não grava tentativa.")
     };
 
+    /// <summary>O detalhe gravado junto (#43): certo, errado, erro ou timeout. Mesmos status que <see cref="ResultFor"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Status que não grava tentativa.</exception>
+    public static SubmissionOutcome OutcomeFor(ExecutionStatus status) => status switch
+    {
+        ExecutionStatus.Pass => SubmissionOutcome.Pass,
+        ExecutionStatus.Fail => SubmissionOutcome.Fail,
+        ExecutionStatus.Error => SubmissionOutcome.Error,
+        ExecutionStatus.Timeout => SubmissionOutcome.Timeout,
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Este status não grava tentativa.")
+    };
+
     public static AttemptCounts Count(IEnumerable<SubmissionResult> results)
     {
         ArgumentNullException.ThrowIfNull(results);

@@ -23,6 +23,10 @@ internal sealed class UserProgressConfiguration : IEntityTypeConfiguration<UserP
             // "Como concluiu" só existe em progresso concluído (ADR-007).
             t.HasCheckConstraint("CK_UserProgress_CompletionKind",
                 "\"CompletionKind\" IS NULL OR \"Status\" IN ('Completed', 'Mastered')");
+
+            // "Usou o Seguir sem pontos" (#43) só existe em aula concluída (a promoção por pass mantém a data).
+            t.HasCheckConstraint("CK_UserProgress_SkippedAt",
+                "\"SkippedAt\" IS NULL OR \"Status\" IN ('Completed', 'Mastered')");
         });
         builder.HasKey(p => p.Id);
 

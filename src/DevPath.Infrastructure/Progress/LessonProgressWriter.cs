@@ -54,9 +54,11 @@ public sealed class LessonProgressWriter(DevPathDbContext db, JourneySnapshotLoa
         EnsureTransaction();
         var now = DateTime.UtcNow;
         var kindText = kind.ToString();
+        // #43: a primeira vez que o aluno usa o "Seguir sem pontos" fica gravada e sobrevive à promoção por pass.
+        DateTime? skippedAt = kind == LessonCompletionKind.SkippedAfterFailures ? now : null;
         return db.Database.ExecuteSqlAsync($"""
-            INSERT INTO "UserProgress" ("Id", "UserId", "LessonId", "Status", "Score", "TimeSpentSeconds", "CompletedAt", "LastAccessedAt", "CompletionKind")
-            VALUES ({Guid.NewGuid()}, {userId}, {lessonId}, 'Completed', {points}::integer, 0, {now}, {now}, {kindText})
+            INSERT INTO "UserProgress" ("Id", "UserId", "LessonId", "Status", "Score", "TimeSpentSeconds", "CompletedAt", "LastAccessedAt", "CompletionKind", "SkippedAt")
+            VALUES ({Guid.NewGuid()}, {userId}, {lessonId}, 'Completed', {points}::integer, 0, {now}, {now}, {kindText}, {skippedAt}::timestamptz)
             ON CONFLICT ("UserId", "LessonId") WHERE "LessonId" IS NOT NULL
             DO UPDATE SET
                 "Status" = CASE WHEN "UserProgress"."Status" = 'Mastered' THEN 'Mastered' ELSE 'Completed' END,
@@ -64,7 +66,8 @@ public sealed class LessonProgressWriter(DevPathDbContext db, JourneySnapshotLoa
                 "CompletionKind" = EXCLUDED."CompletionKind",
                 "CompletedAt" = CASE WHEN "UserProgress"."Status" IN ('Completed', 'Mastered')
                     THEN COALESCE("UserProgress"."CompletedAt", EXCLUDED."CompletedAt") ELSE EXCLUDED."CompletedAt" END,
-                "LastAccessedAt" = EXCLUDED."LastAccessedAt"
+                "LastAccessedAt" = EXCLUDED."LastAccessedAt",
+                "SkippedAt" = COALESCE("UserProgress"."SkippedAt", EXCLUDED."SkippedAt")
             """, ct);
     }
 

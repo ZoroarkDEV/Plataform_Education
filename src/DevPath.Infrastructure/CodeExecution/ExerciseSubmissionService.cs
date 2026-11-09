@@ -132,7 +132,8 @@ public sealed partial class ExerciseSubmissionService(
             ? (cases.Count == 1 ? "O resultado está como esperado." : $"Todos os {cases.Count} resultados estão como esperado.")
             : string.Join("\n", feedback.Where(f => !f.Passed).Select(f => $"Caso \"{f.Name}\": {f.Message}"));
 
-        var submission = CodeSubmission.Create(userId, exerciseId, code, AttemptCounting.ResultFor(status), totalMs, summary);
+        var submission = CodeSubmission.Create(userId, exerciseId, code, AttemptCounting.ResultFor(status), totalMs, summary,
+            AttemptCounting.OutcomeFor(status));
         var saved = await SaveAsync(submission, exercise.MaxAttempts, status == ExecutionStatus.Pass, cancellationToken);
         if (saved is null)
         {

@@ -1,9 +1,11 @@
+using DevPath.Application.Analytics;
 using DevPath.Application.Auth;
 using DevPath.Application.CodeExecution;
 using DevPath.Application.Email;
 using DevPath.Application.Journey;
 using DevPath.Application.Lessons;
 using DevPath.Application.Progress;
+using DevPath.Infrastructure.Analytics;
 using DevPath.Infrastructure.CodeExecution;
 using DevPath.Infrastructure.Email;
 using DevPath.Infrastructure.Identity;
@@ -14,8 +16,8 @@ using DevPath.Infrastructure.Progress;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using StackExchange.Redis;
 
 namespace DevPath.Infrastructure;
@@ -57,6 +59,9 @@ public static class DependencyInjection
         services.AddScoped<JourneySnapshotLoader>();
         services.AddScoped<LessonProgressWriter>();
         services.AddScoped<ILessonProgressService, LessonProgressService>();
+
+        // Relatório de tentativas para o dono (#43, /admin/tentativas).
+        services.AddScoped<IAttemptAnalyticsService, AttemptAnalyticsService>();
 
         // Execução de código: a Web só ENFILEIRA (Redis) e decide quem pode executar. Quem executa é o Worker.
         services.AddRedis(configuration);

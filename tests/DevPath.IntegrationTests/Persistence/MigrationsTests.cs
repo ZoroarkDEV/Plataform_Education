@@ -235,6 +235,63 @@ public sealed class MigrationsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AddAttemptOutcomeAndSkippedAt_PreencheOQueDa_EDownRemove()
+    {
+        const string Previous = "20261105115835_AddLessonProgressTracking";
+        await using var db = CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync(Previous);
+
+        var path = Domain.CareerPaths.CareerPath.Create("Trilha tentativas");
+        var lesson = path.AddModule("M").AddLesson("A", Domain.CareerPaths.ContentType.Markdown, "# a");
+        var lesson2 = path.Modules.Single().AddLesson("B", Domain.CareerPaths.ContentType.Markdown, "# b");
+        var exercise = lesson.AddExercise("E", "x", "sql", "[]");
+        db.CareerPaths.Add(path);
+        var userId = Guid.NewGuid();
+        db.Users.Add(new ApplicationUser
+        {
+            Id = userId, UserName = $"{userId:N}@t", NormalizedUserName = $"{userId:N}@T", Email = $"{userId:N}@t",
+            NormalizedEmail = $"{userId:N}@T", DisplayName = "A", SecurityStamp = Guid.NewGuid().ToString()
+        });
+        await db.SaveChangesAsync();
+
+        var completedAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var p = new[] { new NpgsqlParameter("u", userId), new NpgsqlParameter("e", exercise.Id), new NpgsqlParameter("l", lesson.Id),
+            new NpgsqlParameter("l2", lesson2.Id), new NpgsqlParameter("at", completedAt) };
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "CodeSubmissions" ("Id", "UserId", "ExerciseId", "SubmittedCode", "Result", "ExecutionTimeMs", "SubmittedAt")
+            VALUES (gen_random_uuid(), @u, @e, 'a', 'Fail', 1, now()), (gen_random_uuid(), @u, @e, 'b', 'Pass', 1, now());
+            INSERT INTO "UserProgress" ("Id", "UserId", "LessonId", "Status", "Score", "TimeSpentSeconds", "CompletedAt", "LastAccessedAt", "CompletionKind")
+            VALUES (gen_random_uuid(), @u, @l, 'Completed', 0, 0, @at, @at, 'SkippedAfterFailures'),
+                   (gen_random_uuid(), @u, @l2, 'Completed', 10, 0, @at, @at, 'ExercisePassed');
+            """, p);
+
+        await db.Database.MigrateAsync();
+
+        var outcomes = await db.Database.SqlQueryRaw<string>("""
+            SELECT "Result" || ':' || COALESCE("Outcome", 'null') AS "Value" FROM "CodeSubmissions" WHERE "UserId" = @u
+            """, new NpgsqlParameter("u", userId)).ToListAsync();
+        outcomes.Should().BeEquivalentTo(["Pass:Pass", "Fail:null"], "falha antiga não diz se foi errado ou erro");
+
+        var progress = await db.UserProgress.AsNoTracking().Where(x => x.UserId == userId).ToListAsync();
+        progress.Single(x => x.LessonId == lesson.Id).SkippedAt.Should().Be(completedAt);
+        progress.Single(x => x.LessonId == lesson2.Id).SkippedAt.Should().BeNull();
+
+        await migrator.MigrateAsync(Previous);
+
+        var columns = await db.Database.SqlQueryRaw<string>("""
+            SELECT column_name AS "Value" FROM information_schema.columns
+            WHERE table_schema = 'public' AND column_name IN ('Outcome', 'SkippedAt')
+            """).ToListAsync();
+        columns.Should().BeEmpty("Down remove as duas colunas");
+        (await db.Database.SqlQueryRaw<int>("""SELECT count(*)::int AS "Value" FROM "CodeSubmissions" """).SingleAsync())
+            .Should().Be(2, "Down não apaga tentativas");
+
+        await db.Database.MigrateAsync(); // e sobe de novo
+        (await db.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
     public void Modelo_NaoTemMudancasPendentes_AlemDasMigrations()
     {
         using var db = CreateDbContext();

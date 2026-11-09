@@ -12,6 +12,12 @@ public sealed class CodeSubmission
     public Guid ExerciseId { get; private set; }
     public string SubmittedCode { get; private set; } = string.Empty;
     public SubmissionResult Result { get; private set; }
+
+    /// <summary>
+    /// Certo, errado ou erro (#43). <c>null</c> só em tentativas gravadas antes do #43 que não passaram:
+    /// naquela época erro e timeout também eram gravados só como <see cref="SubmissionResult.Fail"/>.
+    /// </summary>
+    public SubmissionOutcome? Outcome { get; private set; }
     public string? Feedback { get; private set; }
     public int ExecutionTimeMs { get; private set; }
     public DateTime SubmittedAt { get; private set; }
@@ -24,10 +30,18 @@ public sealed class CodeSubmission
         string submittedCode,
         SubmissionResult result,
         int executionTimeMs,
-        string? feedback = null)
+        string? feedback = null,
+        SubmissionOutcome? outcome = null)
     {
         ArgumentNullException.ThrowIfNull(submittedCode);
         ArgumentOutOfRangeException.ThrowIfNegative(executionTimeMs);
+
+        // Sem detalhe, o resultado diz o mínimo: Pass é certo, Fail é errado.
+        var resolvedOutcome = outcome ?? (result == SubmissionResult.Pass ? SubmissionOutcome.Pass : SubmissionOutcome.Fail);
+        if ((resolvedOutcome == SubmissionOutcome.Pass) != (result == SubmissionResult.Pass))
+        {
+            throw new ArgumentException($"Outcome {resolvedOutcome} não combina com o resultado {result}.", nameof(outcome));
+        }
 
         return new CodeSubmission
         {
@@ -36,6 +50,7 @@ public sealed class CodeSubmission
             ExerciseId = exerciseId,
             SubmittedCode = submittedCode,
             Result = result,
+            Outcome = resolvedOutcome,
             ExecutionTimeMs = executionTimeMs,
             Feedback = feedback,
             SubmittedAt = DateTime.UtcNow

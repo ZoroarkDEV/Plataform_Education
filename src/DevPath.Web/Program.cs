@@ -42,6 +42,11 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.SlidingExpiration = true;                     // renova enquanto o usuário estiver ativo
 });
 
+// Área administrativa (#43): só quem tem o papel "Admin" do Identity. Como dar o papel: docs/analytics/tentativas.md.
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(DevPath.Application.Analytics.AdminAccess.Policy,
+        policy => policy.RequireAuthenticatedUser().RequireRole(DevPath.Application.Analytics.AdminAccess.Role));
+
 // API de execução de exercícios (issue #25, ADR-006): antiforgery por header, rate limit por aluno e 401 em /api.
 // A Web NÃO executa código nem fala com o Docker: só enfileira no Redis (o DevPath.Worker executa).
 builder.Services.AddExerciseExecutionApi(builder.Configuration);

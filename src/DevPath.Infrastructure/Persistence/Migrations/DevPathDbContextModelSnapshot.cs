@@ -376,6 +376,10 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.Property<string>("Feedback")
                         .HasColumnType("text");
 
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
                     b.Property<string>("Result")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -400,6 +404,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.ToTable("CodeSubmissions", null, t =>
                         {
                             t.HasCheckConstraint("CK_CodeSubmissions_ExecutionTimeMs_NonNegative", "\"ExecutionTimeMs\" >= 0");
+
+                            t.HasCheckConstraint("CK_CodeSubmissions_Outcome_MatchesResult", "\"Outcome\" IS NULL OR ((\"Outcome\" = 'Pass') = (\"Result\" = 'Pass'))");
                         });
                 });
 
@@ -469,6 +475,9 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.Property<int?>("Score")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("SkippedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -500,6 +509,8 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_UserProgress_ExactlyOneTarget", "num_nonnulls(\"LessonId\", \"ExerciseId\", \"ModuleId\") = 1");
 
                             t.HasCheckConstraint("CK_UserProgress_Score_NonNegative", "\"Score\" IS NULL OR \"Score\" >= 0");
+
+                            t.HasCheckConstraint("CK_UserProgress_SkippedAt", "\"SkippedAt\" IS NULL OR \"Status\" IN ('Completed', 'Mastered')");
 
                             t.HasCheckConstraint("CK_UserProgress_TimeSpentSeconds_NonNegative", "\"TimeSpentSeconds\" >= 0");
                         });

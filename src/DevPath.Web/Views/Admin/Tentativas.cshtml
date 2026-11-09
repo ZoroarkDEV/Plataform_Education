@@ -1,0 +1,87 @@
+@using DevPath.Application.Analytics
+@model AttemptsReport
+@{
+    ViewData["Title"] = "Tentativas (admin)";
+    static string Lesson(AnalyticsLesson l) => $"{l.PathTitle} · {l.ModuleOrder}. {l.ModuleTitle} · Aula {l.LessonOrder}: {l.LessonTitle}";
+    static string Num(double? v) => v is null ? "—" : v.Value.ToString("0.#", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+}
+@* #43. Só aulas visíveis aos alunos. SQL e definições: docs/analytics/tentativas.md *@
+<h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Tentativas do Executar</h1>
+<p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Só aulas publicadas (sem rascunhos nem aulas ocultas). Tentativa = execução gravada; recusas (limite, código vazio, executor fora, erro de preparação) não contam.</p>
+
+<section class="card mt-6 p-5 overflow-x-auto" aria-labelledby="ate-acertar">
+    <h2 id="ate-acertar" class="text-lg font-semibold text-slate-900 dark:text-white">Quantas tentativas até acertar?</h2>
+    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Por aluno, tentativas até o primeiro acerto (inclusive). Quem ainda não acertou só entra em "Tentaram".</p>
+    <table id="tabela-ate-acertar" class="mt-4 w-full text-left text-sm">
+        <thead>
+            <tr>
+                <th scope="col">Aula</th><th scope="col">Tentaram</th><th scope="col">Acertaram</th>
+                <th scope="col">Mediana</th><th scope="col">Média</th>
+                <th scope="col">1</th><th scope="col">2</th><th scope="col">3</th><th scope="col">4</th><th scope="col">5</th>
+                <th scope="col">6–10</th><th scope="col">11+</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var r in Model.AttemptsUntilPass)
+        {
+            <tr data-lesson-id="@r.Lesson.LessonId">
+                <th scope="row">@Lesson(r.Lesson)</th><td>@r.StudentsTried</td><td>@r.StudentsPassed</td>
+                <td>@Num(r.MedianAttempts)</td><td>@Num(r.AverageAttempts)</td>
+                <td>@r.Distribution.One</td><td>@r.Distribution.Two</td><td>@r.Distribution.Three</td><td>@r.Distribution.Four</td>
+                <td>@r.Distribution.Five</td><td>@r.Distribution.SixToTen</td><td>@r.Distribution.ElevenOrMore</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @if (Model.AttemptsUntilPass.Count == 0)
+    {
+        <p class="mt-2 text-sm">Nenhuma aula com exercício.</p>
+    }
+</section>
+
+<section class="card mt-6 p-5 overflow-x-auto" aria-labelledby="seguir-sem-pontos">
+    <h2 id="seguir-sem-pontos" class="text-lg font-semibold text-slate-900 dark:text-white">Em qual aula mais gente usa "Seguir sem pontos"?</h2>
+    <table id="tabela-seguir-sem-pontos" class="mt-4 w-full text-left text-sm">
+        <thead>
+            <tr><th scope="col">Aula</th><th scope="col">Usaram</th><th scope="col">Continuam sem pontos</th><th scope="col">Acertaram depois</th></tr>
+        </thead>
+        <tbody>
+        @foreach (var r in Model.Skips)
+        {
+            <tr data-lesson-id="@r.Lesson.LessonId">
+                <th scope="row">@Lesson(r.Lesson)</th><td>@r.StudentsSkipped</td><td>@r.StillSkipped</td><td>@r.PassedAfterSkip</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @if (Model.Skips.Count == 0)
+    {
+        <p class="mt-2 text-sm">Ninguém usou o "Seguir sem pontos" ainda.</p>
+    }
+</section>
+
+<section class="card mt-6 p-5 overflow-x-auto" aria-labelledby="taxa-falha">
+    <h2 id="taxa-falha" class="text-lg font-semibold text-slate-900 dark:text-white">Taxa de falha por aula</h2>
+    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Tentativas que não passaram ÷ tentativas. "Sem detalhe" = falhas gravadas antes de separar errado de erro.</p>
+    <table id="tabela-taxa-falha" class="mt-4 w-full text-left text-sm">
+        <thead>
+            <tr>
+                <th scope="col">Aula</th><th scope="col">Tentativas</th><th scope="col">Alunos</th><th scope="col">Certas</th>
+                <th scope="col">Erradas</th><th scope="col">Erro/timeout</th><th scope="col">Sem detalhe</th><th scope="col">Taxa de falha</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var r in Model.FailureRates)
+        {
+            <tr data-lesson-id="@r.Lesson.LessonId">
+                <th scope="row">@Lesson(r.Lesson)</th><td>@r.Attempts</td><td>@r.Students</td><td>@r.Passed</td>
+                <td>@r.Wrong</td><td>@r.Errors</td><td>@r.FailedWithoutDetail</td><td>@r.FailureRatePercent.ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))%</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @if (Model.FailureRates.Count == 0)
+    {
+        <p class="mt-2 text-sm">Nenhuma tentativa ainda.</p>
+    }
+</section>

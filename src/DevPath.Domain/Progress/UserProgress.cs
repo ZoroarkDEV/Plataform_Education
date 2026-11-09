@@ -25,6 +25,13 @@ public sealed class UserProgress
     /// <summary>Como a aula foi concluída (só em progresso de aula concluído; null nos demais).</summary>
     public LessonCompletionKind? CompletionKind { get; private set; }
 
+    /// <summary>
+    /// Quando o aluno usou o "Seguir sem pontos" pela primeira vez nesta aula (#43). Continua preenchido se um
+    /// <c>pass</c> depois promover a conclusão para <see cref="LessonCompletionKind.ExercisePassed"/>: é o histórico
+    /// que responde "em qual aula mais gente usa Seguir sem pontos?". null = nunca usou.
+    /// </summary>
+    public DateTime? SkippedAt { get; private set; }
+
     private UserProgress() { }
 
     public static UserProgress StartLesson(Guid userId, Guid lessonId) =>
@@ -52,5 +59,9 @@ public sealed class UserProgress
         CompletionKind = kind;
         CompletedAt = DateTime.UtcNow;
         LastAccessedAt = CompletedAt.Value;
+        if (kind == LessonCompletionKind.SkippedAfterFailures)
+        {
+            SkippedAt ??= CompletedAt;
+        }
     }
 }
