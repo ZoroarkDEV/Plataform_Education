@@ -131,7 +131,7 @@ public sealed class FileSystemContentSourceTests : IDisposable
         WriteLesson("ambiente", "01-intro.md", Frontmatter() + "\n# Intro\n");
 
         Errors().Should().ContainSingle().Which.Should()
-            .StartWith("content/paths/sql-dados/path.yaml, linha 12: chave desconhecida 'autor'. Chaves aceitas: slug, title, description, order.");
+            .StartWith("content/paths/sql-dados/path.yaml, linha 12: chave desconhecida 'autor'. Chaves aceitas: slug, title, description, completion_subtitle, order.");
     }
 
     [Fact]

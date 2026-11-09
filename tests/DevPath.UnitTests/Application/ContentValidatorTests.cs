@@ -275,7 +275,24 @@ public class ContentValidatorTests
             .Should().ContainSingle(e => e.Contains("'completion_summary' tem 201 caracteres (máximo 200)"));
     }
 
+        [Fact]
+    public void Validate_CompletionSubtitleComMaisDe200Caracteres_RetornaErro()
+    {
+        var module = Module("ambiente", 1, Lesson("ambiente", 1)) with
+        {
+            CompletionSubtitle = new string('b', ContentValidator.MaxCompletionSubtitleLength + 1)
+        };
+        ContentValidator.Validate([Path("sql-dados", "SQL", 1, module)])
+            .Should().ContainSingle(e => e.Contains("'completion_subtitle' tem 201 caracteres (máximo 200)"));
+    }
+
     [Fact]
+    public void MaxCompletionSubtitleLength_EhOMesmoLimiteDoDominio()
+    {
+        ContentValidator.MaxCompletionSubtitleLength.Should().Be(DevPath.Domain.CareerPaths.Module.MaxCompletionSubtitleLength);
+    }
+
+[Fact]
     public void MaxCompletionSummaryLength_EhOMesmoLimiteDoDominio()
     {
         ContentValidator.MaxCompletionSummaryLength.Should().Be(DevPath.Domain.CareerPaths.Lesson.MaxCompletionSummaryLength);

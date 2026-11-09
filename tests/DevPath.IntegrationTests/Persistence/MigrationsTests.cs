@@ -145,14 +145,17 @@ public sealed class MigrationsTests : IAsyncLifetime
 
     /// <summary>
     /// Salva o grafo com o modelo atual num banco parado numa migration antiga. O modelo já tem colunas de
-    /// migrations posteriores (Lessons.CompletionSummary, #41), que o INSERT do EF manda mesmo nulas. A coluna
-    /// entra só durante o SaveChanges e sai logo depois, para o banco continuar no esquema da migration antiga.
+    /// migrations posteriores (Lessons.CompletionSummary #41, Modules.CompletionSubtitle #42), que o INSERT
+    /// do EF manda mesmo nulas. As colunas entram só durante o SaveChanges e saem logo depois, para o banco
+    /// continuar no esquema da migration antiga.
     /// </summary>
     private static async Task SaveOnOldSchemaAsync(DevPathDbContext db)
     {
         await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "Lessons" ADD COLUMN "CompletionSummary" character varying(200)""");
+        await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "Modules" ADD COLUMN "CompletionSubtitle" character varying(200)""");
         await db.SaveChangesAsync();
         await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "Lessons" DROP COLUMN "CompletionSummary" """);
+        await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "Modules" DROP COLUMN "CompletionSubtitle" """);
     }
 
     private sealed class DedupeRow
@@ -301,6 +304,25 @@ public sealed class MigrationsTests : IAsyncLifetime
 
         await db.Database.MigrateAsync(); // e sobe de novo
         (await db.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AddModuleCompletionSubtitle_Down_RemoveColuna()
+    {
+        await using var db = CreateDbContext();
+        await db.Database.MigrateAsync();
+        var migrator = db.GetService<IMigrator>();
+
+        await migrator.MigrateAsync("20261109131203_AddLessonCompletionSummary");
+
+        (await db.Database.GetAppliedMigrationsAsync())
+            .Should().NotContain(m => m.EndsWith("_AddModuleCompletionSubtitle"));
+
+        var cols = await db.Database.SqlQueryRaw<string>("""
+            SELECT column_name AS "Value" FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'Modules' AND column_name = 'CompletionSubtitle'
+            """).ToListAsync();
+        cols.Should().BeEmpty("Down remove CompletionSubtitle");
     }
 
     [Fact]

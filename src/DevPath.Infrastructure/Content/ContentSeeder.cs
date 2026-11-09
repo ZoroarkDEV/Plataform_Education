@@ -267,11 +267,14 @@ public sealed class ContentSeeder(DevPathDbContext db, IContentSource source, IL
         {
             module = Module.Create(path.Id, content.Title, content.Order, content.Description, estimatedMinutes);
             ApplySlug(module.Slug, content.Slug, module.ChangeSlug);
+            module.SetCompletionSubtitle(content.CompletionSubtitle);
             db.Modules.Add(module);
         }
         else
         {
             module.UpdateDetails(content.Title, content.Description, content.Order, estimatedMinutes);
+            // completion_subtitle vem sempre do path.yaml: tirar a chave limpa o subtítulo.
+            module.SetCompletionSubtitle(content.CompletionSubtitle);
         }
 
         // Conteúdo que está versionado em /content é conteúdo publicado.

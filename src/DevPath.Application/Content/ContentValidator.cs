@@ -27,6 +27,9 @@ public static partial class ContentValidator
     /// <summary><c>completion_summary</c> da aula: mesmo limite de <c>Lesson.CompletionSummary</c>.</summary>
     public const int MaxCompletionSummaryLength = 200;
 
+    /// <summary><c>completion_subtitle</c> do módulo no path.yaml (#42).</summary>
+    public const int MaxCompletionSubtitleLength = 200;
+
     /// <summary>Slug de dataset: mesmo limite de <c>Datasets.Slug</c> e <c>Exercises.Dataset</c>.</summary>
     public const int MaxDatasetSlugLength = 100;
 
@@ -85,6 +88,10 @@ public static partial class ContentValidator
                 CheckSlug(module.Slug, $"{moduleWhere}: slug", errors);
                 CheckLength(module.Title, MaxTitleLength, "title", moduleWhere, errors);
                 CheckLength(module.Description, MaxDescriptionLength, "description", moduleWhere, errors);
+                if (module.CompletionSubtitle is { Length: > MaxCompletionSubtitleLength } subtitle)
+                {
+                    errors.Add($"{moduleWhere}: 'completion_subtitle' tem {subtitle.Length} caracteres (máximo {MaxCompletionSubtitleLength}).");
+                }
 
                 if (module.Lessons.Count == 0)
                 {

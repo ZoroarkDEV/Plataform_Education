@@ -115,7 +115,12 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
                 errors.Add($"{Relative(exerciseFile)}: exercício sem aula. O arquivo da aula deveria ser {Path.GetFileName(exerciseFile)[..^ExerciseSuffix.Length]}.md.");
             }
 
-            modules.Add(new ModuleContent(slug, moduleTitle, (entry.Description ?? string.Empty).Trim(), moduleOrder, lessons));
+            modules.Add(new ModuleContent(slug, moduleTitle, (entry.Description ?? string.Empty).Trim(), moduleOrder, lessons)
+            {
+                CompletionSubtitle = string.IsNullOrWhiteSpace(entry.CompletionSubtitle)
+                    ? null
+                    : entry.CompletionSubtitle.Trim()
+            });
         }
 
         // Pasta de módulo que ninguém listou no path.yaml provavelmente é esquecimento.
@@ -515,6 +520,7 @@ public sealed partial class FileSystemContentSource(string contentRoot) : IConte
         public string? Slug { get; set; }
         public string? Title { get; set; }
         public string? Description { get; set; }
+        public string? CompletionSubtitle { get; set; }
         public int? Order { get; set; }
     }
 

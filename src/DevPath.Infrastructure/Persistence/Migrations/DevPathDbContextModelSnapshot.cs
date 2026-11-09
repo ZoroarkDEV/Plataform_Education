@@ -288,6 +288,10 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CareerPathId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CompletionSubtitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(2000)

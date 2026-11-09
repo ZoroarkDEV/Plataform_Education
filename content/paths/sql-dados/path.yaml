@@ -14,11 +14,13 @@ modules:
   - slug: primeiros-passos-com-sql
     title: "Primeiros passos com SQL"
     description: "Primeiro contato com SQL direto no navegador, sem instalar nada: SELECT, WHERE, ORDER BY, LIMIT, JOIN e agregações sobre o banco de exemplo de uma livraria."
+    completion_subtitle: "Você fez um banco de dados de verdade responder às suas perguntas, direto no navegador."
     order: 1
   # Segundo módulo no navegador (issue #41): LIKE, IN/BETWEEN, DISTINCT, HAVING e LEFT JOIN.
   - slug: mais-consultas-com-sql
     title: "Mais consultas com SQL"
     description: "Continue no navegador, sem instalar nada: busque por parte do texto, filtre por listas e faixas, tire repetições, filtre grupos e descubra quem ficou sem par."
+    completion_subtitle: "Agora você busca, filtra e cruza dados como quem trabalha com isso no dia a dia."
     order: 2
   - slug: ambiente
     title: "Ambiente: banco relacional + Docker"

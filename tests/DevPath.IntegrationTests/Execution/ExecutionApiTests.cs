@@ -328,21 +328,33 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
         outcome.FriendlyMessage.Should().Be(SqlErrorTranslator.SingleStatementMessage);
     }
 
-    [DockerFact]
+        [DockerFact]
     public async Task ConsultaInfinita_DevolveTimeoutAmigavel()
     {
         var client = await LoggedInClientAsync();
+        var before = DockerAvailability.SandboxContainerIds().ToHashSet(StringComparer.Ordinal);
 
         var outcome = await ExecuteAsync(client, factory.ExerciseId, "SELECT pg_sleep(60);");
 
         outcome.Status.Should().Be(ExecutionStatus.Timeout);
         outcome.FriendlyMessage.Should().Be(SqlErrorTranslator.TimeoutMessage);
         outcome.Rows.Should().BeEmpty();
-        // A remoção do container pode terminar logo depois de o resultado ser publicado: espera um pouco.
         var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DockerAvailability.SandboxContainerCount() > 0 && DateTime.UtcNow < deadline)
+        List<string> leftovers;
+        do
+        {
+            leftovers = DockerAvailability.SandboxContainerIds()
+                .Where(id => !before.Contains(id))
+                .ToList();
+            if (leftovers.Count == 0)
+            {
+                break;
+            }
+
             await Task.Delay(250);
-        DockerAvailability.SandboxContainerCount().Should().Be(0, "o container é removido depois do timeout");
+        } while (DateTime.UtcNow < deadline);
+
+        leftovers.Should().BeEmpty("o container é removido depois do timeout");
     }
 
     [DockerFact]

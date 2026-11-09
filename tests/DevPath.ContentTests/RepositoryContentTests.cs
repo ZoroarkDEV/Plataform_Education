@@ -54,7 +54,17 @@ public class RepositoryContentTests
             "Projeto Final");
     }
 
-    [Fact]
+        [Fact]
+    public void SqlDados_Modulos1e2_TemCompletionSubtitleDoRoteiro()
+    {
+        var sql = LoadPaths().Single(p => p.Slug == "sql-dados");
+        sql.Modules.Single(m => m.Slug == "primeiros-passos-com-sql").CompletionSubtitle.Should().Be(
+            "Você fez um banco de dados de verdade responder às suas perguntas, direto no navegador.");
+        sql.Modules.Single(m => m.Slug == "mais-consultas-com-sql").CompletionSubtitle.Should().Be(
+            "Agora você busca, filtra e cruza dados como quem trabalha com isso no dia a dia.");
+    }
+
+[Fact]
     public void SqlDados_PrimeirosPassosComSqlEhOModulo1()
     {
         // #22/#23: o primeiro contato com SQL (no navegador) vem antes do módulo de ambiente/Docker.

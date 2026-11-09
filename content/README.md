@@ -32,6 +32,7 @@ modules:
   - slug: ambiente                  # nome da pasta em modules/
     title: "Ambiente: banco relacional + Docker"
     description: "..."
+    completion_subtitle: "..."      # opcional (#42): subtítulo da tela "Módulo concluído"
     order: 1                        # 1, 2, 3... sem buracos nem repetição
 ```
 
@@ -81,6 +82,12 @@ O seed grava as duas chaves a cada execução (migration `AddLessonObjectivesAnd
   (ex.: "Achar um livro lembrando só de um pedaço do nome, com LIKE e %.").
   O seed grava em `Lesson.CompletionSummary` (migration `AddLessonCompletionSummary`) a cada execução:
   tirar a chave do frontmatter apaga a frase.
+
+#### Chave opcional `completion_subtitle` (path.yaml)
+
+- **`completion_subtitle`**: frase curta do módulo para a tela "Módulo concluído" (#42), até 200 caracteres.
+  Opcional: sem a chave, a tela esconde o subtítulo. O seed grava em `Module.CompletionSubtitle`
+  (migration `AddModuleCompletionSubtitle`).
 
 ### Exercício (`modules/<modulo>/NN-<aula>.exercise.json`)
 
@@ -215,6 +222,7 @@ consultas de verdade (`SELECT colunas FROM tabela;`) começam com a linha
   e slug 200 caracteres.
 - Cada item de `objectives` tem de 1 a 200 caracteres. Aula pronta tem `objectives`; stub tem `draft: true`.
 - `completion_summary`, quando existe, tem até 200 caracteres.
+- `completion_subtitle` no módulo do path.yaml, quando existe, tem até 200 caracteres (#42).
 - Exercício: JSON válido, sem chave desconhecida, com `solution` e ao menos um caso de teste; cada
   linha de `rows` tem um valor por coluna; o `dataset` existe em `content/datasets/`; não há
   `.exercise.json` sem a aula; títulos do `statement` só até `###`.

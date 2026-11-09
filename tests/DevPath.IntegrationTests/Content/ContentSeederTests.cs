@@ -4,6 +4,7 @@ using DevPath.Domain.Progress;
 using DevPath.Infrastructure.Identity;
 using DevPath.Infrastructure.Content;
 using DevPath.Infrastructure.Persistence;
+using DevPath.Infrastructure.Progress;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -530,7 +531,42 @@ public sealed class ContentSeederTests : IAsyncLifetime
         (await LessonAsync(db, "ambiente", "instalando-docker-desktop")).CompletionSummary.Should().BeNull();
     }
 
-    [Fact]
+        [Fact]
+    public async Task SeedAsync_EModuleCompletionService_RetornaFrasesDoModulo1NaOrdem_SemRascunhos()
+    {
+        // #42: seed grava as frases (#41); o serviço só devolve publicadas e prontas, na ordem do módulo.
+        await WithContentCopy(async copy =>
+        {
+            var lesson3 = Path.Combine(
+                ModuleDir(copy, "sql-dados", "primeiros-passos-com-sql"),
+                "03-ordenando-e-limitando-com-order-by-e-limit.md");
+            var original = File.ReadAllText(lesson3);
+            File.WriteAllText(lesson3, original.Replace(
+                "difficulty: beginner\n", "difficulty: beginner\ndraft: true\n"));
+
+            await SeedAsync(copy);
+
+            await using var db = CreateDbContext();
+            var dto = await new ModuleCompletionContentService(db)
+                .GetAsync("sql-dados", "primeiros-passos-com-sql");
+
+            dto.Should().NotBeNull();
+            dto!.Subtitle.Should().Be(
+                "Você fez um banco de dados de verdade responder às suas perguntas, direto no navegador.");
+            dto.LearnedByLessonSlug.Keys.Should().Equal(
+                "seu-primeiro-select",
+                "filtrando-com-where",
+                "juntando-tabelas-com-join",
+                "resumindo-dados-com-group-by");
+            dto.LearnedByLessonSlug.Should().NotContainKey(
+                "ordenando-e-limitando-com-order-by-e-limit",
+                "rascunho com completion_summary não entra na lista");
+            dto.LearnedByLessonSlug["seu-primeiro-select"].Should().Be(
+                "Pedir dados a uma tabela com SELECT e FROM e ler o resultado como uma planilha.");
+        });
+    }
+
+[Fact]
     public async Task SeedAsync_CompletionSummaryTrocadoERemovido_AtualizaAMesmaAula()
     {
         await WithContentCopy(async copy =>

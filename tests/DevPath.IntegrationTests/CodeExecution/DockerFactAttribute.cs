@@ -84,7 +84,10 @@ internal static class DockerAvailability
     }
 
     /// <summary>Quantos containers com o label do sandbox existem agora.</summary>
-    public static int SandboxContainerCount()
+    public static int SandboxContainerCount() => SandboxContainerIds().Count;
+
+    /// <summary>Ids dos containers com o label do sandbox (rodando ou parados).</summary>
+    public static IReadOnlyList<string> SandboxContainerIds()
     {
         var info = new ProcessStartInfo("docker") { RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var arg in new[] { "ps", "-a", "-q", "--filter", "label=devpath.sandbox=true" })
@@ -94,7 +97,7 @@ internal static class DockerAvailability
         using var process = Process.Start(info)!;
         var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     /// <summary>O container ainda existe (rodando ou parado)? Usado para provar que ninguém ficou para trás.</summary>

@@ -61,18 +61,34 @@ public sealed class DockerCliSandboxTests
         DockerAvailability.ContainerExists(result.ContainerName).Should().BeFalse();
     }
 
-    [DockerFact]
+        [DockerFact]
     public async Task CancelamentoDeQuemChamou_MataOContainer()
     {
+        // Baseline: no daemon compartilhado outros agentes podem ter sandboxes; só cobramos ids novos.
+        var before = DockerAvailability.SandboxContainerIds().ToHashSet(StringComparer.Ordinal);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         var sandbox = CreateSandbox();
 
         var act = () => sandbox.ExecuteAsync(new SandboxRequest(Image, ["sh", "-c", "sleep 120"], Limits: Relaxed), cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
-        // Não sabemos o nome aqui, mas o label marca todo container do sandbox. Os testes de sandbox
-        // rodam em sequência (mesma coleção), então não pode sobrar nenhum.
-        DockerAvailability.SandboxContainerCount().Should().Be(0);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        List<string> leftovers;
+        do
+        {
+            leftovers = DockerAvailability.SandboxContainerIds()
+                .Where(id => !before.Contains(id))
+                .ToList();
+            if (leftovers.Count == 0)
+            {
+                break;
+            }
+
+            await Task.Delay(200);
+        } while (DateTime.UtcNow < deadline);
+
+        leftovers.Should().BeEmpty(
+            "cancelamento remove o container deste teste; sobras = {0}", string.Join(',', leftovers));
     }
 
     [DockerFact]

@@ -18,6 +18,7 @@ internal sealed class ModuleConfiguration : IEntityTypeConfiguration<Module>
         builder.Property(m => m.Title).HasMaxLength(200).IsRequired();
         builder.Property(m => m.Slug).HasMaxLength(200).IsRequired();
         builder.Property(m => m.Description).HasMaxLength(2000);
+        builder.Property(m => m.CompletionSubtitle).HasMaxLength(Module.MaxCompletionSubtitleLength);
 
         // Listar os módulos de uma trilha em ordem (SPEC §4.3). Único: dois módulos
         // não podem ocupar a mesma posição. (Para reordenar, troque as posições numa transação

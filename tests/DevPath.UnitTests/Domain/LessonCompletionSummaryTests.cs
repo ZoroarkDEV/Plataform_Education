@@ -61,4 +61,20 @@ public class LessonCompletionSummaryTests
 
         lesson.CompletionSummary.Should().Be("Achar um livro com LIKE.");
     }
+    [Fact]
+    public void Module_SetCompletionSubtitle_MesmasRegrasDeLimite()
+    {
+        var module = Module.Create(Guid.NewGuid(), "Primeiros passos", order: 1);
+        module.CompletionSubtitle.Should().BeNull();
+
+        module.SetCompletionSubtitle("  Subtítulo do módulo.  ");
+        module.CompletionSubtitle.Should().Be("Subtítulo do módulo.");
+
+        module.SetCompletionSubtitle(null);
+        module.CompletionSubtitle.Should().BeNull();
+
+        var act = () => module.SetCompletionSubtitle(new string('x', Module.MaxCompletionSubtitleLength + 1));
+        act.Should().Throw<ArgumentException>().WithParameterName("subtitle");
+    }
+
 }

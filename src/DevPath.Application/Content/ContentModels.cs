@@ -22,7 +22,13 @@ public sealed record ModuleContent(
     string Title,
     string Description,
     int Order,
-    IReadOnlyList<LessonContent> Lessons);
+    IReadOnlyList<LessonContent> Lessons)
+{
+    /// <summary>
+    /// Subtítulo da tela "Módulo concluído" (<c>completion_subtitle</c> no path.yaml). Opcional.
+    /// </summary>
+    public string? CompletionSubtitle { get; init; }
+}
 
 /// <summary>
 /// Uma aula em Markdown: metadados do frontmatter + corpo do texto.

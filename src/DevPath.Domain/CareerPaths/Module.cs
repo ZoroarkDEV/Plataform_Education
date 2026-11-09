@@ -17,6 +17,15 @@ public sealed class Module
     public int EstimatedMinutes { get; private set; }
     public bool IsPublished { get; private set; }
 
+    /// <summary>
+    /// Subtítulo da tela "Módulo concluído" (#42). Vem de <c>completion_subtitle</c> no path.yaml;
+    /// <c>null</c> = a tela esconde o subtítulo.
+    /// </summary>
+    public string? CompletionSubtitle { get; private set; }
+
+    /// <summary>Tamanho máximo de <see cref="CompletionSubtitle"/>.</summary>
+    public const int MaxCompletionSubtitleLength = 200;
+
     public IReadOnlyCollection<Lesson> Lessons => _lessons;
 
     private Module() { }
@@ -47,6 +56,28 @@ public sealed class Module
         Description = description.Trim();
         Order = order;
         EstimatedMinutes = estimatedMinutes;
+    }
+
+    /// <summary>
+    /// Grava o subtítulo de módulo concluído. <c>null</c> ou branco limpa o campo.
+    /// O seed chama a cada execução: tirar a chave do path.yaml apaga o subtítulo no banco.
+    /// </summary>
+    public void SetCompletionSubtitle(string? subtitle)
+    {
+        if (string.IsNullOrWhiteSpace(subtitle))
+        {
+            CompletionSubtitle = null;
+            return;
+        }
+
+        var trimmed = subtitle.Trim();
+        if (trimmed.Length > MaxCompletionSubtitleLength)
+        {
+            throw new ArgumentException(
+                $"CompletionSubtitle deve ter no máximo {MaxCompletionSubtitleLength} caracteres.", nameof(subtitle));
+        }
+
+        CompletionSubtitle = trimmed;
     }
 
     public void ChangeSlug(string slug) => Slug = SlugGenerator.Generate(slug);

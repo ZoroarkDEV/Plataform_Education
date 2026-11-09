@@ -60,6 +60,9 @@ public static class DependencyInjection
         services.AddScoped<LessonProgressWriter>();
         services.AddScoped<ILessonProgressService, LessonProgressService>();
 
+        // Textos da tela "Módulo concluído" (#42). A Web adapta para IModuleCompletionContentSource.
+        services.AddScoped<IModuleCompletionContentService, ModuleCompletionContentService>();
+
         // Execução de código: a Web só ENFILEIRA (Redis) e decide quem pode executar. Quem executa é o Worker.
         services.AddRedis(configuration);
         services.Configure<ExecutionQueueOptions>(configuration.GetSection(ExecutionQueueOptions.SectionName));
