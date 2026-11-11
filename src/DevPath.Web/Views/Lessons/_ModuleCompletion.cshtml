@@ -9,6 +9,7 @@
 @{
     var level = ViewData["ModuleHeadingLevel"] as int? ?? 2;
     var inLesson = ViewData["ModuleInLesson"] as bool? == true;
+    var unlocked = inLesson ? ViewData["JustUnlocked"] as EarnedAchievement : null;
     var titleTag = $"h{level}";
     var subTag = $"h{level + 1}";
     var titleId = "modulo-concluido-titulo";
@@ -16,10 +17,15 @@
 <section class="min-w-0 rounded-xl border border-emerald-600/40 bg-emerald-50 p-5 dark:border-emerald-400/40 dark:bg-emerald-950 sm:p-6"
          aria-labelledby="@titleId"
          data-module-completed="@Model.ModuleSlug">
-    @* data-completion-message só no texto do título: o JS anuncia e foca isso, sem ler o emoji. *@
+    @* data-completion-message só no texto (título e, se houver, aviso de selo): o JS anuncia e foca isso, sem ler os emojis 🎉/🏅, que ficam aria-hidden do lado de fora. *@
     @Html.Raw($"<{titleTag} id=\"{titleId}\" class=\"break-words text-xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-2xl\">")
-        <span @(inLesson ? Html.Raw("data-completion-message tabindex=\"-1\"") : null)>@Model.Title</span>
+        <span @(inLesson ? Html.Raw("data-completion-message tabindex=\"-1\"") : null)>@Model.Title@if (unlocked is { } badge)
+{<span class="mt-2 block text-base font-medium text-emerald-800 dark:text-emerald-200" data-achievement-unlocked>@AchievementTexts.UnlockLead<strong>@badge.Title</strong>@AchievementTexts.UnlockAfterTitle@badge.Description</span>}</span>
         <span aria-hidden="true">@ModuleCompletionTexts.TitleEmoji</span>
+        @if (unlocked is not null)
+        {
+            <span aria-hidden="true">@AchievementTexts.Medal</span>
+        }
     @Html.Raw($"</{titleTag}>")
 
     @if (Model.Subtitle is { } subtitle)

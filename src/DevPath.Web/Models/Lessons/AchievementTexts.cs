@@ -4,8 +4,8 @@ namespace DevPath.Web.Models.Lessons;
 
 /// <summary>
 /// Textos do selo "Primeiro SELECT" (#45; PO: roteiro-modulo2-sql.md, US-BADGE.1).
-/// Título e descrição do selo também vêm do serviço quando o Backend entregar o seed;
-/// estas constantes existem para a UI e para os testes afirmarem o texto do PO.
+/// O seed do Backend já grava o mesmo título e a mesma descrição; estas constantes
+/// existem para a UI e para os testes afirmarem o texto do PO.
 /// </summary>
 public static class AchievementTexts
 {
