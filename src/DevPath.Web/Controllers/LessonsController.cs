@@ -30,6 +30,7 @@ public sealed partial class LessonsController(
     IAuthService auth,
     IModuleCompletionReader modules,
     IStudentAchievementSource achievements,
+    IJustUnlockedAchievementBuffer justUnlocked,
     IHostEnvironment environment,
     ILogger<LessonsController> logger) : Controller
 {
@@ -265,11 +266,13 @@ public sealed partial class LessonsController(
         // #42: o pass concluiu agora (antes = sem conclusão) a última aula pronta do módulo.
         if (access.State.IsCompleted && before is null)
             completion = completion with { ModuleCompleted = await CompletedModuleAsync(userId, pathSlug, moduleSlug, ct) };
-        // #45: aviso de selo só neste pass (JustPassed). O gancho fica vazio até o Backend expor
-        // ExecutionOutcome.NewlyUnlockedAchievement; o adapter preenche o mesmo formato do DTO.
+        // #45: o aviso vem do ExecutionOutcome deste pass (buffer preenchido no Executar) ou,
+        // nos testes, do gancho do dublê. O adapter real sempre devolve null no gancho, para um
+        // GET /conclusao seguinte (ou um pass de quem já tinha direito) não reexibir o aviso.
         if (completion.JustPassed)
         {
-            var unlocked = await achievements.GetNewlyUnlockedAsync(userId, ct);
+            var unlocked = justUnlocked.Take(userId)
+                ?? await achievements.GetNewlyUnlockedAsync(userId, ct);
             if (unlocked is not null)
                 completion = completion with { JustUnlocked = unlocked };
         }

@@ -135,8 +135,9 @@ public sealed record LessonCompletionViewModel(
 
     /// <summary>
     /// Selo recém-desbloqueado neste pass (#45). O controller preenche a partir de
-    /// <see cref="IStudentAchievementSource.GetNewlyUnlockedAsync"/>; fica null até o Backend
-    /// expor <c>ExecutionOutcome.NewlyUnlockedAchievement</c> (e nos testes, quando o dublê devolve um selo).
+    /// <c>ExecutionOutcome.NewlyUnlockedAchievement</c> (buffer de uma leitura no Executar) ou,
+    /// nos testes, do gancho do dublê. Null em refazer, skip, tentativas esgotadas e no pass
+    /// de quem já tinha direito (backfill silencioso: o Backend grava o selo e deixa o campo null).
     /// </summary>
     public EarnedAchievement? JustUnlocked { get; init; }
 

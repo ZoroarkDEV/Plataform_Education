@@ -111,7 +111,8 @@ public sealed class LessonsControllerTests
         var controller = new LessonsController(
             service ?? new StubLessonService(exercise), new LessonMarkdownRenderer(),
             progress ?? new StubProgress(), new StubAuth(), modules ?? new StubModules(),
-            EmptyStudentAchievementSource.Instance, new StubEnvironment(environment), _logger)
+            EmptyStudentAchievementSource.Instance, new JustUnlockedAchievementBuffer(),
+            new StubEnvironment(environment), _logger)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new NullTempDataProvider()),

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using DevPath.Application.CodeExecution;
+using DevPath.Web.Progress;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
@@ -83,6 +84,7 @@ public static class ExerciseExecutionEndpoints
         ILessonAccessPolicy accessPolicy,
         ILoggerFactory loggerFactory,
         IExecutionQueue queue,
+        IJustUnlockedAchievementBuffer justUnlocked,
         CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
@@ -126,7 +128,11 @@ public static class ExerciseExecutionEndpoints
         try
         {
             // 200 para pass/fail/error/timeout/attempts_exhausted: o pedido foi processado, e o status está no corpo.
-            return Results.Ok(await queue.ExecuteAsync(userId, exerciseId, code, cancellationToken));
+            var outcome = await queue.ExecuteAsync(userId, exerciseId, code, cancellationToken);
+            // #45: o aviso só existe neste pass (NewlyUnlockedAchievement). O GET /conclusao consome uma vez.
+            if (outcome.NewlyUnlockedAchievement is { } unlocked)
+                justUnlocked.Set(userId, StudentAchievementSource.ToAchievement(unlocked));
+            return Results.Ok(outcome);
         }
         catch (ExecutionUnavailableException)
         {
