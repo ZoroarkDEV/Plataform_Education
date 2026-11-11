@@ -325,6 +325,54 @@ public sealed class MigrationsTests : IAsyncLifetime
         cols.Should().BeEmpty("Down remove CompletionSubtitle");
     }
 
+    private const string PrimeiroSelectId = "5e1ec700-0001-4000-8000-000000000001";
+
+    private static Task<int> CountAsync(DevPathDbContext db, string sql) =>
+        db.Database.SqlQueryRaw<int>(sql).SingleAsync();
+
+    [Fact]
+    public async Task AddPrimeiroSelectAchievement_SemeiaUmaVez_EhIdempotente_EDownRemoveSelosEConquista()
+    {
+        await using var db = CreateDbContext();
+        await db.Database.MigrateAsync();
+
+        DevPath.Domain.Achievements.AchievementIds.PrimeiroSelect.Should().Be(Guid.Parse(PrimeiroSelectId),
+            "a migration é congelada e precisa do mesmo id do código");
+        (await CountAsync(db, $"""SELECT count(*)::int AS "Value" FROM "Achievements" WHERE "Id" = '{PrimeiroSelectId}' AND "Title" = 'Primeiro SELECT' AND "Criteria"->>'slug' = 'primeiro-select' """))
+            .Should().Be(1);
+
+        // Idempotente: o mesmo Up de novo (como se o histórico tivesse perdido a linha) não duplica nem falha.
+        await db.Database.ExecuteSqlRawAsync("""DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" LIKE '%_AddPrimeiroSelectAchievement'""");
+        await db.Database.MigrateAsync();
+        (await CountAsync(db, $"""SELECT count(*)::int AS "Value" FROM "Achievements" WHERE "Id" = '{PrimeiroSelectId}' """)).Should().Be(1);
+
+        var userId = Guid.NewGuid();
+        db.Users.Add(new ApplicationUser { Id = userId, UserName = $"{userId:N}@devpath.test", Email = $"{userId:N}@devpath.test", DisplayName = "Aluno" });
+        await db.SaveChangesAsync();
+        var achievementId = Guid.Parse(PrimeiroSelectId);
+        await db.Database.ExecuteSqlAsync(
+            $"""INSERT INTO "UserAchievements" ("UserId", "AchievementId", "EarnedAt") VALUES ({userId}, {achievementId}, now())""");
+
+        await db.GetService<IMigrator>().MigrateAsync("20261109141657_AddModuleCompletionSubtitle");
+
+        (await db.Database.GetAppliedMigrationsAsync()).Should().NotContain(m => m.EndsWith("_AddPrimeiroSelectAchievement"));
+        (await CountAsync(db, $"""SELECT count(*)::int AS "Value" FROM "Achievements" WHERE "Id" = '{PrimeiroSelectId}' """)).Should().Be(0);
+        (await CountAsync(db, $"""SELECT count(*)::int AS "Value" FROM "UserAchievements" WHERE "AchievementId" = '{PrimeiroSelectId}' """)).Should().Be(0);
+        (await CountAsync(db, $"""SELECT count(*)::int AS "Value" FROM "AspNetUsers" WHERE "Id" = '{userId}' """))
+            .Should().Be(1, "Down não apaga alunos");
+
+        await db.Database.MigrateAsync(); // e sobe de novo
+        (await db.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
+        (await CountAsync(db, $"""SELECT count(*)::int AS "Value" FROM "Achievements" WHERE "Id" = '{PrimeiroSelectId}' """)).Should().Be(1);
+    }
+
+    [Fact]
+    public void AddPrimeiroSelectAchievement_EhAUltimaMigration()
+    {
+        using var db = CreateDbContext();
+        db.Database.GetMigrations().Last().Should().EndWith("_AddPrimeiroSelectAchievement");
+    }
+
     [Fact]
     public void Modelo_NaoTemMudancasPendentes_AlemDasMigrations()
     {

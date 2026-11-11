@@ -1,7 +1,9 @@
 using System.Text.RegularExpressions;
+using DevPath.Application.Achievements;
 using DevPath.Application.CodeExecution;
 using DevPath.Application.Progress;
 using DevPath.Domain.Progress;
+using DevPath.Infrastructure.Achievements;
 using DevPath.Infrastructure.Persistence;
 using DevPath.Infrastructure.Progress;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +33,7 @@ public sealed partial class ExerciseSubmissionService(
 {
     private readonly ILogger _logger = logger ?? NullLogger<ExerciseSubmissionService>.Instance;
     private readonly LessonProgressWriter _progress = new(db, new JourneySnapshotLoader(db));
+    private readonly AchievementGranter _achievements = new(db);
 
     /// <summary>Tamanho máximo do código enviado (o mesmo que a Web confere).</summary>
     public const int MaxCodeLength = ExecutionLimits.MaxCodeLength;
@@ -153,12 +156,14 @@ public sealed partial class ExerciseSubmissionService(
             passed, cases.Count, feedback, submission.Id,
             exercise.MaxAttempts is { } limit ? limit - usedAttempts - 1 : null,
             commonErrorMessage,
-            LessonCompleted: saved.Value.LessonCompleted);
+            LessonCompleted: saved.Value.LessonCompleted,
+            NewlyUnlockedAchievement: saved.Value.NewlyUnlocked);
     }
 
     /// <summary>
     /// Grava a tentativa numa transação curta (não a execução no sandbox) e, num <c>pass</c>, conclui a aula NA MESMA
-    /// transação (#27, ADR-007): ou grava as duas coisas, ou nenhuma.
+    /// transação (#27, ADR-007): ou grava as duas coisas, ou nenhuma. O selo "Primeiro SELECT" (#45) também entra nesta
+    /// transação (<see cref="AchievementGranter.GrantOnPassAsync"/>, <c>INSERT ... ON CONFLICT DO NOTHING</c>).
     /// </summary>
     /// <remarks>
     /// Com limite de tentativas, não passa do limite mesmo com dois envios do mesmo aluno ao mesmo tempo (duas abas,
@@ -166,9 +171,9 @@ public sealed partial class ExerciseSubmissionService(
     /// é esta: um lock de transação do PostgreSQL por (aluno, exercício) serializa "contar + inserir".
     /// O lock some sozinho no commit/rollback.
     /// </remarks>
-    /// <returns>Quantas tentativas já existiam antes desta (0 sem limite) e se a aula foi concluída agora; nulo se o
-    /// limite já foi atingido (nada gravado).</returns>
-    private async Task<(int UsedBefore, bool LessonCompleted)?> SaveAsync(CodeSubmission submission, int? maxAttempts, bool passed,
+    /// <returns>Quantas tentativas já existiam antes desta (0 sem limite), se a aula foi concluída agora e o selo que
+    /// este acerto acabou de conceder; nulo se o limite já foi atingido (nada gravado).</returns>
+    private async Task<(int UsedBefore, bool LessonCompleted, EarnedAchievementDto? NewlyUnlocked)?> SaveAsync(CodeSubmission submission, int? maxAttempts, bool passed,
         CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -190,11 +195,15 @@ public sealed partial class ExerciseSubmissionService(
         db.CodeSubmissions.Add(submission);
         await db.SaveChangesAsync(cancellationToken);
 
+        // #45: primeiro acerto da vida → selo. ANTES de concluir a aula: quem já tinha direito é decidido sem a
+        // conclusão que este mesmo pass vai gravar logo abaixo.
+        var unlocked = passed ? await _achievements.GrantOnPassAsync(submission.UserId, submission.Id, cancellationToken) : null;
+
         // Q1: o pass conclui a aula (ou promove o "Seguir sem pontos" para os pontos cheios).
         var completed = passed && await _progress.CompleteOnPassAsync(submission.UserId, submission.ExerciseId, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
-        return (used, completed);
+        return (used, completed, unlocked);
     }
 
     /// <summary>Dataset primeiro, depois o setup do caso (que pode, por exemplo, mudar uma linha do dataset).</summary>

@@ -1,3 +1,4 @@
+using DevPath.Application.Achievements;
 using DevPath.Application.Analytics;
 using DevPath.Application.Auth;
 using DevPath.Application.CodeExecution;
@@ -5,6 +6,7 @@ using DevPath.Application.Email;
 using DevPath.Application.Journey;
 using DevPath.Application.Lessons;
 using DevPath.Application.Progress;
+using DevPath.Infrastructure.Achievements;
 using DevPath.Infrastructure.Analytics;
 using DevPath.Infrastructure.CodeExecution;
 using DevPath.Infrastructure.Email;
@@ -70,6 +72,9 @@ public static class DependencyInjection
         services.AddScoped<IExerciseCatalog, ExerciseCatalog>();
         // Scoped: lê o progresso do aluno no banco (trilha atual + desbloqueio), #27.
         services.AddScoped<ILessonAccessPolicy, LessonAccessPolicy>();
+
+        // Selos do aluno para o dashboard (#45), com o backfill silencioso. A concessão no acerto é do Worker.
+        services.AddScoped<IStudentAchievementService, StudentAchievementService>();
 
         // Relatório de tentativas para o dono (#43, /admin/tentativas).
         services.AddScoped<IAttemptAnalyticsService, AttemptAnalyticsService>();

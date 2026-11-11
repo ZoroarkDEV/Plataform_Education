@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using DevPath.Application.Achievements;
 
 namespace DevPath.Application.CodeExecution;
 
@@ -57,6 +58,11 @@ public sealed record TestCaseFeedback(string Name, bool Passed, string? Message)
 /// Este <c>pass</c> concluiu a aula agora (ou promoveu um "Seguir sem pontos" para concluída com pontos) (#27, ADR-007).
 /// O JS da aula usa para atualizar o bloco de conclusão (GET .../conclusao). false em todo o resto.
 /// </param>
+/// <param name="NewlyUnlockedAchievement">
+/// Selo que ESTE <c>pass</c> acabou de conceder (#45, "Primeiro SELECT"), gravado na mesma transação da tentativa.
+/// A tela mostra o aviso uma vez, junto da mensagem de acerto e dos pontos. null em todo o resto: falha, erro,
+/// timeout, tentativas esgotadas, refazer, outro acerto depois do primeiro e backfill silencioso.
+/// </param>
 public sealed record ExecutionOutcome(
     ExecutionStatus Status,
     IReadOnlyList<string> Columns,
@@ -71,7 +77,8 @@ public sealed record ExecutionOutcome(
     Guid? SubmissionId,
     int? RemainingAttempts,
     string? CommonErrorMessage = null,
-    bool LessonCompleted = false)
+    bool LessonCompleted = false,
+    EarnedAchievementDto? NewlyUnlockedAchievement = null)
 {
     /// <summary>Resultado sem tabela (recusado antes de executar, erro do exercício, executor fora do ar...).</summary>
     public static ExecutionOutcome Failure(ExecutionStatus status, string friendlyMessage, string? technicalDetail = null,

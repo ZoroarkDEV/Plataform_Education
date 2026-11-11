@@ -291,7 +291,8 @@ public sealed class ExecutionApiTests(ExecutionApiFactory factory) : IClassFixtu
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("status").GetString().Should().Be("fail");
         foreach (var field in new[] { "columns", "rows", "truncated", "friendlyMessage", "technicalDetail", "executionTimeMs",
-                     "passedCases", "totalCases", "testCases", "submissionId", "remainingAttempts", "commonErrorMessage", "lessonCompleted" })
+                     "passedCases", "totalCases", "testCases", "submissionId", "remainingAttempts", "commonErrorMessage", "lessonCompleted",
+                     "newlyUnlockedAchievement" })
         {
             body.TryGetProperty(field, out _).Should().BeTrue($"o campo {field} faz parte do contrato");
         }
