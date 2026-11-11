@@ -7,6 +7,7 @@ using DevPath.IntegrationTests.Onboarding;
 using DevPath.Web.Models.Lessons;
 using DevPath.Web.Onboarding;
 using DevPath.Web.Progress;
+using DevPath.Web.ViewModels.Onboarding;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -129,8 +130,14 @@ public sealed class AchievementPageTests(DevPathWebApplicationFactory factory)
         html.Should().Contain("data-announce=\"true\"");
         html.Should().Contain("data-completion-message");
         html.Should().MatchRegex(
-            @"data-completion-message[^>]*>[\s\S]*data-achievement-unlocked[^>]*>\s*<span aria-hidden=""true"">🏅</span>\s*Selo desbloqueado: <strong>Primeiro SELECT</strong>\. Você fez um banco de dados responder à sua primeira pergunta\.\s*</span>",
-            "o aviso do PO entra no mesmo bloco da mensagem de +N pontos");
+            @"data-completion-message tabindex=""-1"">[\s\S]*data-achievement-unlocked[^>]*>\s*Selo desbloqueado: <strong>Primeiro SELECT</strong>\. Você fez um banco de dados responder à sua primeira pergunta\.\s*</span>\s*</span>\s*<span aria-hidden=""true"">🏅</span>",
+            "o aviso entra no bloco anunciado; o 🏅 fica aria-hidden do lado de fora");
+        var announced = Regex.Match(html,
+            @"data-completion-message tabindex=""-1"">(?<body>[\s\S]*?)</span>\s*<span aria-hidden=""true"">🏅</span>");
+        announced.Success.Should().BeTrue();
+        AnnouncedText(announced.Groups["body"].Value).Should().Contain(LessonCompletionTexts.PassCompletes(10))
+            .And.Contain(AchievementTexts.FirstSelectUnlockNotice)
+            .And.NotContain("🏅");
     }
 
     [Fact]
@@ -227,6 +234,83 @@ public sealed class AchievementPageTests(DevPathWebApplicationFactory factory)
         html.Should().Contain(LessonCompletionTexts.ReopenPassed(10));
         html.Should().NotContain("data-achievement-unlocked");
         html.Should().NotContain("Selo desbloqueado");
+    }
+
+    [Fact]
+    public async Task Conclusao_primeiro_acerto_na_ultima_aula_depois_de_seguir_sem_pontos_anuncia_selo_junto_do_titulo_do_modulo()
+    {
+        const string last = "filtrando-com-where";
+        var selectRef = new LessonRef(Path, Module, Lesson, "Seu primeiro SELECT");
+        var lastRef = new LessonRef(Path, Module, last, "Filtrando com WHERE");
+        var dashboard = new DashboardViewModel(Path, "SQL & Dados", 2, 2, 100, null, false,
+        [
+            new(Module, "Primeiros passos", 2, 2, 100,
+            [
+                new(selectRef, LessonStatus.Completed, Points: 0),
+                new(lastRef, LessonStatus.Completed, Points: 10),
+            ]),
+        ], 10);
+        var passed = FakeLessonProgressGateway.Samples.ExercisePassedCompleted() with
+        {
+            Lesson = lastRef,
+            PathProgressPercentage = 100,
+            Next = null,
+        };
+
+        await using var app = factory.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
+        {
+            var fake = new FakeLessonProgressGateway
+            {
+                GetState = (_, _, _, _) => FakeLessonProgressGateway.Samples.Allowed(passed),
+            };
+            var lessons = new InMemoryLessonContentService(
+                new InMemoryLessonContentService.FakePath(Path, "SQL & Dados",
+                [
+                    new(Module, "Primeiros passos",
+                    [
+                        Select with { Exercise = SampleExercise() },
+                        new(last, "Filtrando com WHERE", "# WHERE\n## Resumo\nFeito.", EstimatedMinutes: 15,
+                            Objectives: ["Filtrar"], Exercise: SampleExercise()),
+                    ]),
+                ]));
+            services.Replace(ServiceDescriptor.Scoped<ILessonContentService>(_ => lessons));
+            services.Replace(ServiceDescriptor.Scoped<ILessonProgressGateway>(_ => fake));
+            services.RemoveAll<IStudentJourneyGateway>();
+            services.AddSingleton<IStudentJourneyGateway>(new FixedJourney(dashboard));
+            services.RemoveAll<IStudentAchievementSource>();
+            services.AddSingleton<IStudentAchievementSource>(new FakeStudentAchievementSource { NewlyUnlocked = FirstSelect });
+        }));
+        var client = await LoggedInAsync(app);
+
+        var html = await (await client.GetAsync($"/trilhas/{Path}/{Module}/{last}/conclusao")).ReadHtmlAsync();
+
+        html.Should().Contain("data-module-completed");
+        html.Should().Contain("data-announce=\"true\"");
+        html.Should().NotContain("data-just-completed", "o pass do Executar só anuncia, sem mover o foco");
+        html.Should().MatchRegex(
+            @"data-completion-message tabindex=""-1"">Módulo concluído: Primeiros passos<span[^>]*data-achievement-unlocked[^>]*>Selo desbloqueado: <strong>Primeiro SELECT</strong>\. Você fez um banco de dados responder à sua primeira pergunta\.</span></span>\s*<span aria-hidden=""true"">🎉</span>\s*<span aria-hidden=""true"">🏅</span>",
+            "o aviso entra no mesmo bloco anunciado que o título do módulo; os emojis ficam fora");
+        var announced = Regex.Match(html,
+            @"data-completion-message tabindex=""-1"">(?<body>[\s\S]*?)</span>\s*<span aria-hidden=""true"">🎉</span>");
+        announced.Success.Should().BeTrue();
+        AnnouncedText(announced.Groups["body"].Value).Should().Contain("Módulo concluído: Primeiros passos")
+            .And.Contain(AchievementTexts.FirstSelectUnlockNotice)
+            .And.NotContain("🏅")
+            .And.NotContain("🎉");
+    }
+
+    private static string AnnouncedText(string markup) =>
+        Regex.Replace(Regex.Replace(markup, "<[^>]+>", ""), @"\s+", " ").Trim();
+
+    private sealed class FixedJourney(DashboardViewModel dashboard) : IStudentJourneyGateway
+    {
+        public Task<IReadOnlyList<PathOptionViewModel>> GetActivePathsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PathOptionViewModel>>([]);
+        public Task<bool> HasCurrentPathAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<EnrollmentOutcome> EnrollAsync(Guid userId, string pathSlug, CancellationToken cancellationToken) =>
+            Task.FromResult(EnrollmentOutcome.AlreadyEnrolled(dashboard.PathTitle));
+        public Task<DashboardViewModel?> GetDashboardAsync(Guid userId, CancellationToken cancellationToken) =>
+            Task.FromResult<DashboardViewModel?>(dashboard);
     }
 
     private HttpClient DashboardClient(IStudentJourneyGateway journey, IStudentAchievementSource achievements) =>

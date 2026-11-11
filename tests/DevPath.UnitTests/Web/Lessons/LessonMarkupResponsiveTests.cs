@@ -160,4 +160,26 @@ public sealed class LessonMarkupResponsiveTests
         announceOnly.Should().Contain("announce(msg.textContent.trim())")
             .And.NotContain("activeElement", "Executar não move o foco e sempre anuncia");
     }
+
+    [Fact]
+    public void Unlock_medal_stays_outside_the_announced_completion_message()
+    {
+        // UX #45: o #lesson-live copia o textContent de [data-completion-message]; o 🏅
+        // precisa ficar aria-hidden do lado de fora (como o 🎉 do módulo), para não ser anunciado.
+        var completion = View("_LessonCompletion.cshtml");
+        var medalAt = completion.IndexOf("aria-hidden=\"true\">@AchievementTexts.Medal</span>", StringComparison.Ordinal);
+        var unlockAt = completion.IndexOf("data-achievement-unlocked", StringComparison.Ordinal);
+        medalAt.Should().BePositive();
+        unlockAt.Should().BePositive();
+        medalAt.Should().BeGreaterThan(unlockAt, "o 🏅 é irmão, depois do aviso, não fica dentro dele");
+
+        var module = View("_ModuleCompletion.cshtml");
+        module.Should().Contain("data-achievement-unlocked");
+        var titleOpen = module.IndexOf("data-completion-message tabindex", StringComparison.Ordinal);
+        var titleClose = module.IndexOf("</span>", titleOpen);
+        var announced = module[titleOpen..titleClose];
+        announced.Should().Contain("data-achievement-unlocked")
+            .And.NotContain("AchievementTexts.Medal", "o 🏅 não entra no bloco anunciado");
+        module.Should().Contain("aria-hidden=\"true\">@AchievementTexts.Medal</span>");
+    }
 }
