@@ -48,6 +48,30 @@
                 <div class="progress-fill" style="width: @(Math.Clamp(Model.ProgressPercentage, 0, 100))%"></div>
             </div>
             <p class="mt-3 text-sm font-semibold text-slate-900 dark:text-white" data-total-points>@Model.TotalPointsText</p>
+            @if (Model.HasAchievements)
+            {
+                <section class="mt-4" aria-labelledby="seus-selos-titulo" data-achievements>
+                    <h2 id="seus-selos-titulo" class="text-base font-semibold text-slate-900 dark:text-white">@AchievementTexts.SectionHeading</h2>
+                    <ul class="mt-2 flex flex-col gap-2">
+                        @{ var badgeIndex = 0; }
+                        @foreach (var badge in Model.EarnedAchievements)
+                        {
+                            var titleId = $"selo-titulo-{badgeIndex}";
+                            var dateId = $"selo-data-{badgeIndex}";
+                            badgeIndex++;
+                            <li class="flex min-h-11 items-start gap-2" aria-labelledby="@titleId @dateId" data-achievement>
+                                <span class="mt-0.5" aria-hidden="true">@AchievementTexts.Medal</span>
+                                <div class="min-w-0">
+                                    <p id="@titleId" class="font-medium text-slate-900 dark:text-white">@badge.Title</p>
+                                    <p id="@dateId" class="text-sm text-slate-600 dark:text-slate-300">
+                                        <time datetime="@AchievementTexts.FormatDateIso(badge.EarnedAt)">@AchievementTexts.EarnedOn(badge.EarnedAt)</time>
+                                    </p>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
         </div>
 
         @if (Model.State == DashboardState.Continue)

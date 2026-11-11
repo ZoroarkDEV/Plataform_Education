@@ -1,4 +1,5 @@
 using DevPath.Domain.Common;
+using DevPath.Web.Progress;
 
 namespace DevPath.Web.ViewModels.Onboarding;
 
@@ -110,8 +111,15 @@ public sealed record DashboardViewModel(
     LessonRef? NextLesson,
     bool IsFirstAccess,
     IReadOnlyList<ModuleProgressViewModel> Modules,
-    int TotalPoints = 0)
+    int TotalPoints = 0,
+    IReadOnlyList<EarnedAchievement>? Achievements = null)
 {
+    /// <summary>Selos ganhos (#45). Lista vazia ou null = a área "Seus selos" não aparece.</summary>
+    public IReadOnlyList<EarnedAchievement> EarnedAchievements =>
+        Achievements is { Count: > 0 } list ? list : [];
+
+    public bool HasAchievements => EarnedAchievements.Count > 0;
+
     public DashboardState State => AvailableLessons == 0
         ? DashboardState.Empty
         : NextLesson is not null ? DashboardState.Continue : DashboardState.AllDone;

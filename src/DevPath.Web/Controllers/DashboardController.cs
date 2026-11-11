@@ -1,5 +1,6 @@
 using DevPath.Application.Auth;
 using DevPath.Web.Onboarding;
+using DevPath.Web.Progress;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,7 +11,7 @@ namespace DevPath.Web.Controllers;
 /// Sem trilha escolhida, manda para "Escolha sua trilha".
 /// </summary>
 [Authorize]
-public sealed class DashboardController(IStudentJourneyGateway journey) : Controller
+public sealed class DashboardController(IStudentJourneyGateway journey, IStudentAchievementSource achievements) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
@@ -28,6 +29,8 @@ public sealed class DashboardController(IStudentJourneyGateway journey) : Contro
 
         ViewData["DisplayName"] = User.FindFirst(DevPathClaimTypes.DisplayName)?.Value ?? User.Identity?.Name;
         ViewData[OnboardingController.FlashKey] = TempData[OnboardingController.FlashKey] as string;
-        return View(dashboard);
+        var badges = await achievements.ListAsync(userId, cancellationToken);
+        // Sem selos, devolve o mesmo objeto (construtores e testes antigos do dashboard continuam iguais).
+        return View(badges.Count > 0 ? dashboard with { Achievements = badges } : dashboard);
     }
 }

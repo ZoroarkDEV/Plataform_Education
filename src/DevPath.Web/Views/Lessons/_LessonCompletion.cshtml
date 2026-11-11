@@ -31,6 +31,14 @@
             <div class="mt-4">
                 <partial name="_ModuleCompletion" model="moduleDone" view-data='new ViewDataDictionary(ViewData) { ["ModuleHeadingLevel"] = 2, ["ModuleInLesson"] = true }' />
             </div>
+            @if (Model.ShowUnlockNotice)
+            {
+                <p class="mt-3 min-w-0 break-words text-base font-medium text-emerald-800 dark:text-emerald-200"
+                   data-achievement-unlocked>
+                    <span aria-hidden="true">@AchievementTexts.Medal</span>
+                    @AchievementTexts.UnlockLead<strong>@Model.JustUnlocked!.Title</strong>@AchievementTexts.UnlockAfterTitle@Model.JustUnlocked.Description
+                </p>
+            }
         }
         else if (Model.SuccessMessage is { } msg)
         {
@@ -42,6 +50,15 @@
                    : "font-medium text-emerald-800 dark:text-emerald-200")"
                data-completion-message>
                 @msg
+                @if (Model.ShowUnlockNotice)
+                {
+                    @* Mesmo bloco focado/anunciado: o aviso entra no textContent, então o leitor ou o
+                       #lesson-live anunciam uma vez só, junto da mensagem de +N pontos (QA #42). *@
+                    <span class="mt-2 block" data-achievement-unlocked>
+                        <span aria-hidden="true">@AchievementTexts.Medal</span>
+                        @AchievementTexts.UnlockLead<strong>@Model.JustUnlocked!.Title</strong>@AchievementTexts.UnlockAfterTitle@Model.JustUnlocked.Description
+                    </span>
+                }
             </p>
         }
     }

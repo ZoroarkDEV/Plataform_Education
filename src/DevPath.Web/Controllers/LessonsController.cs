@@ -29,6 +29,7 @@ public sealed partial class LessonsController(
     ILessonProgressGateway progress,
     IAuthService auth,
     IModuleCompletionReader modules,
+    IStudentAchievementSource achievements,
     IHostEnvironment environment,
     ILogger<LessonsController> logger) : Controller
 {
@@ -264,6 +265,14 @@ public sealed partial class LessonsController(
         // #42: o pass concluiu agora (antes = sem conclusão) a última aula pronta do módulo.
         if (access.State.IsCompleted && before is null)
             completion = completion with { ModuleCompleted = await CompletedModuleAsync(userId, pathSlug, moduleSlug, ct) };
+        // #45: aviso de selo só neste pass (JustPassed). O gancho fica vazio até o Backend expor
+        // ExecutionOutcome.NewlyUnlockedAchievement; o adapter preenche o mesmo formato do DTO.
+        if (completion.JustPassed)
+        {
+            var unlocked = await achievements.GetNewlyUnlockedAsync(userId, ct);
+            if (unlocked is not null)
+                completion = completion with { JustUnlocked = unlocked };
+        }
         ViewData["PagerOob"] = true;
         // Page model for OOB pager (rendered inside completion partial footer).
         ViewData["LessonPage"] = new LessonPageViewModel(load.Lesson, renderer.Render(load.Lesson.MarkdownBody), Progress: access.State);

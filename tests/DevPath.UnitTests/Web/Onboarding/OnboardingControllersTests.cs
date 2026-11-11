@@ -3,6 +3,7 @@ using DevPath.Application.Auth;
 using DevPath.Domain.Common;
 using DevPath.Web.Controllers;
 using DevPath.Web.Onboarding;
+using DevPath.Web.Progress;
 using DevPath.Web.ViewModels.Account;
 using DevPath.Web.ViewModels.Onboarding;
 using FluentAssertions;
@@ -160,7 +161,7 @@ public class OnboardingControllersTests
     [Fact]
     public async Task Dashboard_SemTrilha_RedirecionaParaAEscolha()
     {
-        var controller = WithContext(new DashboardController(new StubGateway()));
+        var controller = WithContext(new DashboardController(new StubGateway(), EmptyStudentAchievementSource.Instance));
 
         var result = await controller.Index(CancellationToken.None);
 
@@ -173,7 +174,7 @@ public class OnboardingControllersTests
     public async Task Dashboard_ComTrilha_MostraODashboardEAConfirmacao()
     {
         var dashboard = new DashboardViewModel("sql-dados", "SQL & Dados", 0, 20, 0, null, true, []);
-        var controller = WithContext(new DashboardController(new StubGateway { Dashboard = dashboard }));
+        var controller = WithContext(new DashboardController(new StubGateway { Dashboard = dashboard }, EmptyStudentAchievementSource.Instance));
         controller.TempData[OnboardingController.FlashKey] = "Você começou a trilha SQL & Dados!";
 
         var result = await controller.Index(CancellationToken.None);

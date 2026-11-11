@@ -103,6 +103,11 @@ else
 builder.Services.AddScoped<DevPath.Web.Progress.IModuleCompletionContentSource, DevPath.Web.Progress.ModuleCompletionContentSource>();
 builder.Services.AddScoped<DevPath.Web.Progress.IModuleCompletionReader, DevPath.Web.Progress.ModuleCompletionReader>();
 
+// Selos (#45): porta da Web para o futuro IStudentAchievementService. Enquanto o Backend não
+// entrega o serviço (ListAsync + ExecutionOutcome.NewlyUnlockedAchievement), a implementação
+// vazia não mostra selos nem o aviso de desbloqueio.
+builder.Services.AddSingleton<DevPath.Web.Progress.IStudentAchievementSource>(DevPath.Web.Progress.EmptyStudentAchievementSource.Instance);
+
 // GET /health (usado pelo healthcheck do serviço web no docker-compose).
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database");

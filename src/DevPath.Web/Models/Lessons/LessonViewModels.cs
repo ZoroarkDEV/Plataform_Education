@@ -133,6 +133,22 @@ public sealed record LessonCompletionViewModel(
     /// </summary>
     public ModuleCompletionViewModel? ModuleCompleted { get; init; }
 
+    /// <summary>
+    /// Selo recém-desbloqueado neste pass (#45). O controller preenche a partir de
+    /// <see cref="IStudentAchievementSource.GetNewlyUnlockedAsync"/>; fica null até o Backend
+    /// expor <c>ExecutionOutcome.NewlyUnlockedAchievement</c> (e nos testes, quando o dublê devolve um selo).
+    /// </summary>
+    public EarnedAchievement? JustUnlocked { get; init; }
+
+    /// <summary>
+    /// Aviso "Selo desbloqueado" só no primeiro acerto (JustPassed + selo novo). Não aparece em
+    /// "Seguir sem pontos", tentativas esgotadas, reabrir a aula ou pass sem desbloqueio.
+    /// </summary>
+    public bool ShowUnlockNotice =>
+        JustPassed
+        && JustUnlocked is not null
+        && State.CompletionKind == LessonCompletionKind.ExercisePassed;
+
     /// <summary>Só o clique em "Concluí esta aula" ou "Seguir sem pontos" leva o foco para a "Próxima".</summary>
     public bool MovesFocus => JustCompleted || JustSkipped;
 
