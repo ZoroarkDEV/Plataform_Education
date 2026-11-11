@@ -15,6 +15,13 @@ public static class AchievementTexts
 
     public const string UnlockAfterTitle = ". ";
 
+    /// <summary>
+    /// Separador só para leitor de tela (<c>sr-only</c>) entre o título do módulo e o aviso do selo no mesmo
+    /// <c>[data-completion-message]</c>: na tela o aviso é <c>block</c>, mas o <c>textContent</c> anunciado
+    /// precisa de "…SQL. Selo desbloqueado…", e não "…SQLSelo desbloqueado…".
+    /// </summary>
+    public const string AnnouncedSentenceBreak = ". ";
+
     public const string FirstSelectTitle = "Primeiro SELECT";
 
     public const string FirstSelectDescription =

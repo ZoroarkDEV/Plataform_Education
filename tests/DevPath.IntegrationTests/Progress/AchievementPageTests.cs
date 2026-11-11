@@ -288,19 +288,31 @@ public sealed class AchievementPageTests(DevPathWebApplicationFactory factory)
         html.Should().Contain("data-announce=\"true\"");
         html.Should().NotContain("data-just-completed", "o pass do Executar só anuncia, sem mover o foco");
         html.Should().MatchRegex(
-            @"data-completion-message tabindex=""-1"">Módulo concluído: Primeiros passos<span[^>]*data-achievement-unlocked[^>]*>Selo desbloqueado: <strong>Primeiro SELECT</strong>\. Você fez um banco de dados responder à sua primeira pergunta\.</span></span>\s*<span aria-hidden=""true"">🎉</span>\s*<span aria-hidden=""true"">🏅</span>",
+            @"data-completion-message tabindex=""-1"">Módulo concluído: Primeiros passos<span class=""sr-only"">\. </span><span[^>]*data-achievement-unlocked[^>]*>Selo desbloqueado: <strong>Primeiro SELECT</strong>\. Você fez um banco de dados responder à sua primeira pergunta\.</span></span>\s*<span aria-hidden=""true"">🎉</span>\s*<span aria-hidden=""true"">🏅</span>",
             "o aviso entra no mesmo bloco anunciado que o título do módulo; os emojis ficam fora");
         var announced = Regex.Match(html,
             @"data-completion-message tabindex=""-1"">(?<body>[\s\S]*?)</span>\s*<span aria-hidden=""true"">🎉</span>");
         announced.Success.Should().BeTrue();
-        AnnouncedText(announced.Groups["body"].Value).Should().Contain("Módulo concluído: Primeiros passos")
+        // textContent de verdade (o que o site.js anuncia): tags somem sem inserir espaço, então o separador
+        // tem de estar no próprio texto. Sem ele o leitor ouviria "…passosSelo desbloqueado…".
+        var textContent = TextContent(announced.Groups["body"].Value);
+        textContent.Should().Be(
+            $"{ModuleCompletionTexts.Title("Primeiros passos")}. {AchievementTexts.FirstSelectUnlockNotice}",
+            "título do módulo e aviso do selo são duas frases, separadas por ponto e espaço");
+        textContent.Should().Contain("Módulo concluído: Primeiros passos")
             .And.Contain(AchievementTexts.FirstSelectUnlockNotice)
+            .And.NotContain("passosSelo")
+            .And.NotMatchRegex(@"\p{L}Selo desbloqueado")
             .And.NotContain("🏅")
             .And.NotContain("🎉");
     }
 
     private static string AnnouncedText(string markup) =>
-        Regex.Replace(Regex.Replace(markup, "<[^>]+>", ""), @"\s+", " ").Trim();
+        Regex.Replace(TextContent(markup), @"\s+", " ").Trim();
+
+    /// <summary>Como <c>Node.textContent.trim()</c>: tira as tags sem pôr nada no lugar e decodifica entidades.</summary>
+    private static string TextContent(string markup) =>
+        WebUtility.HtmlDecode(Regex.Replace(markup, "<[^>]+>", "")).Trim();
 
     private sealed class FixedJourney(DashboardViewModel dashboard) : IStudentJourneyGateway
     {

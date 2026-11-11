@@ -20,7 +20,7 @@
     @* data-completion-message só no texto (título e, se houver, aviso de selo): o JS anuncia e foca isso, sem ler os emojis 🎉/🏅, que ficam aria-hidden do lado de fora. *@
     @Html.Raw($"<{titleTag} id=\"{titleId}\" class=\"break-words text-xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-2xl\">")
         <span @(inLesson ? Html.Raw("data-completion-message tabindex=\"-1\"") : null)>@Model.Title@if (unlocked is { } badge)
-{<span class="mt-2 block text-base font-medium text-emerald-800 dark:text-emerald-200" data-achievement-unlocked>@AchievementTexts.UnlockLead<strong>@badge.Title</strong>@AchievementTexts.UnlockAfterTitle@badge.Description</span>}</span>
+{<span class="sr-only">@AchievementTexts.AnnouncedSentenceBreak</span><span class="mt-2 block text-base font-medium text-emerald-800 dark:text-emerald-200" data-achievement-unlocked>@AchievementTexts.UnlockLead<strong>@badge.Title</strong>@AchievementTexts.UnlockAfterTitle@badge.Description</span>}</span>
         <span aria-hidden="true">@ModuleCompletionTexts.TitleEmoji</span>
         @if (unlocked is not null)
         {

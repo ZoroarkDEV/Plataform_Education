@@ -176,10 +176,18 @@ public sealed class LessonMarkupResponsiveTests
         var module = View("_ModuleCompletion.cshtml");
         module.Should().Contain("data-achievement-unlocked");
         var titleOpen = module.IndexOf("data-completion-message tabindex", StringComparison.Ordinal);
-        var titleClose = module.IndexOf("</span>", titleOpen);
+        var titleClose = module.IndexOf("<span aria-hidden=\"true\">@ModuleCompletionTexts.TitleEmoji", titleOpen, StringComparison.Ordinal);
+        titleClose.Should().BePositive();
         var announced = module[titleOpen..titleClose];
         announced.Should().Contain("data-achievement-unlocked")
-            .And.NotContain("AchievementTexts.Medal", "o 🏅 não entra no bloco anunciado");
+            .And.NotContain("AchievementTexts.Medal", "o 🏅 não entra no bloco anunciado")
+            .And.NotContain("ModuleCompletionTexts.TitleEmoji", "o 🎉 não entra no bloco anunciado");
+        // O aviso é block na tela, mas o textContent anunciado precisa de separador entre o título e "Selo desbloqueado".
+        var breakAt = announced.IndexOf("@AchievementTexts.AnnouncedSentenceBreak", StringComparison.Ordinal);
+        breakAt.Should().BePositive("sem separador o leitor ouve \"…SQLSelo desbloqueado…\"");
+        breakAt.Should().BeGreaterThan(announced.IndexOf("@Model.Title", StringComparison.Ordinal))
+            .And.BeLessThan(announced.IndexOf("data-achievement-unlocked", StringComparison.Ordinal));
+        DevPath.Web.Models.Lessons.AchievementTexts.AnnouncedSentenceBreak.Should().Be(". ");
         module.Should().Contain("aria-hidden=\"true\">@AchievementTexts.Medal</span>");
     }
 }
