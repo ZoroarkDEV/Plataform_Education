@@ -39,6 +39,9 @@ public sealed class ExecutionApiFactory : WebApplicationFactory<Program>, IAsync
 
     /// <summary>Trilha em que os alunos dos testes se matriculam (#27: só executa quem está na trilha).</summary>
     public string PathSlug { get; private set; } = "";
+    public string ModuleSlug { get; private set; } = "";
+    public string SelectLessonSlug { get; private set; } = "";
+    public string WhereLessonSlug { get; private set; } = "";
     public Guid SelectLessonId { get; private set; }
 
     /// <summary>Aula 2 ("WHERE", um exercício só): bloqueada até concluir a aula "SELECT".</summary>
@@ -125,6 +128,9 @@ public sealed class ExecutionApiFactory : WebApplicationFactory<Program>, IAsync
         var where = module.AddLesson("WHERE", ContentType.Markdown, "# WHERE");
         WhereExerciseId = where.AddExercise("Notas de novo", "Liste nome e nota em ordem.", "sql", TestCases).Id;
         (SelectLessonId, WhereLessonId) = (lesson.Id, where.Id);
+        ModuleSlug = module.Slug;
+        SelectLessonSlug = lesson.Slug;
+        WhereLessonSlug = where.Slug;
         UnpublishedModuleExerciseId = path.AddModule("Módulo rascunho")
             .AddLesson("Aula", ContentType.Markdown, "# ...").AddExercise("Módulo não publicado", "x", "sql", TestCases).Id;
 
