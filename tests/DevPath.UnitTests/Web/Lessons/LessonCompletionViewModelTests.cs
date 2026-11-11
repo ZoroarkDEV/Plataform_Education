@@ -250,4 +250,39 @@ public sealed class LessonCompletionViewModelTests
         Vm(ReadingCompleted()).MovesFocus.Should().BeFalse();
         Vm(ReadingCompleted()).Announces.Should().BeFalse();
     }
+
+    private static readonly EarnedAchievement FirstSelect = new(
+        AchievementTexts.FirstSelectTitle,
+        AchievementTexts.FirstSelectDescription,
+        new DateTimeOffset(2026, 11, 11, 15, 0, 0, TimeSpan.Zero));
+
+    [Fact]
+    public void Unlock_notice_shows_on_just_passed_with_new_badge()
+    {
+        var vm = LessonCompletionViewModel.AfterPass(ExercisePassed(10), Reading, previousKind: null) with
+        {
+            JustUnlocked = FirstSelect
+        };
+        vm.ShowUnlockNotice.Should().BeTrue();
+        vm.JustPassed.Should().BeTrue();
+        vm.SuccessMessage.Should().Be(LessonCompletionTexts.PassCompletes(10));
+        AchievementTexts.FirstSelectUnlockNotice.Should().Be(
+            "Selo desbloqueado: Primeiro SELECT. Você fez um banco de dados responder à sua primeira pergunta.");
+    }
+
+    [Fact]
+    public void Unlock_notice_hidden_without_just_unlocked_or_on_reopen_skip_or_exhausted()
+    {
+        LessonCompletionViewModel.AfterPass(ExercisePassed(10), Reading, null)
+            .ShowUnlockNotice.Should().BeFalse("JustPassed sem selo novo");
+
+        (Vm(ExercisePassed(10)) with { JustUnlocked = FirstSelect })
+            .ShowUnlockNotice.Should().BeFalse("reabrir: JustPassed é falso");
+
+        (Vm(Skipped(), justSkipped: true) with { JustUnlocked = FirstSelect })
+            .ShowUnlockNotice.Should().BeFalse("Seguir sem pontos");
+
+        (LessonCompletionViewModel.AfterPass(Exhausted(), Reading, null) with { JustUnlocked = FirstSelect })
+            .ShowUnlockNotice.Should().BeFalse("tentativas esgotadas não dão o selo");
+    }
 }
