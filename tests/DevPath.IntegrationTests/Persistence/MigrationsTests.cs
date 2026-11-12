@@ -367,10 +367,48 @@ public sealed class MigrationsTests : IAsyncLifetime
     }
 
     [Fact]
-    public void AddPrimeiroSelectAchievement_EhAUltimaMigration()
+    public void AddEmailSettings_EhAUltimaMigration()
     {
         using var db = CreateDbContext();
-        db.Database.GetMigrations().Last().Should().EndWith("_AddPrimeiroSelectAchievement");
+        var migrations = db.Database.GetMigrations().ToList();
+        migrations.Last().Should().EndWith("_AddEmailSettings");
+        migrations[^2].Should().EndWith("_AddPrimeiroSelectAchievement");
+    }
+
+    [Fact]
+    public async Task AddEmailSettings_UmaLinhaSo_ProvedorConhecido_EDownRemoveATabela()
+    {
+        await using var db = CreateDbContext();
+        await db.Database.MigrateAsync();
+
+        var userId = Guid.NewGuid();
+        db.Users.Add(new ApplicationUser { Id = userId, UserName = $"{userId:N}@devpath.test", Email = $"{userId:N}@devpath.test", DisplayName = "Admin" });
+        await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlAsync($"""
+            INSERT INTO "EmailSettings" ("Id", "Provider", "FromAddress", "FromName", "ResendApiKeyProtected", "UpdatedAt", "UpdatedByUserId")
+            VALUES (1, 'Resend', 'a@devpath.test', 'DevPath', 'CfDJ8-protegido', now(), {userId})
+            """);
+
+        var secondRow = () => db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "EmailSettings" ("Id", "Provider", "FromAddress", "FromName", "UpdatedAt") VALUES (2, 'None', '', '', now())
+            """);
+        (await secondRow.Should().ThrowAsync<PostgresException>()).Which.ConstraintName.Should().Be("CK_EmailSettings_Singleton");
+        var badProvider = () => db.Database.ExecuteSqlRawAsync("""UPDATE "EmailSettings" SET "Provider" = 'SendGrid' """);
+        (await badProvider.Should().ThrowAsync<PostgresException>()).Which.ConstraintName.Should().Be("CK_EmailSettings_Provider");
+
+        // Apagar a conta de quem salvou mantém a configuração (auditoria vira null).
+        await db.Database.ExecuteSqlAsync($"""DELETE FROM "AspNetUsers" WHERE "Id" = {userId}""");
+        (await CountAsync(db, """SELECT count(*)::int AS "Value" FROM "EmailSettings" WHERE "UpdatedByUserId" IS NULL""")).Should().Be(1);
+
+        await db.GetService<IMigrator>().MigrateAsync("20261111142448_AddPrimeiroSelectAchievement");
+
+        (await db.Database.GetAppliedMigrationsAsync()).Should().NotContain(m => m.EndsWith("_AddEmailSettings"));
+        (await CountAsync(db, """SELECT count(*)::int AS "Value" FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'EmailSettings'"""))
+            .Should().Be(0, "Down remove a tabela");
+
+        await db.Database.MigrateAsync(); // e sobe de novo
+        (await db.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
+        (await CountAsync(db, """SELECT count(*)::int AS "Value" FROM "EmailSettings" """)).Should().Be(0);
     }
 
     [Fact]

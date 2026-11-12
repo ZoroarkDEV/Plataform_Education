@@ -38,10 +38,13 @@ O envio fica atrás de `IEmailSender` (`DevPath.Application.Email`). A implement
 | `None` | só registra um aviso no log, não envia | padrão do `appsettings.json` (testes, produção antes da chave) |
 | vazio | `Smtp` se `Email:Smtp:Host` existir, senão `None` | compatibilidade |
 
-Configuração incompleta **derruba o startup** com mensagem clara: `Resend` sem chave, `Smtp` sem
-`Email:Smtp:Host` ou um provider desconhecido. Uma recusa do provedor (4xx/5xx, timeout, rede) é
-registrada no log (status e resposta do Resend, nunca a chave) e o worker segue para o próximo e-mail;
-o aluno vê a mesma tela e pode pedir de novo.
+Desde o #47 o `IEmailSender` é um só (`ConfiguredEmailSender`), que resolve o provedor **a cada envio**:
+configuração do servidor + o que o admin salvou na tela de configurações de e-mail
+(veja [configuracoes-de-email.md](configuracoes-de-email.md)). Ainda derrubam o startup só os erros de
+configuração do servidor: provider desconhecido ou `Smtp` sem `Email:Smtp:Host`. **`Resend` sem chave sobe**:
+a tela mostra o que falta e o envio falha com `EmailDeliveryException` explicando o motivo. Uma recusa do
+provedor (4xx/5xx, timeout, rede) é registrada no log (status e resposta do Resend, nunca a chave) e o
+worker segue para o próximo e-mail; o aluno vê a mesma tela e pode pedir de novo.
 
 ## Configuração
 
@@ -89,8 +92,10 @@ Decisão do dono (#44, 2026-11-09): produção envia pelo **Resend**; dev e stag
    *Verified*, o Resend recusa o envio com 403/422 e o log mostra a mensagem dele.
 2. **Remetente.** `Email__FromAddress` precisa ser um endereço desse domínio verificado
    (ex.: `nao-responda@<domínio>`). `Email__FromName` = `DevPath`.
-3. **Chave.** Crie uma API key com permissão **Sending access**, restrita ao domínio. **O dono envia a
-   chave por um canal seguro** (gerenciador de segredos/cofre, nunca chat, issue ou e-mail) e ela entra só
+3. **Chave.** Crie uma API key com permissão **Sending access**, restrita ao domínio. O caminho
+   preferido agora é o admin colar a chave na **tela de configurações de e-mail** (#47), que a guarda
+   protegida e vale sem reiniciar ([configuracoes-de-email.md](configuracoes-de-email.md)). Alternativa:
+   **o dono envia a chave por um canal seguro** (gerenciador de segredos/cofre, nunca chat, issue ou e-mail) e ela entra só
    no secret do deploy, como `Email__Resend__ApiKey` (ou `RESEND_API_KEY`). Ela nunca vai para o
    repositório, para o `appsettings*.json` nem para o `.env.example` (um teste garante que os appsettings
    versionados não têm valor em `ApiKey`). Para trocar a chave, gere outra no Resend, atualize o secret,
@@ -105,7 +110,7 @@ Email__FromName=DevPath
 App__PublicBaseUrl=https://<domínio público>
 ```
 
-Sem a chave, a Web **não sobe** (mensagem "Email:Provider=Resend, mas a chave do Resend não foi
-informada…"), para o problema aparecer no deploy e não no primeiro aluno que esqueceu a senha.
+Sem a chave, a Web **sobe** (#47): a tela de configurações de e-mail lista "Falta a chave da API do
+Resend" e cada envio falha com essa mensagem no log, sem derrubar nada.
 **Não convide pessoas reais antes de configurar.** O texto do e-mail é o mesmo em todos os provedores:
 PT-BR, assunto "DevPath: crie sua nova senha", HTML + texto.

@@ -75,6 +75,8 @@ services:
       # pública, nunca o header Host. Em staging, PUBLIC_BASE_URL = endereço do staging.
       # Dev/staging: Smtp (Mailpit). Produção não usa este compose: Email__Provider=Resend + chave por secret.
       Email__Provider: Smtp
+      # #47: dev e staging ficam no Mailpit mesmo com a tela /admin/email (o que ela salvar só vale em produção).
+      Email__LockedToConfiguration: "true"
       Email__Smtp__Host: mailpit
       Email__Smtp__Port: "1025"
       Email__Smtp__Security: None

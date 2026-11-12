@@ -12,6 +12,7 @@ namespace DevPath.Infrastructure.Email;
 /// HttpClient tipado puro em vez do SDK: é um endpoint só, e assim não entra dependência nova.
 /// </summary>
 /// <remarks>
+/// Quem escolhe o provedor e passa remetente/chave a cada envio é o <see cref="ConfiguredEmailSender"/> (#47).
 /// A chave vai só no header <c>Authorization</c> desta requisição: nunca em log, exceção ou
 /// DefaultRequestHeaders. Resposta 4xx/5xx, timeout ou falha de rede viram
 /// <see cref="EmailDeliveryException"/> (o <c>PasswordResetEmailWorker</c> registra e continua).
@@ -24,20 +25,27 @@ public sealed class ResendEmailSender(
     public const string EmailsPath = "emails";
     private const int MaxLoggedBodyLength = 500;
 
-    public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
+    /// <summary>Envia com o remetente e a chave de <see cref="EmailOptions"/> (uso direto/testes do #44).</summary>
+    public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
         var settings = options.Value;
-        var apiKey = settings.Resend.ApiKey;
+        return SendAsync(message, new EmailTransport(settings.FromAddress, settings.FromName, settings.Resend.ApiKey), cancellationToken);
+    }
+
+    /// <summary>Envia com remetente e chave resolvidos por envio (tela de admin, #47).</summary>
+    internal async Task SendAsync(EmailMessage message, EmailTransport transport, CancellationToken cancellationToken)
+    {
+        var apiKey = transport.ResendApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            // O startup já recusa Provider=Resend sem chave; isto é só uma rede de segurança.
-            throw new EmailDeliveryException("Chave do Resend ausente (Email:Resend:ApiKey).");
+            // O ConfiguredEmailSender já confere antes; isto é só uma rede de segurança.
+            throw new EmailDeliveryException("Chave do Resend ausente: cadastre na tela de configurações de e-mail (admin).");
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, EmailsPath)
         {
             Content = JsonContent.Create(new ResendEmailRequest(
-                From: $"{settings.FromName} <{settings.FromAddress}>",
+                From: $"{transport.FromName} <{transport.FromAddress}>",
                 To: [message.To],
                 Subject: message.Subject,
                 Html: message.HtmlBody,
@@ -81,7 +89,7 @@ public sealed class ResendEmailSender(
             logger.LogError(
                 "Resend recusou o e-mail \"{Subject}\" com HTTP {Status} ({Kind}): {Body}",
                 message.Subject, status, status >= 500 ? "erro do provedor" : "erro da requisição/configuração", body);
-            throw new EmailDeliveryException($"Resend respondeu HTTP {status}.");
+            throw new EmailDeliveryException($"Resend respondeu HTTP {status}.", statusCode: status);
         }
     }
 

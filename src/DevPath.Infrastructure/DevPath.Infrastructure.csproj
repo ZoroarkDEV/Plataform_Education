@@ -23,6 +23,12 @@
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
+  <!-- Testes leem a chave resolvida (EffectiveEmailSettings.ResendApiKey), que fica internal: segredo fora da API pública. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="DevPath.UnitTests" />
+    <InternalsVisibleTo Include="DevPath.IntegrationTests" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

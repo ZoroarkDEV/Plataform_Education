@@ -33,6 +33,7 @@ public sealed class DevPathDbContext(DbContextOptions<DevPathDbContext> options)
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<CodeSubmission> CodeSubmissions => Set<CodeSubmission>();
     public DbSet<Dataset> Datasets => Set<Dataset>();
+    public DbSet<Email.EmailSettingsRecord> EmailSettings => Set<Email.EmailSettingsRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

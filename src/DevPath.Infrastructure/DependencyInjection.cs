@@ -15,6 +15,7 @@ using DevPath.Infrastructure.Journey;
 using DevPath.Infrastructure.Lessons;
 using DevPath.Infrastructure.Persistence;
 using DevPath.Infrastructure.Progress;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -141,69 +142,87 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// E-mail (issue #44). <c>Email:Provider</c> escolhe a implementação de <see cref="IEmailSender"/>:
-    /// <c>Smtp</c> (dev/staging: Mailpit), <c>Resend</c> (produção) ou <c>None</c> (só avisa no log).
-    /// Vazio = <c>Smtp</c> se <c>Email:Smtp:Host</c> existir, senão <c>None</c>.
-    /// Configuração incompleta falha AQUI, no startup, com mensagem clara (não no primeiro e-mail).
+    /// E-mail (#44, #47). <see cref="IEmailSender"/> é o <see cref="ConfiguredEmailSender"/>: a cada envio ele resolve
+    /// provedor, remetente e chave (configuração <c>Email:*</c> + o que o admin salvou na tela, protegido no banco)
+    /// e repassa ao SMTP ou ao Resend. Veja docs/configuracoes-de-email.md.
     /// </summary>
+    /// <remarks>
+    /// Falha no startup só o que é erro de configuração do SERVIDOR: <c>Email:Provider</c> desconhecido ou
+    /// <c>Smtp</c> sem <c>Email:Smtp:Host</c>. <c>Resend</c> sem chave SOBE (#47): a tela mostra o que falta e o
+    /// envio diz o motivo (<see cref="EmailDeliveryException"/>), sem derrubar a Web.
+    /// </remarks>
     public static IServiceCollection AddEmailSender(this IServiceCollection services, IConfiguration configuration)
     {
         var section = configuration.GetSection(EmailOptions.SectionName);
-        // A chave só vem do ambiente/secret: Email__Resend__ApiKey ou RESEND_API_KEY (nome do Resend).
+        // A chave do ambiente: Email__Resend__ApiKey ou RESEND_API_KEY (nome do Resend). A da tela fica no banco.
         var resendApiKey = section["Resend:ApiKey"];
         if (string.IsNullOrWhiteSpace(resendApiKey))
         {
             resendApiKey = configuration[ResendOptions.ApiKeyEnvironmentVariable];
         }
 
-        services.Configure<EmailOptions>(section);
-        services.PostConfigure<EmailOptions>(options => options.Resend.ApiKey = resendApiKey);
-
-        var provider = section["Provider"]?.Trim();
-        if (string.IsNullOrEmpty(provider))
+        var configuredProvider = section["Provider"]?.Trim();
+        string provider;
+        if (string.IsNullOrEmpty(configuredProvider))
         {
             provider = string.IsNullOrWhiteSpace(section["Smtp:Host"]) ? EmailProviders.None : EmailProviders.Smtp;
         }
-
-        if (provider.Equals(EmailProviders.Smtp, StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(section["Smtp:Host"]))
-            {
-                throw new InvalidOperationException(
-                    "Email:Provider=Smtp, mas Email:Smtp:Host não está configurado. Defina Email__Smtp__Host " +
-                    "(ex.: mailpit no compose) ou use Email:Provider=None. Veja docs/email-e-recuperacao-de-senha.md.");
-            }
-
-            services.TryAddSingleton<IEmailSender, SmtpEmailSender>();
-        }
-        else if (provider.Equals(EmailProviders.Resend, StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(resendApiKey))
-            {
-                throw new InvalidOperationException(
-                    "Email:Provider=Resend, mas a chave do Resend não foi informada. Defina a variável de ambiente " +
-                    "Email__Resend__ApiKey (ou RESEND_API_KEY) pelo secret do deploy; nunca no appsettings. " +
-                    "Veja docs/email-e-recuperacao-de-senha.md.");
-            }
-
-            var resend = section.GetSection("Resend").Get<ResendOptions>() ?? new ResendOptions();
-            services.AddHttpClient<IEmailSender, ResendEmailSender>(client =>
-            {
-                client.BaseAddress = new Uri(resend.BaseUrl.TrimEnd('/') + "/");
-                client.Timeout = TimeSpan.FromSeconds(Math.Max(1, resend.TimeoutSeconds));
-            });
-        }
-        else if (provider.Equals(EmailProviders.None, StringComparison.OrdinalIgnoreCase))
-        {
-            services.TryAddSingleton<IEmailSender, UnconfiguredEmailSender>();
-        }
         else
         {
-            throw new InvalidOperationException(
-                $"Email:Provider inválido: \"{provider}\". Use Smtp, Resend ou None.");
+            provider = EmailProviders.Normalize(configuredProvider)
+                       ?? throw new InvalidOperationException(
+                           $"Email:Provider inválido: \"{configuredProvider}\". Use Smtp, Resend ou None.");
         }
 
+        if (provider == EmailProviders.Smtp && string.IsNullOrWhiteSpace(section["Smtp:Host"]))
+        {
+            throw new InvalidOperationException(
+                "Email:Provider=Smtp, mas Email:Smtp:Host não está configurado. Defina Email__Smtp__Host " +
+                "(ex.: mailpit no compose) ou use Email:Provider=None. Veja docs/email-e-recuperacao-de-senha.md.");
+        }
+
+        services.Configure<EmailOptions>(section);
+        services.PostConfigure<EmailOptions>(options =>
+        {
+            options.Provider = provider;
+            options.Resend.ApiKey = string.IsNullOrWhiteSpace(resendApiKey) ? null : resendApiKey;
+        });
+
+        // Chave do Resend salva pela tela: protegida com o Data Protection (anel de chaves fora do banco).
+        services.AddDataProtectionKeyRing(configuration);
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<ResendApiKeyProtector>();
+        services.TryAddSingleton<EmailSettingsResolver>();
+        services.TryAddSingleton<TestEmailThrottle>();
+
+        services.TryAddSingleton<SmtpEmailSender>();
+        var resend = section.GetSection("Resend").Get<ResendOptions>() ?? new ResendOptions();
+        services.AddHttpClient<ResendEmailSender>(client =>
+        {
+            client.BaseAddress = new Uri(resend.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, resend.TimeoutSeconds));
+        });
+
+        services.TryAddSingleton<IEmailSender, ConfiguredEmailSender>();
+        services.TryAddScoped<IEmailSettingsService, EmailSettingsService>();
+
         return services;
+    }
+
+    /// <summary>
+    /// Data Protection (cookies, antiforgery, tokens do Identity e a chave do Resend da tela, #47).
+    /// Anel de chaves: <c>DataProtection:KeysPath</c> se configurado; senão o padrão do ASP.NET
+    /// (<c>$HOME/.aspnet/DataProtection-Keys</c>, que no compose é o volume <c>web_keys</c>).
+    /// Fica FORA do banco de propósito: o backup do banco sozinho não abre a chave do Resend.
+    /// </summary>
+    private static void AddDataProtectionKeyRing(this IServiceCollection services, IConfiguration configuration)
+    {
+        var builder = services.AddDataProtection();
+        var keysPath = configuration["DataProtection:KeysPath"];
+        if (!string.IsNullOrWhiteSpace(keysPath))
+        {
+            builder.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+        }
     }
 
     private static void AddIdentityServices(this IServiceCollection services, IConfiguration configuration)

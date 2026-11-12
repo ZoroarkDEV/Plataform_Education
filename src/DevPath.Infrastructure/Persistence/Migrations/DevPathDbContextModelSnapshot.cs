@@ -520,6 +520,47 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("DevPath.Infrastructure.Email.EmailSettingsRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FromAddress")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("FromName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ResendApiKeyProtected")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("EmailSettings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_EmailSettings_Provider", "\"Provider\" IN ('None', 'Smtp', 'Resend')");
+
+                            t.HasCheckConstraint("CK_EmailSettings_Singleton", "\"Id\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("DevPath.Infrastructure.Identity.ApplicationUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -844,6 +885,14 @@ namespace DevPath.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("DevPath.Infrastructure.Email.EmailSettingsRecord", b =>
+                {
+                    b.HasOne("DevPath.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("DevPath.Infrastructure.Identity.ApplicationUser", b =>
