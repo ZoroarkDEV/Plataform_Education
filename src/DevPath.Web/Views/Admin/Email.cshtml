@@ -1,0 +1,195 @@
+@using DevPath.Application.Email
+@using DevPath.Web.ViewModels.Admin
+@model EmailSettingsPageViewModel
+@{
+    ViewData["Title"] = "E-mail (admin)";
+    var s = Model.Settings;
+    var keyFromDatabase = s.ResendKeySource == EmailSecretSource.Database;
+    var keyDescribedBy = s.ResendKeyConfigured ? "NewResendApiKey-status NewResendApiKey-hint" : "NewResendApiKey-hint";
+    // Classes escritas por extenso (o Tailwind só gera o que encontra literal nas views).
+    const string Notice = "mt-4 rounded-lg border p-4 text-sm";
+    const string Warning = "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200";
+    const string Info = "border-brand-200 bg-brand-50 text-slate-800 dark:border-brand-500 dark:bg-slate-800 dark:text-slate-100";
+    const string Success = "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200";
+    const string Error = "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200";
+    const string Dt = "font-medium text-slate-600 dark:text-slate-300";
+    const string Dd = "mt-0.5 break-words text-slate-900 dark:text-white";
+}
+@* #47. Contrato e precedência: docs/configuracoes-de-email.md. A chave do Resend NUNCA é escrita nesta página. *@
+<div class="mx-auto max-w-2xl">
+    <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">@EmailSettingsTexts.PageTitle</h1>
+    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">@EmailSettingsTexts.Intro</p>
+
+    @if (Model.SavedMessage is not null)
+    {
+        <p id="email-salvo" class="@Notice @Success font-medium" role="status">@Model.SavedMessage</p>
+    }
+
+    @if (s.LockedToConfiguration)
+    {
+        <div id="aviso-travado" class="@Notice @Info" role="status">
+            <p>@EmailSettingsTexts.Locked</p>
+        </div>
+    }
+
+    @if (s.MissingRequirements.Count > 0)
+    {
+        <div id="aviso-falta" class="@Notice @Warning" role="status">
+            <p class="font-semibold">@EmailSettingsTexts.MissingLead</p>
+            <ul class="mt-1 list-disc space-y-1 pl-5">
+                @foreach (var missing in s.MissingRequirements)
+                {
+                    <li>@missing</li>
+                }
+            </ul>
+            @if (s.RestartRequired)
+            {
+                <p id="aviso-reinicio" class="mt-2">@EmailSettingsTexts.RestartRequired</p>
+            }
+        </div>
+    }
+    else if (s.RestartRequired)
+    {
+        <div id="aviso-reinicio" class="@Notice @Warning" role="status"><p>@EmailSettingsTexts.RestartRequired</p></div>
+    }
+
+    <section class="card mt-6 p-5" aria-labelledby="em-uso">
+        <h2 id="em-uso" class="text-lg font-semibold text-slate-900 dark:text-white">@EmailSettingsTexts.CurrentHeading</h2>
+        <dl id="email-efetivo" class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <div><dt class="@Dt">Provedor</dt><dd class="@Dd">@EmailSettingsTexts.ProviderName(s.EffectiveProvider)</dd></div>
+            <div><dt class="@Dt">Remetente</dt><dd class="@Dd">@(string.IsNullOrEmpty(s.EffectiveFromAddress) ? "—" : s.EffectiveFromAddress)</dd></div>
+            <div><dt class="@Dt">Vem de</dt><dd class="@Dd">@EmailSettingsTexts.SourceLabel(s.EffectiveSource)</dd></div>
+            <div>
+                <dt class="@Dt">Situação</dt>
+                <dd class="@Dd">
+                    <span class="status-badge @(s.CanSend ? "status-completed" : "status-in-progress")">@(s.CanSend ? EmailSettingsTexts.ReadyToSend : EmailSettingsTexts.NotReadyToSend)</span>
+                </dd>
+            </div>
+        </dl>
+    </section>
+
+    <section class="card mt-6 p-5" aria-labelledby="config-salva">
+        <h2 id="config-salva" class="text-lg font-semibold text-slate-900 dark:text-white">@EmailSettingsTexts.FormHeading</h2>
+        @if (s.UpdatedAt is { } updatedAt)
+        {
+            <p id="email-alterado" class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                <time datetime="@EmailSettingsTexts.ChangedAtIso(updatedAt)">@EmailSettingsTexts.ChangedBy(s.UpdatedByDisplayName, updatedAt)</time>
+            </p>
+        }
+
+        @* novalidate: a validação (PT-BR) é do serviço; os atributos HTML5 ficam por semântica. *@
+        <form asp-controller="AdminEmail" asp-action="Save" method="post" class="mt-5 space-y-5" novalidate>
+            <div asp-validation-summary="ModelOnly" role="alert" id="email-erros"></div>
+
+            <div>
+                <label asp-for="Provider" class="form-label"></label>
+                <select asp-for="Provider" class="form-input">
+                    @foreach (var kind in Enum.GetValues<EmailProviderKind>())
+                    {
+                        <option value="@kind">@EmailSettingsTexts.ProviderLabel(kind)</option>
+                    }
+                </select>
+                <span asp-validation-for="Provider" id="Provider-error"></span>
+            </div>
+
+            <div>
+                <label asp-for="FromAddress" class="form-label"></label>
+                <input asp-for="FromAddress" type="email" class="form-input" autocomplete="off" inputmode="email"
+                       autocapitalize="none" spellcheck="false" maxlength="254" placeholder="nao-responda@seudominio.com"
+                       aria-describedby="FromAddress-hint" />
+                <p id="FromAddress-hint" class="form-hint">
+                    @EmailSettingsTexts.FromAddressHint
+                    <a href="https://resend.com/domains" class="link inline-flex min-h-11 items-center" rel="noopener noreferrer">Abrir os domínios no Resend</a>
+                </p>
+                <span asp-validation-for="FromAddress" id="FromAddress-error"></span>
+            </div>
+
+            <div>
+                <label asp-for="FromName" class="form-label"></label>
+                <input asp-for="FromName" class="form-input" autocomplete="off" maxlength="100" aria-describedby="FromName-hint" />
+                <p id="FromName-hint" class="form-hint">@EmailSettingsTexts.FromNameHint</p>
+                <span asp-validation-for="FromName" id="FromName-error"></span>
+            </div>
+
+            <div>
+                <label asp-for="NewResendApiKey" class="form-label"></label>
+                @* type="password" + asp-for: o tag helper nunca escreve value (e o controller tira o valor do ModelState). *@
+                <input asp-for="NewResendApiKey" type="password" class="form-input" autocomplete="off"
+                       autocapitalize="none" spellcheck="false" maxlength="200" placeholder="re_..."
+                       aria-describedby="@keyDescribedBy" />
+                @if (s.ResendKeyConfigured)
+                {
+                    <p id="NewResendApiKey-status" class="mt-1 text-sm font-medium text-slate-800 dark:text-slate-100">
+                        @EmailSettingsTexts.KeyConfigured(s.ResendKeyHint)@(s.ResendKeySource == EmailSecretSource.Environment ? ". " + EmailSettingsTexts.KeyFromEnvironment : "")
+                    </p>
+                }
+                else
+                {
+                    <p class="mt-1 text-sm text-slate-700 dark:text-slate-200">@EmailSettingsTexts.KeyNotConfigured</p>
+                }
+                <p id="NewResendApiKey-hint" class="form-hint">@EmailSettingsTexts.KeyHint</p>
+                <span asp-validation-for="NewResendApiKey" id="NewResendApiKey-error"></span>
+            </div>
+
+            @if (keyFromDatabase || Model.ClearResendApiKey)
+            {
+                <div>
+                    <div class="flex min-h-11 items-center gap-3">
+                        <input asp-for="ClearResendApiKey" class="form-checkbox" aria-describedby="ClearResendApiKey-hint" />
+                        <label asp-for="ClearResendApiKey" class="flex min-h-11 flex-1 cursor-pointer items-center text-sm text-slate-700 dark:text-slate-200"></label>
+                    </div>
+                    <p id="ClearResendApiKey-hint" class="form-hint">@EmailSettingsTexts.ClearKeyHint</p>
+                    <span asp-validation-for="ClearResendApiKey" id="ClearResendApiKey-error"></span>
+                </div>
+            }
+
+            <button type="submit" class="btn-primary sm:w-auto">@EmailSettingsTexts.SaveButton</button>
+        </form>
+    </section>
+
+    <section id="email-teste" class="card mt-6 p-5" aria-labelledby="email-teste-titulo" tabindex="-1">
+        <h2 id="email-teste-titulo" class="text-lg font-semibold text-slate-900 dark:text-white">@EmailSettingsTexts.TestHeading</h2>
+        <p id="email-teste-dica" class="mt-1 text-sm text-slate-600 dark:text-slate-300">@EmailSettingsTexts.TestIntro</p>
+
+        @if (Model.TestNotice is { } test)
+        {
+            <div id="email-teste-resultado" data-test-status="@test.Status" class="@Notice @(test.IsError ? (test.Status == EmailTestStatus.RateLimited ? Warning : Error) : Success)"
+                 role="@(test.IsError ? "alert" : "status")">
+                <p class="font-semibold">@test.Title</p>
+                @if (!string.IsNullOrEmpty(test.Detail))
+                {
+                    <p class="mt-1">@test.Detail</p>
+                }
+            </div>
+        }
+
+        <form asp-controller="AdminEmail" asp-action="SendTest" method="post" class="mt-4">
+            <button type="submit" class="btn-secondary" aria-describedby="email-teste-dica">@EmailSettingsTexts.TestButton</button>
+        </form>
+    </section>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            var firstInvalid = document.querySelector("input[aria-invalid=\"true\"], select[aria-invalid=\"true\"]");
+            if (firstInvalid) {
+                firstInvalid.focus();
+                return;
+            }
+            var summary = document.querySelector(".validation-summary-errors[role=\"alert\"]");
+            if (summary && summary.textContent.trim()) {
+                if (!summary.hasAttribute("tabindex")) {
+                    summary.setAttribute("tabindex", "-1");
+                }
+                summary.focus();
+                return;
+            }
+            var test = document.getElementById("email-teste-resultado");
+            if (test) {
+                document.getElementById("email-teste").focus();
+            }
+        })();
+    </script>
+}
